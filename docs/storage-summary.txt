@@ -1,0 +1,76 @@
+# Test Configuration Storage Module Summary
+
+## Structure
+```
+src/lib/storage/
+├── adapters/
+│   ├── file/
+│   │   ├── automation.storage.ts
+│   │   ├── config.storage.ts
+│   │   ├── system.storage.ts
+│   │   ├── user.storage.ts
+│   │   └── utils.ts
+│   ├── index.ts
+│   └── storage.adapter.ts
+├── config.ts
+├── index.ts
+├── storage.interface.ts
+└── storage.types.ts
+```
+
+## Key Features
+1. **Storage Abstraction**
+   - File-based storage with easy migration path to MongoDB
+   - Single point of configuration change for storage type
+   - Common interface for both storage types
+
+2. **Directory Structure**
+```
+/data/
+├── users/
+│   └── {userId}/
+│       ├── configs/
+│       │   ├── private/
+│       │   └── shared/
+│       └── preferences.json
+├── systems/
+├── public/
+├── automation/
+└── _indexes/
+```
+
+3. **Core Components**
+- `StorageAdapter`: Main adapter handling both file and MongoDB storage
+- `StoragePathResolver`: Manages file paths and directory structure
+- `FileSystemHelper`: Utility functions for file operations
+
+4. **Configuration**
+- Environment-based configuration
+- Default path: project_root/data
+- Support for both file and MongoDB storage types
+- Automatic directory creation and initialization
+
+5. **Implementation Details**
+- Follows interface-based design for storage operations
+- Supports CRUD operations for configurations
+- Handles user preferences, system configs, and automation data
+- Built-in indexing for faster lookups
+- Backup and restore capabilities
+
+## Usage
+1. Storage initialization happens automatically
+2. Directory structure is created on first run
+3. Can switch storage types via configuration:
+```typescript
+STORAGE_TYPE=file|mongodb
+MONGODB_URI=mongodb://localhost:27017  // for MongoDB
+```
+
+## Key Interfaces
+- IStorageAdapter: Main storage interface
+- IConfigStorage: Configuration storage operations
+- ISystemStorage: System configuration storage
+- IUserPreferencesStorage: User preferences storage
+- IAutomationStorage: Automation suite storage
+
+The module is designed to be easily extended and provides a consistent interface regardless of the underlying storage mechanism.

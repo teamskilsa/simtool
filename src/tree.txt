@@ -1,0 +1,648 @@
+.
+├── app
+│   ├── actions
+│   │   └── ssh.ts
+│   ├── api
+│   │   ├── configs
+│   │   │   ├── route.ts
+│   │   │   └── upload
+│   │   │       └── route.ts
+│   │   ├── groups
+│   │   │   ├── configs
+│   │   │   │   └── route.ts
+│   │   │   └── route.ts
+│   │   └── scenarios
+│   │       ├── edit
+│   │       │   └── page.tsx
+│   │       ├── execute
+│   │       │   └── route.ts
+│   │       └── route.ts
+│   ├── dashboard
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── favicon.ico
+│   ├── fonts
+│   │   ├── GeistMonoVF.woff
+│   │   └── GeistVF.woff
+│   ├── globals.css
+│   ├── layout.tsx
+│   ├── login
+│   │   └── page.tsx
+│   ├── page.tsx
+│   ├── stats
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── systems
+│   │   └── check-connection
+│   │       └── route.ts
+│   └── test
+│       └── page.tsx
+├── components
+│   ├── ConfigPreview.tsx
+│   ├── dialog_script.sh
+│   ├── dialogs
+│   │   ├── hooks
+│   │   │   └── use-dialog.ts
+│   │   ├── styles
+│   │   │   ├── config.ts
+│   │   │   ├── glass.ts
+│   │   │   ├── index.ts
+│   │   │   └── theme-extensions.ts
+│   │   └── templates
+│   │       ├── BaseDialog.tsx
+│   │       ├── FormDialog.tsx
+│   │       └── index.ts
+│   ├── dialogs_BU
+│   │   └── dialog-styles.ts
+│   ├── style
+│   ├── theme
+│   │   ├── BU
+│   │   │   ├── amber.ts
+│   │   │   ├── dashboard-content.tsx
+│   │   │   ├── dashboard-header.tsx
+│   │   │   ├── dashboard-layout.tsx
+│   │   │   ├── dashboard-sidebar.tsx
+│   │   │   ├── emerald.ts
+│   │   │   ├── indigo.ts
+│   │   │   ├── rose.ts
+│   │   │   ├── simple.ts
+│   │   │   ├── sky.ts
+│   │   │   ├── teal.ts
+│   │   │   ├── theme-context.tsx
+│   │   │   ├── theme-selector.tsx
+│   │   │   ├── theme.types.ts
+│   │   │   └── themes.ts
+│   │   ├── context
+│   │   │   └── theme-context.tsx
+│   │   ├── core
+│   │   │   └── theme-factory.ts
+│   │   ├── hooks
+│   │   │   └── use-theme-selector.ts
+│   │   ├── theme-selector.tsx
+│   │   ├── themes.ts
+│   │   ├── types
+│   │   │   ├── theme.types copy.ts
+│   │   │   └── theme.types.ts
+│   │   ├── utils
+│   │   │   ├── base-components.ts
+│   │   │   └── palette.ts
+│   │   └── variants
+│   │       ├── base-theme.ts
+│   │       ├── bu
+│   │       │   ├── amber.ts
+│   │       │   ├── emerald.ts
+│   │       │   ├── indigo.ts
+│   │       │   ├── light.ts
+│   │       │   ├── rose.ts
+│   │       │   ├── simple.ts
+│   │       │   ├── sky.ts
+│   │       │   └── teal.ts
+│   │       ├── index.ts
+│   │       └── themes.ts
+│   └── ui
+│       ├── accordion.tsx
+│       ├── alert-dialog.tsx
+│       ├── alert.tsx
+│       ├── aspect-ratio.tsx
+│       ├── avatar.tsx
+│       ├── badge.tsx
+│       ├── button-separator.tsx
+│       ├── button.tsx
+│       ├── calendar.tsx
+│       ├── card.tsx
+│       ├── checkbox.tsx
+│       ├── collapsible.tsx
+│       ├── command.tsx
+│       ├── configuration-box
+│       │   ├── ConfigurationBox.tsx
+│       │   └── index.ts
+│       ├── confirm-dialog.tsx
+│       ├── context-menu.tsx
+│       ├── dialog.tsx
+│       ├── dropdown-menu.tsx
+│       ├── file-upload.tsx
+│       ├── form.tsx
+│       ├── hover-card.tsx
+│       ├── input.tsx
+│       ├── label.tsx
+│       ├── loading-spinner.tsx
+│       ├── menubar.tsx
+│       ├── navbar.tsx
+│       ├── navigation-menu.tsx
+│       ├── popover.tsx
+│       ├── progress.tsx
+│       ├── radio-group.tsx
+│       ├── scroll-area.tsx
+│       ├── select.tsx
+│       ├── separator.tsx
+│       ├── sheet.tsx
+│       ├── sidebar.tsx
+│       ├── skeleton.tsx
+│       ├── slider.tsx
+│       ├── spinner.tsx
+│       ├── switch.tsx
+│       ├── table.tsx
+│       ├── tabs.tsx
+│       ├── textarea.tsx
+│       ├── toast.tsx
+│       ├── toaster.tsx
+│       ├── toggle-group.tsx
+│       ├── toggle.tsx
+│       ├── tooltip.tsx
+│       └── use-toast.ts
+├── lib
+│   ├── storage
+│   │   ├── adapters
+│   │   │   ├── file
+│   │   │   │   ├── automation.storage.ts
+│   │   │   │   ├── config.storage.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── system.storage.ts
+│   │   │   │   └── user.storage.ts
+│   │   │   ├── index.ts
+│   │   │   ├── storage.adapter.ts
+│   │   │   └── utils.ts
+│   │   ├── config.ts
+│   │   ├── index.ts
+│   │   ├── indexes
+│   │   │   └── IndexManager.ts
+│   │   ├── storage.interface.ts
+│   │   └── storage.types.ts
+│   └── utils.ts
+├── modules
+│   ├── auth
+│   │   ├── components
+│   │   │   ├── index.ts
+│   │   │   ├── login-form-fields.tsx
+│   │   │   └── login-form.tsx
+│   │   ├── context
+│   │   │   └── auth-context.tsx
+│   │   ├── hooks
+│   │   │   └── use-login.ts
+│   │   ├── index.ts
+│   │   ├── lib
+│   │   │   └── auth-utils.ts
+│   │   └── types
+│   │       └── index.ts
+│   ├── dashboard
+│   │   ├── components
+│   │   │   ├── dashboard-content.tsx
+│   │   │   ├── dashboard-header.tsx
+│   │   │   ├── dashboard-layout.tsx
+│   │   │   └── dashboard-sidebar.tsx
+│   │   ├── hooks
+│   │   ├── lib
+│   │   └── types
+│   │       └── index.ts
+│   ├── remoteAPI
+│   │   ├── components
+│   │   │   ├── command-panel.tsx
+│   │   │   ├── command-selector.tsx
+│   │   │   ├── connection-selector.tsx
+│   │   │   ├── index.ts
+│   │   │   ├── log-viewer.tsx
+│   │   │   ├── remote-api-interface.tsx
+│   │   │   └── response-log.tsx
+│   │   ├── hooks
+│   │   │   └── use-remote-api.ts
+│   │   ├── index.ts
+│   │   ├── types
+│   │   │   └── index.ts
+│   │   └── utils
+│   │       ├── command-storage.ts
+│   │       ├── remote-api-storage.ts
+│   │       └── websocket-client.ts
+│   ├── statLogs
+│   │   ├── README.md
+│   │   ├── components
+│   │   │   ├── common
+│   │   │   │   ├── LogViewer.tsx
+│   │   │   │   ├── MonitoringControls.tsx
+│   │   │   │   └── StatsLayout.tsx
+│   │   │   ├── enb
+│   │   │   │   ├── EnbLogs.tsx
+│   │   │   │   ├── EnbMetrics.tsx
+│   │   │   │   ├── EnbStats.tsx
+│   │   │   │   ├── EnbTestPage.tsx
+│   │   │   │   └── index.ts
+│   │   │   ├── ims
+│   │   │   │   ├── ImsLogs.tsx
+│   │   │   │   ├── ImsMetrics.tsx
+│   │   │   │   └── ImsStats.tsx
+│   │   │   ├── index.ts
+│   │   │   ├── mme
+│   │   │   │   ├── MmeLogs.tsx
+│   │   │   │   ├── MmeMetrics.tsx
+│   │   │   │   └── MmeStats.tsx
+│   │   │   └── ue
+│   │   │       ├── UeLogs.tsx
+│   │   │       ├── UeMetrics.tsx
+│   │   │       └── UeStats.tsx
+│   │   ├── constants
+│   │   │   ├── metrics.ts
+│   │   │   ├── ports.ts
+│   │   │   └── wsCommands.ts
+│   │   ├── context
+│   │   │   ├── StatsContext.tsx
+│   │   │   └── WebSocketContext.tsx
+│   │   ├── hooks
+│   │   │   ├── useEnbStats.ts
+│   │   │   ├── useMetricsStore.ts
+│   │   │   ├── useStatsMonitor.ts
+│   │   │   └── useWebSocket.ts
+│   │   ├── lib
+│   │   │   ├── remoteAPI
+│   │   │   │   ├── client.ts
+│   │   │   │   └── types.ts
+│   │   │   └── utils
+│   │   │       ├── formatters.ts
+│   │   │       └── websocket.ts
+│   │   ├── services
+│   │   │   ├── grafana
+│   │   │   │   └── dashboards
+│   │   │   │       ├── enb
+│   │   │   │       │   ├── metrics.json
+│   │   │   │       │   └── overview.json
+│   │   │   │       ├── ims
+│   │   │   │       │   ├── metrics.json
+│   │   │   │       │   └── overview.json
+│   │   │   │       ├── mme
+│   │   │   │       │   ├── metrics.json
+│   │   │   │       │   └── overview.json
+│   │   │   │       └── ue
+│   │   │   │           ├── metrics.json
+│   │   │   │           └── overview.json
+│   │   │   ├── index.ts
+│   │   │   ├── prometheus
+│   │   │   │   ├── client.ts
+│   │   │   │   ├── enbMetrics.ts
+│   │   │   │   ├── imsMetrics.ts
+│   │   │   │   ├── mmeMetrics.ts
+│   │   │   │   └── ueMetrics.ts
+│   │   │   └── statsHandlers
+│   │   │       ├── enbStatsHandler.ts
+│   │   │       ├── imsStatsHandler.ts
+│   │   │       ├── mmeStatsHandler.ts
+│   │   │       └── ueStatsHandler.ts
+│   │   └── types
+│   │       ├── common.types.ts
+│   │       ├── enb.types.ts
+│   │       ├── ims.types.ts
+│   │       ├── mme.types.ts
+│   │       └── ue.types.ts
+│   ├── systems
+│   │   ├── components
+│   │   │   ├── add-system.tsx
+│   │   │   ├── edit-system-dialog.tsx
+│   │   │   ├── edit-system.tsx
+│   │   │   ├── list
+│   │   │   │   ├── bu
+│   │   │   │   │   ├── SystemConnectionStatus.tsx
+│   │   │   │   │   ├── table-row.tsx
+│   │   │   │   │   └── table.tsx
+│   │   │   │   ├── filters.tsx
+│   │   │   │   ├── header.tsx
+│   │   │   │   ├── index.tsx
+│   │   │   │   └── table
+│   │   │   │       ├── ActionButtons.tsx
+│   │   │   │       ├── MonitoringControls.tsx
+│   │   │   │       ├── SystemConnectionStatus.tsx
+│   │   │   │       ├── SystemDetails.tsx
+│   │   │   │       ├── SystemIcon.tsx
+│   │   │   │       ├── SystemInfo.tsx
+│   │   │   │       ├── SystemResources.tsx
+│   │   │   │       ├── SystemStatusBadge.tsx
+│   │   │   │       ├── SystemTableRow.tsx
+│   │   │   │       ├── SystemsTable.tsx
+│   │   │   │       └── index.ts
+│   │   │   ├── shared
+│   │   │   │   ├── FormField.tsx
+│   │   │   │   ├── SystemDialog.tsx
+│   │   │   │   ├── SystemForm.tsx
+│   │   │   │   ├── SystemTypeSelect.tsx
+│   │   │   │   ├── connection-status.tsx
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── monitoring-stats.tsx
+│   │   │   │   ├── resource-usage.tsx
+│   │   │   │   ├── service-status.tsx
+│   │   │   │   ├── stats-display.tsx
+│   │   │   │   └── status-badge.tsx
+│   │   │   ├── ssh
+│   │   │   │   ├── ssh-terminal-dialog.tsx
+│   │   │   │   └── ssh-terminal-output.tsx
+│   │   │   └── system-form-dialog.tsx
+│   │   ├── config
+│   │   │   └── system-types.ts
+│   │   ├── debug
+│   │   │   └── DebugConnectionButton.tsx
+│   │   ├── hooks
+│   │   │   ├── index.ts
+│   │   │   ├── use-filters.ts
+│   │   │   ├── use-ssh-connection.ts
+│   │   │   ├── use-system-connection.ts
+│   │   │   ├── use-system-monitoring.ts
+│   │   │   ├── use-system-operations.ts
+│   │   │   ├── use-system-stats.ts
+│   │   │   ├── use-system-storage.ts
+│   │   │   ├── use-system-validation.ts
+│   │   │   └── use-systems.ts
+│   │   ├── services
+│   │   │   ├── secure-credentials.ts
+│   │   │   ├── security-manager.ts
+│   │   │   ├── ssh-connection.ts
+│   │   │   ├── ssh-service.ts
+│   │   │   └── system-connection-handler.ts
+│   │   ├── types
+│   │   │   ├── connection.ts
+│   │   │   └── index.ts
+│   │   └── utils
+│   │       ├── connection-test.ts
+│   │       ├── port-scanner.ts
+│   │       └── storage.ts
+│   ├── testConfig
+│   │   ├── actions
+│   │   │   └── configListActions
+│   │   │       ├── dropdownActions.ts
+│   │   │       ├── index.ts
+│   │   │       └── selectionActions.ts
+│   │   ├── components
+│   │   │   ├── ConfigEditor
+│   │   │   │   ├── ConfigActions.tsx
+│   │   │   │   ├── ConfigEditor.tsx
+│   │   │   │   ├── Editor.tsx
+│   │   │   │   ├── EditorHeader.tsx
+│   │   │   │   ├── EditorToolbar.tsx
+│   │   │   │   └── index.ts
+│   │   │   ├── ConfigList
+│   │   │   │   ├── ConfigListHeader.tsx
+│   │   │   │   ├── ConfigListItem.tsx
+│   │   │   │   ├── ConfigurationList.tsx
+│   │   │   │   ├── NewMethod
+│   │   │   │   ├── actions
+│   │   │   │   │   ├── configActions.ts
+│   │   │   │   │   └── groupActions.ts
+│   │   │   │   ├── components
+│   │   │   │   │   ├── FilterDropdown.tsx
+│   │   │   │   │   └── RenameDialog.tsx
+│   │   │   │   ├── hooks
+│   │   │   │   │   └── useConfigList.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   └── oldMethod
+│   │   │   │       ├── ConfigItemActions.tsx
+│   │   │   │       ├── ConfigListHeader.tsx
+│   │   │   │       ├── ConfigListItem.tsx
+│   │   │   │       ├── ConfigurationList.tsx
+│   │   │   │       └── index.ts
+│   │   │   ├── FileImport
+│   │   │   │   ├── FileImportModal.tsx
+│   │   │   │   └── index.ts
+│   │   │   ├── GroupManagement
+│   │   │   │   ├── AssignToGroupDialog.tsx
+│   │   │   │   ├── BulkActionMenu.tsx
+│   │   │   │   ├── CreateGroupDialog.tsx
+│   │   │   │   ├── GroupConfigList.tsx
+│   │   │   │   ├── GroupDetails.tsx
+│   │   │   │   ├── GroupManagementContainer.tsx
+│   │   │   │   ├── GroupManagementContent.tsx
+│   │   │   │   ├── GroupManagementHeader.tsx
+│   │   │   │   ├── GroupTree.tsx
+│   │   │   │   ├── constants.ts
+│   │   │   │   ├── hooks.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── old
+│   │   │   │   │   ├── GroupManagement.tsx
+│   │   │   │   │   ├── GroupTree.tsx
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── store.ts
+│   │   │   │   ├── styles.ts
+│   │   │   │   ├── types.ts
+│   │   │   │   ├── useGroupDrag.ts
+│   │   │   │   └── utils.ts
+│   │   │   ├── ImportConfig
+│   │   │   │   ├── ConfigSelector.tsx
+│   │   │   │   ├── ImportForm.tsx
+│   │   │   │   ├── ImportModal.tsx
+│   │   │   │   ├── ModuleSelect.tsx
+│   │   │   │   ├── ServerConfigSelector.tsx
+│   │   │   │   ├── SystemSelect.tsx
+│   │   │   │   └── index.ts
+│   │   │   ├── SectionFiles
+│   │   │   │   ├── SectionList.tsx
+│   │   │   │   ├── SectionViewer.tsx
+│   │   │   │   └── index.ts
+│   │   │   ├── TestExecutionPanel
+│   │   │   │   ├── TestExecutionPanel.tsx
+│   │   │   │   └── index.ts
+│   │   │   └── index.ts
+│   │   ├── context
+│   │   │   ├── ConfigContext.tsx
+│   │   │   ├── ConfigProvider.tsx
+│   │   │   ├── SystemContext.tsx
+│   │   │   └── index.ts
+│   │   ├── hooks
+│   │   │   ├── index.ts
+│   │   │   └── useConfig.ts
+│   │   ├── index.ts
+│   │   ├── services
+│   │   │   ├── configs.service.ts
+│   │   │   ├── fileImport.service.ts
+│   │   │   ├── groups.service.ts
+│   │   │   ├── index.ts
+│   │   │   ├── storage.service.ts
+│   │   │   ├── test.service.ts
+│   │   │   ├── testConfig.service.ts
+│   │   │   └── testRunner.service.ts
+│   │   ├── store
+│   │   │   ├── configStore.ts
+│   │   │   ├── groupStore.ts
+│   │   │   ├── index.ts
+│   │   │   └── testExecutionStore.ts
+│   │   ├── types
+│   │   │   ├── group.types.ts
+│   │   │   ├── index.ts
+│   │   │   ├── system.types.ts
+│   │   │   ├── test.types.ts
+│   │   │   └── testConfig.types.ts
+│   │   ├── utils
+│   │   │   ├── constants.ts
+│   │   │   ├── index.ts
+│   │   │   ├── logger.ts
+│   │   │   └── validation.ts
+│   │   └── views
+│   │       ├── ConfigurationView
+│   │       │   ├── ConfigurationEditor.tsx
+│   │       │   ├── ConfigurationHeader.tsx
+│   │       │   ├── ConfigurationView.tsx
+│   │       │   └── index.tsx
+│   │       ├── CreateTestView.tsx
+│   │       └── index.ts
+│   ├── testExecution
+│   │   ├── components
+│   │   │   ├── ComponentSelector
+│   │   │   │   ├── ComponentCard.tsx
+│   │   │   │   ├── ComponentList.tsx
+│   │   │   │   └── index.ts
+│   │   │   ├── DebugConfigView.tsx
+│   │   │   ├── ExecutionPanel
+│   │   │   │   ├── ExecutionControls.tsx
+│   │   │   │   ├── ExecutionSteps.tsx
+│   │   │   │   └── index.ts
+│   │   │   ├── ResultsPanel
+│   │   │   ├── ScenarioCreator
+│   │   │   │   ├── CreateScenarioDialog.tsx
+│   │   │   │   ├── ModuleConfigRow.tsx
+│   │   │   │   ├── ModuleConfigurator.tsx
+│   │   │   │   ├── Old_ModuleConfigurator.tsx
+│   │   │   │   ├── ScenarioActions.tsx
+│   │   │   │   ├── ScenarioCreator.tsx
+│   │   │   │   ├── SystemSelector.tsx
+│   │   │   │   ├── TopologySelector.tsx
+│   │   │   │   ├── constants.ts
+│   │   │   │   ├── index.ts
+│   │   │   │   ├── types.ts
+│   │   │   │   └── useModuleConfig.ts
+│   │   │   ├── ScenarioSelector
+│   │   │   │   ├── ExecutionLogs.tsx
+│   │   │   │   ├── ScenarioActions.tsx
+│   │   │   │   ├── ScenarioCard.tsx
+│   │   │   │   ├── ScenarioDialog.tsx
+│   │   │   │   ├── ScenarioList.tsx
+│   │   │   │   └── index.ts
+│   │   │   ├── common
+│   │   │   │   ├── StatusBadge.tsx
+│   │   │   │   └── index.ts
+│   │   │   └── index.ts
+│   │   ├── context
+│   │   │   ├── ConfigContext
+│   │   │   │   └── ConfigContext.tsx
+│   │   │   ├── ExecutionContext
+│   │   │   │   ├── ExecutionContext.tsx
+│   │   │   │   └── ExecutionProvider.tsx
+│   │   │   └── ResultsContext
+│   │   ├── hooks
+│   │   │   ├── execution
+│   │   │   │   ├── useExecutionControl.ts
+│   │   │   │   └── useExecutionLogs.ts
+│   │   │   ├── index.ts
+│   │   │   ├── results
+│   │   │   └── scenario
+│   │   │       └── useScenarioConfig.ts
+│   │   ├── index.ts
+│   │   ├── modals
+│   │   ├── services
+│   │   │   ├── config
+│   │   │   │   └── config.service.ts
+│   │   │   ├── execution
+│   │   │   │   ├── execution.service.ts
+│   │   │   │   └── testExecution.ts
+│   │   │   ├── index.ts
+│   │   │   ├── metrics
+│   │   │   ├── results
+│   │   │   │   └── results.service.ts
+│   │   │   └── scenario
+│   │   │       ├── execute
+│   │   │       │   └── route.ts
+│   │   │       └── scenario.service.ts
+│   │   ├── store
+│   │   │   ├── execution
+│   │   │   │   └── executionStore.ts
+│   │   │   ├── results
+│   │   │   └── scenario
+│   │   │       └── scenarioStore.ts
+│   │   ├── types
+│   │   │   ├── execution.types.ts
+│   │   │   ├── index.ts
+│   │   │   ├── results.types.ts
+│   │   │   └── scenario.types.ts
+│   │   ├── utils
+│   │   │   ├── execution
+│   │   │   ├── metrics
+│   │   │   └── results
+│   │   └── views
+│   │       ├── Analytics
+│   │       │   └── AnalyticsView.tsx
+│   │       ├── Results
+│   │       │   └── ResultsView.tsx
+│   │       ├── TestExecution
+│   │       │   ├── TestExecutionView.tsx
+│   │       │   ├── components
+│   │       │   │   ├── ScenarioList_2
+│   │       │   │   │   ├── ScenarioActions.tsx
+│   │       │   │   │   ├── ScenarioCard.tsx
+│   │       │   │   │   ├── ScenarioList.tsx
+│   │       │   │   │   └── index.ts
+│   │       │   │   └── TestExecutionHeader.tsx
+│   │       │   └── index.ts
+│   │       └── index.ts
+│   └── users
+│       ├── README.md
+│       ├── components
+│       │   ├── user-list.tsx
+│       │   ├── user-management
+│       │   │   ├── CreateUserDialog.tsx
+│       │   │   ├── EditUserDialog.tsx
+│       │   │   ├── UserList.tsx
+│       │   │   ├── UserManagement.tsx
+│       │   │   └── index.ts
+│       │   ├── user-profile.tsx
+│       │   └── visibility
+│       │       └── config-visibility.tsx
+│       ├── context
+│       │   ├── auth-persist.tsx
+│       │   └── user-context.tsx
+│       ├── hooks
+│       │   ├── use-user-operations.ts
+│       │   ├── use-users.ts
+│       │   └── use-visibility.ts
+│       ├── types
+│       │   └── index.ts
+│       └── utils
+│           ├── activity-logger.ts
+│           └── storage.ts
+├── shared
+│   ├── default
+│   │   └── templates
+│   │       └── remoteapi
+│   │           ├── commands.ts
+│   │           ├── common
+│   │           │   └── types.ts
+│   │           ├── enb
+│   │           │   ├── config
+│   │           │   │   ├── cell
+│   │           │   │   │   └── index.ts
+│   │           │   │   ├── index.ts
+│   │           │   │   ├── logging
+│   │           │   │   ├── phy-mac
+│   │           │   │   │   └── index.ts
+│   │           │   │   └── sib
+│   │           │   │       └── index.ts
+│   │           │   └── stats
+│   │           ├── index.ts
+│   │           ├── mme
+│   │           │   ├── config
+│   │           │   └── stats
+│   │           ├── script.sh
+│   │           └── ue
+│   │               ├── config
+│   │               └── stats
+│   └── users
+│       ├── systems
+│       │   ├── config
+│       │   │   └── config.ts
+│       │   ├── hooks
+│       │   │   ├── index.ts
+│       │   │   └── use-systems-config.ts
+│       │   ├── index.ts
+│       │   ├── types
+│       │   │   └── index.ts
+│       │   └── utils
+│       │       ├── ssh-client.ts
+│       │       └── system-operations.ts
+│       └── types.ts
+├── telecom
+│   ├── core
+│   ├── nodeb
+│   └── ue
+└── tree.txt
+
+194 directories, 452 files

@@ -1,0 +1,254 @@
+/**
+ * Import the base xterm styles first
+ */
+ @import 'xterm/css/xterm.css';
+
+ /**
+  * Terminal container and global styles
+  */
+ .terminal-container {
+   width: 100%;
+   height: 600px;
+   background: #1a1b26;
+   border-radius: 0.5rem;
+   overflow: hidden;
+   position: relative;
+ }
+ 
+ /**
+  * Base terminal styles
+  */
+ .xterm {
+   height: 100%;
+   width: 100%;
+   padding: 12px;
+ }
+ 
+ .xterm-screen {
+   width: 100% !important;
+   height: 100% !important;
+ }
+ 
+ /**
+  * Cursor styling
+  */
+ .xterm-cursor-layer {
+   z-index: 1;
+ }
+ 
+ .xterm-cursor {
+   background-color: #f8f8f2;
+   border-color: #f8f8f2;
+ }
+ 
+ .xterm-cursor.xterm-cursor-blink {
+   animation: blink 1s ease infinite;
+ }
+ 
+ @keyframes blink {
+   0%, 100% { opacity: 1; }
+   50% { opacity: 0; }
+ }
+ 
+ /**
+  * Selection styling
+  */
+ .xterm-selection {
+   background-color: rgba(255, 255, 255, 0.3);
+   opacity: 1;
+ }
+ 
+ /**
+  * Terminal viewport
+  */
+ .xterm-viewport {
+   background-color: #1a1b26;
+   width: 100% !important;
+   height: 100% !important;
+   overflow-y: auto;
+   scrollbar-width: thin;
+   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+ }
+ 
+ /* Webkit scrollbar styling */
+ .xterm-viewport::-webkit-scrollbar {
+   width: 8px;
+   height: 8px;
+ }
+ 
+ .xterm-viewport::-webkit-scrollbar-track {
+   background: transparent;
+ }
+ 
+ .xterm-viewport::-webkit-scrollbar-thumb {
+   background-color: rgba(255, 255, 255, 0.2);
+   border-radius: 4px;
+ }
+ 
+ .xterm-viewport::-webkit-scrollbar-thumb:hover {
+   background-color: rgba(255, 255, 255, 0.3);
+ }
+ 
+ /**
+  * Terminal rows and text
+  */
+ .xterm-rows {
+   font-family: 'Menlo', 'DejaVu Sans Mono', 'Consolas', monospace;
+   line-height: 1.2;
+ }
+ 
+ /**
+  * Default color theme overrides
+  * You can customize these colors based on your theme
+  */
+ .xterm-decoration-overview-ruler {
+   background-color: rgba(0, 0, 0, 0.2);
+ }
+ 
+ /* Terminal focus styles */
+ .xterm.focus {
+   outline: none;
+ }
+ 
+ .xterm.focus .xterm-cursor {
+   box-shadow: 0 0 2px rgba(255, 255, 255, 0.5);
+ }
+ 
+ /* Terminal resize handle */
+ .terminal-resize-handle {
+   position: absolute;
+   bottom: 0;
+   right: 0;
+   width: 20px;
+   height: 20px;
+   cursor: se-resize;
+   opacity: 0.3;
+   transition: opacity 0.2s;
+ }
+ 
+ .terminal-resize-handle:hover {
+   opacity: 0.6;
+ }
+ 
+ /* Terminal overlay for disconnected state */
+ .terminal-overlay {
+   position: absolute;
+   top: 0;
+   left: 0;
+   right: 0;
+   bottom: 0;
+   background: rgba(0, 0, 0, 0.7);
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   color: #fff;
+   font-size: 14px;
+   z-index: 10;
+ }
+ 
+ /* Terminal header area if needed */
+ .terminal-header {
+   padding: 8px 12px;
+   background: rgba(0, 0, 0, 0.2);
+   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+ }
+ 
+ /* Terminal footer area if needed */
+ .terminal-footer {
+   padding: 8px 12px;
+   background: rgba(0, 0, 0, 0.2);
+   border-top: 1px solid rgba(255, 255, 255, 0.1);
+ }
+ 
+ /* Terminal loading state */
+ .terminal-loading {
+   position: absolute;
+   top: 50%;
+   left: 50%;
+   transform: translate(-50%, -50%);
+   color: rgba(255, 255, 255, 0.8);
+ }
+ 
+ /* Error state styling */
+ .terminal-error {
+   color: #ff5555;
+   padding: 8px 12px;
+   margin: 8px;
+   background: rgba(255, 85, 85, 0.1);
+   border-radius: 4px;
+   border: 1px solid rgba(255, 85, 85, 0.2);
+ }
+ 
+ /* Success message styling */
+ .terminal-success {
+   color: #50fa7b;
+   padding: 8px 12px;
+   margin: 8px;
+   background: rgba(80, 250, 123, 0.1);
+   border-radius: 4px;
+   border: 1px solid rgba(80, 250, 123, 0.2);
+ }
+ 
+ /* Warning message styling */
+ .terminal-warning {
+   color: #f1fa8c;
+   padding: 8px 12px;
+   margin: 8px;
+   background: rgba(241, 250, 140, 0.1);
+   border-radius: 4px;
+   border: 1px solid rgba(241, 250, 140, 0.2);
+ }
+ 
+ /* Info message styling */
+ .terminal-info {
+   color: #8be9fd;
+   padding: 8px 12px;
+   margin: 8px;
+   background: rgba(139, 233, 253, 0.1);
+   border-radius: 4px;
+   border: 1px solid rgba(139, 233, 253, 0.2);
+ }
+ 
+ /* Add support for different terminal sizes */
+ @media (max-width: 640px) {
+   .terminal-container {
+     height: 400px;
+   }
+   
+   .xterm {
+     padding: 8px;
+   }
+ }
+ 
+ @media (min-width: 1024px) {
+   .terminal-container {
+     height: 700px;
+   }
+ }
+ 
+ /* Print styles */
+ @media print {
+   .terminal-container {
+     height: auto;
+     overflow: visible;
+   }
+   
+   .xterm-viewport {
+     overflow: visible;
+   }
+ }
+ 
+ /* High contrast mode support */
+ @media (forced-colors: active) {
+   .xterm-cursor {
+     background-color: CanvasText;
+     border-color: CanvasText;
+   }
+   
+   .terminal-container {
+     border: 1px solid CanvasText;
+   }
+ }
