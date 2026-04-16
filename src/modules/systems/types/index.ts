@@ -11,6 +11,8 @@ export interface System {
   status: 'running' | 'warning' | 'stopped';
   username?: string;
   password?: string;
+  authMode?: 'password' | 'privateKey';
+  privateKey?: string;
   maxUEs?: number;
   maxConnections?: number;
   maxThroughput?: string;
