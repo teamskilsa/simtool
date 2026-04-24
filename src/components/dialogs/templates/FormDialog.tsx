@@ -48,9 +48,9 @@ export function FormDialog({
             {children}
 
             {error && (
-              <div className="mt-4 rounded-lg bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
-                <span>⚠️</span>
-                {error}
+              <div className="mt-4 rounded-lg bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-600 dark:text-red-400 flex items-start gap-2">
+                <span className="shrink-0">⚠️</span>
+                <div className="whitespace-pre-line leading-relaxed">{error}</div>
               </div>
             )}
           </div>

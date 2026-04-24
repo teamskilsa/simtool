@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { toast } from "@/components/ui/use-toast";
 import type { System } from '../types';
+import { agentUrl } from '@/lib/constants';
 
 interface ConnectionStatus {
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -16,9 +17,13 @@ export function useSystemConnection() {
   const testSystemReachability = async (ip: string): Promise<boolean> => {
     console.log('Testing reachability for:', ip);
     try {
-      const response = await fetch(`http://${ip}:9050/api/health`, {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 5000);
+      const response = await fetch(agentUrl(ip, '/api/health'), {
         method: 'GET',
+        signal: ac.signal,
       });
+      clearTimeout(timer);
       return response.ok;
     } catch {
       return false;
@@ -28,7 +33,9 @@ export function useSystemConnection() {
   const testSSHConnection = async (system: System): Promise<boolean> => {
     console.log('Testing SSH connection for:', system.ip);
     try {
-      const response = await fetch(`http://${system.ip}:9050/api/ssh/test`, {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 8000);
+      const response = await fetch(agentUrl(system.ip, '/api/ssh/test'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -37,8 +44,10 @@ export function useSystemConnection() {
           username: system.username,
           password: system.password,
           host: system.ip
-        })
+        }),
+        signal: ac.signal,
       });
+      clearTimeout(timer);
 
       if (!response.ok) {
         const error = await response.json();
@@ -56,7 +65,9 @@ export function useSystemConnection() {
   const executeCommand = async (system: System, command: string): Promise<string> => {
     console.log('Executing command on:', system.ip, 'Command:', command);
     try {
-      const response = await fetch(`http://${system.ip}:9050/api/ssh/execute`, {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 30000);
+      const response = await fetch(agentUrl(system.ip, '/api/ssh/execute'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -66,8 +77,10 @@ export function useSystemConnection() {
           username: system.username,
           password: system.password,
           host: system.ip
-        })
+        }),
+        signal: ac.signal,
       });
+      clearTimeout(timer);
 
       if (!response.ok) {
         const error = await response.json();

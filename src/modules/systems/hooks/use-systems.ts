@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from "@/components/ui/use-toast";
 import type { System } from '../types';
+import { agentUrl } from '@/lib/constants';
 
 interface ConnectionStatus {
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -36,23 +37,39 @@ export function useSystems() {
         return newMap;
       });
 
-      // Try to connect to the system
-      const response = await fetch(`http://${system.ip}:9050/api/health`);
-      const pingOk = response.ok;
+      // Try to connect to the system (with timeout to avoid ECONNRESET hangs)
+      let pingOk = false;
+      try {
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 5000);
+        const response = await fetch(agentUrl(system.ip, '/api/health'), { signal: ac.signal });
+        clearTimeout(timer);
+        pingOk = response.ok;
+      } catch {
+        pingOk = false;
+      }
 
       // Try SSH if ping successful
       let sshOk = false;
       if (pingOk && system.username && system.password) {
-        const sshResponse = await fetch(`http://${system.ip}:9050/api/ssh/test`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: system.username,
-            password: system.password
-          })
-        });
-        const sshResult = await sshResponse.json();
-        sshOk = sshResult.success;
+        try {
+          const ac = new AbortController();
+          const timer = setTimeout(() => ac.abort(), 8000);
+          const sshResponse = await fetch(agentUrl(system.ip, '/api/ssh/test'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: system.username,
+              password: system.password
+            }),
+            signal: ac.signal
+          });
+          clearTimeout(timer);
+          const sshResult = await sshResponse.json();
+          sshOk = sshResult.success;
+        } catch {
+          sshOk = false;
+        }
       }
 
       setConnections(prev => {
@@ -96,16 +113,19 @@ export function useSystems() {
     } as System;
 
     setSystems(prev => [...prev, newSystem]);
-    
-    // Try to connect the new system
-    await connectSystem(newSystem);
-    
-    toast({
-      title: "System Added",
-      description: `${newSystem.name} has been added successfully.`,
-    });
-
+    // NOTE: We intentionally do NOT call connectSystem() or show a toast here anymore.
+    // The caller (SystemDialog) is now responsible for running provisioning asynchronously
+    // via the shared provisionSystem() utility, and updates provisioning state via
+    // updateSystemProvisionStatus(). This lets us save the system even if provisioning fails.
     return newSystem;
+  };
+
+  // Update a system's provision fields after (re)provisioning completes
+  const updateSystemProvisionStatus = (
+    systemId: number,
+    patch: Partial<Pick<System, 'provisionStatus' | 'provisionError' | 'provisionSteps' | 'provisionedAt' | 'provisionFailedStep'>>,
+  ) => {
+    setSystems(prev => prev.map(s => s.id === systemId ? { ...s, ...patch } : s));
   };
 
   const updateSystem = async (systemId: number, updates: Partial<System>) => {
@@ -176,6 +196,7 @@ export function useSystems() {
     loading,
     addSystem,
     updateSystem,
+    updateSystemProvisionStatus,
     deleteSystem,
     refreshSystem,
     refreshAllSystems,

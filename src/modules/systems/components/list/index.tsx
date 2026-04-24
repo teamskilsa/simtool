@@ -14,14 +14,15 @@ export function SystemsListView() {
   const { theme, mode } = useTheme();
   const themeConfig = themes[theme];
   
-  const { 
-    systems, 
+  const {
+    systems,
     connections,
     monitoring,
-    startMonitoring, 
+    startMonitoring,
     stopMonitoring,
     addSystem,
     updateSystem,
+    updateSystemProvisionStatus,
     deleteSystem,
     refreshSystem,
     refreshAllSystems,
@@ -30,26 +31,25 @@ export function SystemsListView() {
   
   const { filters, setFilters, filteredSystems } = useSystemsFilter(systems);
 
-  // Handle adding a new system
-  const handleAddSystem = async (systemData: Partial<System>) => {
-    try {
-      const newSystem = await addSystem(systemData);
-      toast({
-        title: "System Added",
-        description: "New system has been added successfully.",
-      });
-      // Connect the system if needed
-      if (newSystem) {
-        connectSystem(newSystem);
-      }
-    } catch (error) {
-      toast({
-        title: "Error Adding System",
-        description: error instanceof Error ? error.message : "Failed to add system",
-        variant: "destructive",
-      });
-      throw error;
-    }
+  // Handle adding a new system — returns the created System so the dialog
+  // can pass it to the async provisioning flow.
+  const handleAddSystem = async (systemData: Partial<System>): Promise<System> => {
+    return await addSystem(systemData);
+  };
+
+  // Called by SystemDialog when async provisioning completes (success or failure).
+  // We save the result onto the System so the table can show status and allow retry.
+  const handleProvisionComplete = (
+    systemId: number,
+    result: { success: boolean; error?: string; steps: any[]; failedStep?: string },
+  ) => {
+    updateSystemProvisionStatus(systemId, {
+      provisionStatus: result.success ? 'success' : 'failed',
+      provisionError: result.error,
+      provisionSteps: result.steps,
+      provisionedAt: Date.now(),
+      provisionFailedStep: result.failedStep,
+    });
   };
 
   // Handle editing an existing system
@@ -179,10 +179,11 @@ export function SystemsListView() {
 
       <div className="relative">
         {/* Header Section */}
-        <SystemsHeader 
-          count={filteredSystems.length} 
+        <SystemsHeader
+          count={filteredSystems.length}
           onAddSystem={handleAddSystem}
           onRefreshAll={handleRefreshAll}
+          onProvisionComplete={handleProvisionComplete}
         />
         
         {/* Main Content */}
@@ -213,12 +214,14 @@ export function SystemsListView() {
 
             {/* Table Section */}
             <div className="p-6">
-              <SystemsTable 
+              <SystemsTable
                 systems={filteredSystems}
                 connections={connections}
                 onRefreshSystem={handleRefreshSystem}
                 onEditSystem={handleEditSystem}
                 onDeleteSystem={handleDeleteSystem}
+                onProvisionComplete={handleProvisionComplete}
+                updateSystemProvisionStatus={updateSystemProvisionStatus}
               />
             </div>
           </div>

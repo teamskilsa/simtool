@@ -1,9 +1,9 @@
 // modules/systems/services/ssh-service.ts
 import type { System } from '../types';
+import { agentUrl } from '@/lib/constants';
 
 export class SSHService {
   private system: System | null = null;
-  private readonly SSH_GATEWAY_PORT = 9050;
 
   async connect(system: System): Promise<boolean> {
     try {
@@ -16,12 +16,12 @@ export class SSHService {
       };
 
       console.log('Connecting to system:', {
-        url: `http://${system.ip}:${this.SSH_GATEWAY_PORT}/api/ssh/test`,
+        url: agentUrl(system.ip, '/api/ssh/test'),
         username: system.username,
         host: system.ip
       });
 
-      const response = await fetch(`http://${system.ip}:${this.SSH_GATEWAY_PORT}/api/ssh/test`, {
+      const response = await fetch(agentUrl(system.ip, '/api/ssh/test'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -55,7 +55,7 @@ export class SSHService {
         host: this.system.ip
       };
 
-      const response = await fetch(`http://${this.system.ip}:${this.SSH_GATEWAY_PORT}/api/ssh/execute`, {
+      const response = await fetch(agentUrl(this.system.ip, '/api/ssh/execute'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

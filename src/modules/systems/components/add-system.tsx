@@ -5,23 +5,20 @@ import { Button } from "@/components/ui/button";
 import { SystemDialog } from './shared/SystemDialog';
 import { useTheme } from '@/components/theme/context/theme-context';
 import type { System } from '../types';
+import type { ProvisionResult } from '../services/provision';
 
 interface AddSystemProps {
-  onAddSystem: (system: Partial<System>) => Promise<void>;
+  onAddSystem: (system: Partial<System>) => Promise<System | void>;
+  onProvisionComplete?: (systemId: number, result: ProvisionResult) => void;
 }
 
-export function AddSystem({ onAddSystem }: AddSystemProps) {
+export function AddSystem({ onAddSystem, onProvisionComplete }: AddSystemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { theme } = useTheme();
 
   const handleSubmit = async (_mode: 'add' | 'edit', _: number | undefined, data: Partial<System>) => {
-    try {
-      await onAddSystem(data);
-      setIsOpen(false);
-    } catch (error) {
-      console.error('Failed to add system:', error);
-      throw error;
-    }
+    // Don't catch here — errors should bubble up to SystemDialog so the error banner shows.
+    return await onAddSystem(data);
   };
 
   const getButtonClass = () => {
@@ -48,6 +45,7 @@ export function AddSystem({ onAddSystem }: AddSystemProps) {
         open={isOpen}
         onOpenChange={setIsOpen}
         onSubmit={handleSubmit}
+        onProvisionComplete={onProvisionComplete}
       />
     </>
   );

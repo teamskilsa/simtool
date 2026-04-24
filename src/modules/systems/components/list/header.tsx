@@ -13,14 +13,16 @@ import {
 import { AddSystem } from '../add-system';
 import { toast } from "@/components/ui/use-toast";
 import type { System } from '../types';
+import type { ProvisionResult } from '../services/provision';
 
 interface SystemsHeaderProps {
   count: number;
-  onAddSystem: (system: Partial<System>) => Promise<void>;
+  onAddSystem: (system: Partial<System>) => Promise<System | void>;
   onRefreshAll: () => Promise<void>;
+  onProvisionComplete?: (systemId: number, result: ProvisionResult) => void;
 }
 
-export function SystemsHeader({ count, onAddSystem, onRefreshAll }: SystemsHeaderProps) {
+export function SystemsHeader({ count, onAddSystem, onRefreshAll, onProvisionComplete }: SystemsHeaderProps) {
   const { theme, mode } = useTheme();
   const themeConfig = themes[theme];
   const [refreshing, setRefreshing] = useState(false);
@@ -114,7 +116,7 @@ export function SystemsHeader({ count, onAddSystem, onRefreshAll }: SystemsHeade
               </Tooltip>
             </TooltipProvider>
             
-            <AddSystem onAddSystem={onAddSystem} />
+            <AddSystem onAddSystem={onAddSystem} onProvisionComplete={onProvisionComplete} />
           </div>
         </div>
       </div>

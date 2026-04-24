@@ -28,6 +28,19 @@ export const DashboardLayout = () => {
     }
   }, [currentUser?.preferences.sidebarOpen]);
 
+  // Cross-component navigation — e.g. "Edit in Builder" button in Test
+  // Configurations dispatches this event to jump to Create Config.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<{ section: string }>;
+      if (custom.detail?.section) {
+        setActiveSection(custom.detail.section);
+      }
+    };
+    window.addEventListener('simtool:navigate', handler);
+    return () => window.removeEventListener('simtool:navigate', handler);
+  }, []);
+
   // Update user preferences when sidebar state changes
   const handleSidebarToggle = (open: boolean) => {
     setIsSidebarOpen(open);

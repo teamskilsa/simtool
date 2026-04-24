@@ -1,6 +1,7 @@
 // modules/systems/services/system-connection-handler.ts
 import { SSHConnectionService } from './ssh-connection';
 import type { System } from '../types';
+import { agentUrl } from '@/lib/constants';
 
 interface ConnectionCheckResult {
   success: boolean;
@@ -35,7 +36,7 @@ export class SystemConnectionHandler {
       }
 
       // Step 2: Check SSH connection
-      const sshResponse = await fetch(`http://${system.ip}:9050/api/ssh/test`, {
+      const sshResponse = await fetch(agentUrl(system.ip, '/api/ssh/test'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -83,7 +84,7 @@ export class SystemConnectionHandler {
 
   private static async checkPing(ip: string): Promise<{ success: boolean }> {
     try {
-      const response = await fetch(`http://${ip}:9050/api/health`);
+      const response = await fetch(agentUrl(ip, '/api/health'));
       return { success: response.ok };
     } catch {
       return { success: false };
@@ -93,7 +94,7 @@ export class SystemConnectionHandler {
   private static async getSystemInformation(system: System) {
     try {
       // Use SSH execute to get system information
-      const response = await fetch(`http://${system.ip}:9050/api/ssh/execute`, {
+      const response = await fetch(agentUrl(system.ip, '/api/ssh/execute'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

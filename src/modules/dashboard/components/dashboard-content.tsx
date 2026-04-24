@@ -2,12 +2,13 @@
 'use client';
 
 import { ConfigProvider } from '@/modules/testConfig/context';
-import { ConfigurationView, CreateTestView } from '@/modules/testConfig/views';
+import { ConfigurationView, CreateTestView, SectionFilesView } from '@/modules/testConfig/views';
 import { TestExecutionView } from '@/modules/testExecution/views';
 import { SystemsListView } from '@/modules/systems/components/list';
 import { RemoteAPIInterface } from '@/modules/remoteAPI';
 import { UserProfile } from '@/modules/users/components/user-profile';
 import { UserManagement } from '@/modules/users/components/user-management';
+import { SWManagementView } from '@/modules/sw-management';
 import { useUser } from '@/modules/users/context/user-context';
 
 interface DashboardContentProps {
@@ -26,6 +27,9 @@ export const DashboardContent = ({
       case 'systems':
         return <SystemsListView />;
 
+      case 'sw-management':
+        return <SWManagementView />;
+
       case 'test-configs':
         return (
           <ConfigProvider>
@@ -43,7 +47,7 @@ export const DashboardContent = ({
       case 'test-sections':
         return (
           <ConfigProvider>
-            <div>Section Files View</div>
+            <SectionFilesView />
           </ConfigProvider>
         );        
         

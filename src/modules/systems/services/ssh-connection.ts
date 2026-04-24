@@ -1,5 +1,6 @@
 // modules/systems/services/ssh-connection.ts
 import type { System } from '../types';
+import { agentUrl } from '@/lib/constants';
 
 interface ConnectionCheckResult {
   success: boolean;
@@ -20,7 +21,7 @@ export class SSHConnectionService {
         hasPassword: !!system.password
       });
 
-      const response = await fetch(`http://${system.ip}:9050/api/ssh/test`, {
+      const response = await fetch(agentUrl(system.ip, '/api/ssh/test'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

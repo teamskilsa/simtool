@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from "@/components/ui/use-toast";
 import type { System } from '../types';
+import { agentUrl } from '@/lib/constants';
 
 interface SystemStats {
   cpu: {
@@ -32,7 +33,10 @@ export function useSystemStats(system: System) {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch(`http://${system.ip}:9050/api/stats`);
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 5000);
+      const response = await fetch(agentUrl(system.ip, '/api/stats'), { signal: ac.signal });
+      clearTimeout(timer);
       if (!response.ok) {
         throw new Error('Failed to fetch system stats');
       }

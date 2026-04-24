@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { agentUrl } from '@/lib/constants';
 import { useRouter } from 'next/navigation';
 import { ConfigItem } from '../../types';
 import { Editor } from './Editor';
@@ -82,7 +83,7 @@ export const ConfigEditor: React.FC<ConfigEditorProps> = ({
     try {
       const result = await testRunnerService.executeTest(
         config,
-        `http://${useCommonIp ? commonIp : '192.168.1.100'}:9050`,
+        agentUrl(useCommonIp ? commonIp : '192.168.1.100'),
         (step) => {
           setTestSteps(prev => [...prev, step]);
         }

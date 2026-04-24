@@ -1,6 +1,6 @@
 // modules/systems/components/list/table/SystemTableRow.tsx
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 import { SystemInfo } from './SystemInfo';
 import { ActionButtons } from './ActionButtons';
 import { SystemConnectionStatus } from './SystemConnectionStatus';
@@ -9,6 +9,9 @@ import { SSHTerminalDialog } from '../../ssh/ssh-terminal-dialog';
 import { useSystemConnection } from '../../../hooks/use-system-connection';
 import { useSystemStats } from '../../../hooks/use-system-stats';
 import { toast } from "@/components/ui/use-toast";
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { provisionSystem as runProvisionSystem, type ProvisionResult } from '../../../services/provision';
 import type { System } from '../../../types';
 import type { ConnectionStatus } from '../../../types/connection';
 
@@ -23,6 +26,8 @@ interface SystemTableRowProps {
     sshOk: boolean;
     lastError?: string;
   }) => void;
+  onProvisionComplete?: (systemId: number, result: ProvisionResult) => void;
+  updateSystemProvisionStatus?: (systemId: number, patch: Partial<System>) => void;
 }
 
 function formatUptime(seconds: number): string {
@@ -50,12 +55,37 @@ export function SystemTableRow({
   onRefresh,
   onEdit,
   onDelete,
-  onConnectionUpdate
+  onConnectionUpdate,
+  onProvisionComplete,
+  updateSystemProvisionStatus,
 }: SystemTableRowProps) {
   const [sshDialogOpen, setSSHDialogOpen] = useState(false);
   const [localConnection, setLocalConnection] = useState(connection);
+  const [retrying, setRetrying] = useState(false);
   const { testSystemReachability, testSSHConnection } = useSystemConnection();
   const { stats, loading: statsLoading, error: statsError } = useSystemStats(system);
+
+  const handleRetryProvision = async () => {
+    if (retrying) return;
+    setRetrying(true);
+    if (updateSystemProvisionStatus) {
+      updateSystemProvisionStatus(system.id, { provisionStatus: 'provisioning' } as any);
+    }
+    toast({ title: 'Retrying provisioning', description: `Re-attempting ${system.name}…` });
+    try {
+      const result = await runProvisionSystem(system);
+      onProvisionComplete?.(system.id, result);
+      toast({
+        title: result.success ? 'Provisioning Successful' : 'Provisioning Failed',
+        description: result.success
+          ? `${system.name} is now ready.`
+          : `${system.name}: ${(result.error || 'unknown error').split('\n')[0]}`,
+        variant: result.success ? 'default' : 'destructive',
+      });
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   useEffect(() => {
     setLocalConnection(connection);
@@ -171,10 +201,65 @@ export function SystemTableRow({
     );
   };
 
+  const provisionStatus = system.provisionStatus;
+  const provisionError = system.provisionError;
+  const provisionFailedStep = system.provisionFailedStep;
+
+  const renderProvisionBadge = () => {
+    if (provisionStatus === 'provisioning' || retrying) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+          <Loader2 className="w-3 h-3 animate-spin" /> Provisioning…
+        </span>
+      );
+    }
+    if (provisionStatus === 'failed') {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-red-50 text-red-700 border border-red-200 cursor-help">
+                <AlertTriangle className="w-3 h-3" /> Provision failed{provisionFailedStep ? ` (${provisionFailedStep})` : ''}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-sm whitespace-pre-line">
+              {provisionError || 'Provisioning did not complete.'}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+    if (provisionStatus === 'success') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-50 text-green-700 border border-green-200">
+          <CheckCircle2 className="w-3 h-3" /> Provisioned
+        </span>
+      );
+    }
+    return null;
+  };
+
   return (
     <tr className="border-t border-gray-200 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
       <td className="px-4 py-4">
-        <SystemInfo system={system} />
+        <div className="space-y-1.5">
+          <SystemInfo system={system} />
+          <div className="flex items-center gap-2">
+            {renderProvisionBadge()}
+            {provisionStatus === 'failed' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRetryProvision}
+                disabled={retrying}
+                className="h-6 text-xs px-2 border-red-300 text-red-700 hover:bg-red-50"
+              >
+                <RefreshCw className={`w-3 h-3 mr-1 ${retrying ? 'animate-spin' : ''}`} />
+                Retry
+              </Button>
+            )}
+          </div>
+        </div>
       </td>
       <td className="px-4 py-4">
         <SystemConnectionStatus connection={localConnection} />

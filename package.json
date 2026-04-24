@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "prepare:storage": "mkdir -p data/{users,systems,public,automation,remote-api,_indexes,temp}",
+    "prepare:storage": "node -e \"const fs=require('fs');['users','systems','public','automation','remote-api','_indexes','temp'].forEach(d=>{fs.mkdirSync('data/'+d,{recursive:true})})\"",
     "dev": "npm run prepare:storage && next dev",
     "build": "npm run prepare:storage && next build",
     "start": "npm run prepare:storage && next start"
@@ -47,6 +47,7 @@
     "cmdk": "^1.0.4",
     "crypto-js": "^4.2.0",
     "events": "^3.3.0",
+    "formidable": "^3.5.4",
     "jszip": "^3.10.1",
     "lucide-react": "^0.454.0",
     "mongodb": "^6.3.0",
@@ -74,6 +75,7 @@
   },
   "devDependencies": {
     "@types/crypto-js": "^4.2.2",
+    "@types/formidable": "^3.5.1",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",

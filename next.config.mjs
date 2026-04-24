@@ -39,8 +39,6 @@ const nextConfig = {
        //'self': true  // Add this for xterm
       };
 
-     }
-
       // Prevent certain packages from being included in the client bundle
       config.module = {
         ...config.module,
@@ -53,7 +51,8 @@ const nextConfig = {
           }
         ]
       };
-    
+    }
+
     // Server-side externals
     if (isServer) {
       config.externals = [

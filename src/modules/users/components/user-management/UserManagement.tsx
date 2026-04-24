@@ -78,16 +78,16 @@ export function UserManagement() {
           />
         </div>
         <Select
-          value={filters.role}
-          onValueChange={(value: any) => 
-            setFilters(prev => ({ ...prev, role: value }))
+          value={filters.role || 'all'}
+          onValueChange={(value: any) =>
+            setFilters(prev => ({ ...prev, role: value === 'all' ? undefined : value }))
           }
         >
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="All Roles" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={undefined}>All Roles</SelectItem>
+            <SelectItem value="all">All Roles</SelectItem>
             <SelectItem value="admin">Admin</SelectItem>
             <SelectItem value="user">User</SelectItem>
           </SelectContent>

@@ -1,5 +1,6 @@
 // modules/systems/utils/connection-test.ts
 import type { System } from '../types';
+import { agentUrl } from '@/lib/constants';
 
 async function checkSSHConnection(system: System): Promise<{
   success: boolean;
@@ -10,15 +11,15 @@ async function checkSSHConnection(system: System): Promise<{
     const requestBody = {
       username: system.username || '',
       password: system.password || '',
-      host: 'localhost'
+      host: system.ip || 'localhost'
     };
 
     console.log('Testing SSH connection:', {
-      url: `http://${system.ip}:9050/api/ssh/test`,
+      url: agentUrl(system.ip, '/api/ssh/test'),
       body: { ...requestBody, password: '****' }
     });
 
-    const response = await fetch(`http://${system.ip}:9050/api/ssh/test`, {
+    const response = await fetch(agentUrl(system.ip, '/api/ssh/test'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -5,13 +5,16 @@ import { SystemForm } from './SystemForm';
 import { useDialog } from '@/components/dialogs/hooks/use-dialog';
 import { toast } from '@/components/ui/use-toast';
 import type { System } from '../../types';
+import { provisionSystem, type ProvisionResult } from '../../services/provision';
 
 interface SystemDialogProps {
   mode: 'add' | 'edit';
   system?: System | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (mode: 'add' | 'edit', systemId: number | undefined, data: Partial<System>) => Promise<void>;
+  onSubmit: (mode: 'add' | 'edit', systemId: number | undefined, data: Partial<System>) => Promise<System | void>;
+  /** Called after provisioning completes (success or failure). Receives the saved system id and the result. */
+  onProvisionComplete?: (systemId: number, result: ProvisionResult) => void;
 }
 
 type FormState = {
@@ -34,7 +37,7 @@ const initialFormState: FormState = {
   privateKey: '',
 };
 
-export function SystemDialog({ mode, system, open, onOpenChange, onSubmit }: SystemDialogProps) {
+export function SystemDialog({ mode, system, open, onOpenChange, onSubmit, onProvisionComplete }: SystemDialogProps) {
   const dialog = useDialog();
   const [formData, setFormData] = useState<FormState>(initialFormState);
 
@@ -74,49 +77,6 @@ export function SystemDialog({ mode, system, open, onOpenChange, onSubmit }: Sys
     }
   };
 
-  const provisionSystem = async () => {
-    const credentials = {
-      host: formData.ip,
-      username: formData.username,
-      ...(formData.authMode === 'password'
-        ? { password: formData.password }
-        : { privateKey: formData.privateKey }),
-    };
-
-    // Step 1: ping (TCP probe to SSH port)
-    toast({ title: 'Provisioning', description: 'Checking connectivity…' });
-    const pingRes = await fetch('/api/systems/ping', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ host: formData.ip, port: 22 }),
-    }).then((r) => r.json());
-    if (!pingRes.reachable) throw new Error(`Host ${formData.ip}:22 is not reachable`);
-
-    // Step 2: ssh-test
-    toast({ title: 'Provisioning', description: 'Verifying SSH credentials…' });
-    const sshRes = await fetch('/api/systems/ssh-test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials),
-    }).then((r) => r.json());
-    if (!sshRes.success) throw new Error(`SSH login failed: ${sshRes.error || 'unknown error'}`);
-
-    // Step 3: deploy agent
-    toast({ title: 'Provisioning', description: 'Deploying agent to target…' });
-    const deployRes = await fetch('/api/systems/deploy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials),
-    }).then((r) => r.json());
-    if (!deployRes.success) {
-      const failed = (deployRes.steps || []).find((s: any) => !s.ok);
-      throw new Error(
-        deployRes.error ||
-          (failed ? `Deploy failed at step "${failed.name}": ${failed.detail || ''}` : 'Deploy failed'),
-      );
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -124,18 +84,47 @@ export function SystemDialog({ mode, system, open, onOpenChange, onSubmit }: Sys
       try {
         validateForm();
 
-        if (mode === 'add') {
-          await provisionSystem();
-        }
+        // Save the system immediately (with provisionStatus='provisioning' for add mode).
+        // This way, if provisioning fails, the system is still saved and the user can retry later.
+        const dataToSave: Partial<System> = mode === 'add'
+          ? { ...formData, provisionStatus: 'provisioning' }
+          : formData;
 
-        await onSubmit(mode, system?.id, formData);
-
-        toast({
-          title: 'Success',
-          description: `System has been ${mode === 'add' ? 'added and provisioned' : 'updated'} successfully.`,
-        });
+        const saved = await onSubmit(mode, system?.id, dataToSave);
 
         if (mode === 'add') setFormData(initialFormState);
+
+        // Close dialog immediately — provisioning runs in the background.
+        onOpenChange(false);
+
+        // For add mode, kick off async provisioning. For edit, nothing to do.
+        if (mode === 'add') {
+          const savedSystem = (saved as System) || ({ ...formData, id: Date.now() } as unknown as System);
+          toast({
+            title: 'System Added',
+            description: `Provisioning ${savedSystem.name || formData.name} in the background…`,
+          });
+
+          // Fire-and-forget provisioning
+          void (async () => {
+            const result = await provisionSystem(savedSystem);
+            if (onProvisionComplete && savedSystem.id) {
+              onProvisionComplete(savedSystem.id, result);
+            }
+            toast({
+              title: result.success ? 'Provisioning Successful' : 'Provisioning Failed',
+              description: result.success
+                ? `${savedSystem.name} is ready.`
+                : `${savedSystem.name}: ${(result.error || 'unknown error').split('\n')[0]}. You can retry from the systems list.`,
+              variant: result.success ? 'default' : 'destructive',
+            });
+          })();
+        } else {
+          toast({
+            title: 'Success',
+            description: 'System has been updated successfully.',
+          });
+        }
       } catch (error) {
         toast({
           title: 'Error',

@@ -1,6 +1,7 @@
 // modules/systems/components/ssh/ssh-terminal-dialog.tsx
 import { useState, useRef, useEffect } from 'react';
 import { Terminal } from 'lucide-react';
+import { agentUrl } from '@/lib/constants';
 import { Resizable } from 're-resizable';
 import {
   Dialog,
@@ -72,7 +73,7 @@ export function SSHTerminalDialog({ system, open, onOpenChange }: SSHTerminalDia
 
     try {
       setOutput(prev => [...prev, `$ ${command}`]);
-      const result = await fetch(`http://${system.ip}:9050/api/ssh/execute`, {
+      const result = await fetch(agentUrl(system.ip, '/api/ssh/execute'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

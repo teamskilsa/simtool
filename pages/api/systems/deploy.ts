@@ -3,14 +3,14 @@ import { NodeSSH } from 'node-ssh';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-const AGENT_PORT = 9050;
-const REMOTE_BASE = 'simtool/version_1';
+const AGENT_PORT = parseInt(process.env.AGENT_PORT || '9050', 10);
+const REMOTE_BASE = process.env.REMOTE_BASE || 'simtool/version_1';
 const REMOTE_FILE = 'server.js';
 
 // Where the bundled agent lives on this (Next.js) host
 const AGENT_BUNDLE_PATH =
     process.env.AGENT_BUNDLE_PATH ||
-    '/Users/nikhiljain/server/dist/server.js';
+    path.join(process.cwd(), 'agent', 'dist', 'server.js');
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         } catch {
             return res.status(500).json({
                 success: false,
-                error: `Agent bundle not found at ${AGENT_BUNDLE_PATH}. Run 'npm run build' in /Users/nikhiljain/server/.`,
+                error: `Agent bundle not found at ${AGENT_BUNDLE_PATH}. Run 'npm run build' in the agent/ directory.`,
             });
         }
 

@@ -1,72 +1,276 @@
-// src/modules/testConfig/views/CreateTestView.tsx
-import React from 'react';
-import { Card } from '@/components/ui/card';
+// Create Config — multi-RAT config builder: NR / LTE / NB-IoT / CAT-M / Core
+import React, { useState, useMemo, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useTheme } from '@/components/theme/context/theme-context';
-import { themes } from '@/components/theme/themes';
-import { Plus, Download } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { ConfigEditor } from '../components/ConfigEditor';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Save, Copy, Download, Eye, EyeOff, FolderOpen, Radio, Shield, Wifi, Signal, RotateCcw } from 'lucide-react';
+import { ResizablePanel } from '@/components/ui/resizable-panel';
+import { toast } from '@/components/ui/use-toast';
+import {
+  ConfigBuilder, CoreConfigBuilder, LTEConfigBuilder,
+  DEFAULT_NR_FORM, DEFAULT_LTE_FORM,
+  generateNRConfig, generateCoreConfig, generateLTEConfig,
+  embedBuilderMeta, extractBuilderMeta,
+} from '../components/ConfigBuilder';
+import { configsService } from '../services/configs.service';
+import { useConfigContext } from '../context';
+import type { NRFormState, LTEFormState } from '../components/ConfigBuilder';
+import type { ConfigItem } from '../types';
+
+type ConfigType = 'nr' | 'lte' | 'nbiot' | 'catm' | 'core';
+
+const RAT_OPTIONS: { id: ConfigType; label: string; icon: any; description: string }[] = [
+  { id: 'nr',    label: 'NR (5G)',    icon: Radio,  description: 'gNB SA' },
+  { id: 'lte',   label: 'LTE',       icon: Wifi,   description: 'eNB' },
+  { id: 'nbiot', label: 'NB-IoT',    icon: Signal, description: 'IoT' },
+  { id: 'catm',  label: 'CAT-M',     icon: Signal, description: 'eMTC' },
+  { id: 'core',  label: 'Core',      icon: Shield, description: 'MME/AMF' },
+];
 
 export const CreateTestView: React.FC = () => {
-  const { theme } = useTheme();
-  const themeConfig = themes[theme];
+  const { configs, loadConfigs } = useConfigContext();
+  const [configType, setConfigType] = useState<ConfigType>('nr');
+  const [configName, setConfigName] = useState('gnb-config');
+  const [nrForm, setNrForm] = useState<NRFormState>({ ...DEFAULT_NR_FORM });
+  const [lteForm, setLteForm] = useState<LTEFormState>({ ...DEFAULT_LTE_FORM });
+  const [saving, setSaving] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+
+  const handleNrChange = (key: string, value: any) => setNrForm(prev => ({ ...prev, [key]: value }));
+  const handleLteChange = (key: string, value: any) => setLteForm(prev => ({ ...prev, [key]: value }));
+
+  const handleTypeChange = (type: ConfigType) => {
+    setConfigType(type);
+    const nameMap: Record<ConfigType, string> = {
+      nr: 'gnb-config', lte: 'enb-config', nbiot: 'nbiot-config', catm: 'catm-config', core: 'mme-config',
+    };
+    setConfigName(nameMap[type]);
+  };
+
+  // Generate config output based on type
+  const configOutput = useMemo(() => {
+    switch (configType) {
+      case 'nr': return generateNRConfig(nrForm);
+      case 'lte': return generateLTEConfig(lteForm, 'lte');
+      case 'nbiot': return generateLTEConfig(lteForm, 'nbiot');
+      case 'catm': return generateLTEConfig(lteForm, 'catm');
+      case 'core': return generateCoreConfig(nrForm);
+    }
+  }, [configType, nrForm, lteForm]);
+
+  const moduleType = (() => {
+    switch (configType) {
+      case 'nr': return nrForm.fr2 ? 'gnb' : 'enb';
+      case 'lte': case 'nbiot': case 'catm': return 'enb';
+      case 'core': return 'mme';
+    }
+  })();
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(configOutput);
+    toast({ title: 'Copied' });
+  };
+
+  const handleDownload = () => {
+    const fileName = configName.endsWith('.cfg') ? configName : `${configName}.cfg`;
+    const blob = new Blob([configOutput], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName; a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Downloaded', description: fileName });
+  };
+
+  const handleSave = async () => {
+    if (!configName.trim()) return;
+    setSaving(true);
+    try {
+      const fileName = configName.endsWith('.cfg') ? configName : `${configName}.cfg`;
+      // Embed builder metadata at the top so this config can be loaded back into the form
+      const form = (configType === 'lte' || configType === 'nbiot' || configType === 'catm') ? lteForm : nrForm;
+      const contentWithMeta = embedBuilderMeta(configOutput, { type: configType, form });
+
+      await configsService.importConfig({
+        id: `${moduleType}-${Date.now()}`,
+        name: fileName,
+        module: moduleType as any,
+        content: contentWithMeta,
+        path: `/root/${moduleType === 'mme' ? 'mme' : 'enb'}/config/${fileName}`,
+        createdBy: 'admin',
+        createdAt: new Date(),
+        modifiedAt: new Date(),
+        size: contentWithMeta.length,
+      }, 'admin');
+      await loadConfigs();
+      toast({ title: 'Saved', description: `${fileName} saved.` });
+    } catch (err: any) {
+      toast({ title: 'Save Failed', description: err?.message || 'Error', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const savedConfigs = configs.filter((c: ConfigItem) =>
+    configType === 'core' ? c.module === 'mme' : ['enb', 'gnb'].includes(c.module)
+  );
+
+  // If the user clicked "Edit in Builder" from Test Configurations, auto-load that config
+  useEffect(() => {
+    const pendingId = typeof window !== 'undefined' ? sessionStorage.getItem('simtool_load_config_id') : null;
+    if (!pendingId || configs.length === 0) return;
+    const target = configs.find((c: ConfigItem) => c.id === pendingId);
+    if (target) {
+      sessionStorage.removeItem('simtool_load_config_id');
+      handleLoadConfig(pendingId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configs]);
+
+  const handleLoadConfig = (configId: string) => {
+    const config = configs.find((c: ConfigItem) => c.id === configId);
+    if (!config || !config.content) {
+      toast({ title: 'Load Failed', description: 'Config content unavailable', variant: 'destructive' });
+      return;
+    }
+
+    const meta = extractBuilderMeta(config.content);
+    setConfigName(config.name.replace(/\.cfg$/, ''));
+
+    if (meta) {
+      // Restore the builder form state — switches to the right RAT type and fills all fields
+      setConfigType(meta.type);
+      if (meta.type === 'lte' || meta.type === 'nbiot' || meta.type === 'catm') {
+        setLteForm({ ...DEFAULT_LTE_FORM, ...(meta.form as LTEFormState) });
+      } else {
+        setNrForm({ ...DEFAULT_NR_FORM, ...(meta.form as NRFormState) });
+      }
+      toast({ title: 'Loaded into Builder', description: `${config.name} — edit the blocks, then Save.` });
+    } else {
+      // Legacy config without builder meta — just show preview
+      setShowPreview(true);
+      toast({
+        title: 'Loaded (View Only)',
+        description: `${config.name} has no builder metadata. Previewing text — create a new config to edit in builder.`,
+      });
+    }
+  };
 
   return (
-    <div className="flex-1 p-6 space-y-6">
-      <Card className="overflow-hidden">
-        <div className="px-6 py-4 border-b flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Create Test</h2>
-          <div className="flex items-center space-x-3">
-            <Button variant="secondary" size="sm">
-              <Download className="w-4 h-4 mr-2" />
-              Import Template
-            </Button>
-            <Button size="sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Create Test
-            </Button>
+    <div className="space-y-4">
+      {/* Hero header */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0">
+            <Radio className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight">Create Config</h2>
+            <p className="text-sm text-muted-foreground">
+              Visual Amarisoft config builder
+            </p>
+          </div>
+          {/* RAT dropdown */}
+          <div className="ml-2 flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">RAT:</span>
+            <Select value={configType} onValueChange={(v) => handleTypeChange(v as ConfigType)}>
+              <SelectTrigger className="h-9 w-44 text-sm bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {RAT_OPTIONS.map(rat => {
+                  const Icon = rat.icon;
+                  return (
+                    <SelectItem key={rat.id} value={rat.id}>
+                      <span className="flex items-center gap-2">
+                        <Icon className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>{rat.label}</span>
+                        <span className="text-[10px] text-gray-500">({rat.description})</span>
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
-        <div className="p-6">
-          <Tabs defaultValue="config" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="config">Configuration</TabsTrigger>
-              <TabsTrigger value="parameters">Parameters</TabsTrigger>
-              <TabsTrigger value="validation">Validation</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="config" className="space-y-4">
-              <TooltipProvider>
-                <ConfigEditor
-                  config={null}
-                  content=""
-                  onChange={() => {}}
-                  readOnly={false}
-                />
-              </TooltipProvider>
-            </TabsContent>
-
-            <TabsContent value="parameters">
-              <Card className="p-4">
-                <p className="text-muted-foreground">
-                  Test parameters configuration will be implemented here.
-                </p>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="validation">
-              <Card className="p-4">
-                <p className="text-muted-foreground">
-                  Test validation rules will be implemented here.
-                </p>
-              </Card>
-            </TabsContent>
-          </Tabs>
+        {/* Right-side actions */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {savedConfigs.length > 0 && (
+            <Select onValueChange={handleLoadConfig}>
+              <SelectTrigger className="h-8 w-36 text-xs bg-white">
+                <FolderOpen className="w-3.5 h-3.5 mr-1" />
+                <SelectValue placeholder="Load config" />
+              </SelectTrigger>
+              <SelectContent>
+                {savedConfigs.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          <Input
+            className="h-8 w-40 text-sm"
+            value={configName}
+            onChange={e => setConfigName(e.target.value)}
+            placeholder="config-name"
+          />
+          <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => setShowPreview(!showPreview)}>
+            {showPreview ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            <span className="text-xs">{showPreview ? 'Hide' : 'Preview'}</span>
+          </Button>
+          <Button size="sm" variant="outline" className="h-8" onClick={handleCopy}><Copy className="w-3.5 h-3.5" /></Button>
+          <Button size="sm" variant="outline" className="h-8" onClick={handleDownload}><Download className="w-3.5 h-3.5" /></Button>
+          <Button size="sm" className="h-8 bg-indigo-600 text-white hover:bg-indigo-700" onClick={handleSave} disabled={saving}>
+            <Save className="w-3.5 h-3.5 mr-1" /> {saving ? 'Saving…' : 'Save'}
+          </Button>
         </div>
-      </Card>
+      </div>
+
+
+      {/* Builder + optional live preview as resizable split */}
+      {showPreview ? (
+        <ResizablePanel
+          className="rounded-lg border border-gray-200 bg-white"
+          defaultSplit={55}
+          leftClassName="p-4"
+          rightClassName="bg-gray-950 rounded-r-lg"
+          left={
+            <>
+              {configType === 'nr' && <ConfigBuilder form={nrForm} onChange={handleNrChange} />}
+              {(configType === 'lte' || configType === 'nbiot' || configType === 'catm') && (
+                <LTEConfigBuilder form={lteForm} onChange={handleLteChange} ratMode={configType} />
+              )}
+              {configType === 'core' && <CoreConfigBuilder form={nrForm} onChange={handleNrChange} />}
+            </>
+          }
+          right={
+            <div className="flex flex-col h-full">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800 bg-gray-900 rounded-tr-lg">
+                <span className="text-xs font-mono text-gray-400">
+                  {configType === 'core' ? 'mme.cfg' : 'enb.cfg'}
+                </span>
+                <Badge variant="outline" className="text-[10px] border-gray-700 text-gray-400">
+                  {RAT_OPTIONS.find(r => r.id === configType)?.description}
+                </Badge>
+              </div>
+              <pre className="flex-1 p-3 text-[11px] font-mono text-gray-300 overflow-auto leading-relaxed">
+                {configOutput}
+              </pre>
+            </div>
+          }
+        />
+      ) : (
+        <Card>
+          <CardContent className="pt-4">
+            {configType === 'nr' && <ConfigBuilder form={nrForm} onChange={handleNrChange} />}
+            {(configType === 'lte' || configType === 'nbiot' || configType === 'catm') && (
+              <LTEConfigBuilder form={lteForm} onChange={handleLteChange} ratMode={configType} />
+            )}
+            {configType === 'core' && <CoreConfigBuilder form={nrForm} onChange={handleNrChange} />}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

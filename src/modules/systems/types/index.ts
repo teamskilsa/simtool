@@ -3,6 +3,14 @@ export * from './connection';
 
 export type SystemType = 'Callbox' | 'UESim' | 'MME' | 'SPGW';
 
+export type ProvisionStatus = 'pending' | 'provisioning' | 'success' | 'failed';
+
+export interface ProvisionStep {
+  name: string;
+  ok: boolean;
+  detail?: string;
+}
+
 export interface System {
   id: number;
   name: string;
@@ -23,6 +31,14 @@ export interface System {
   uptime?: string;
   lastUpdate?: number;
   lastError?: string;
+  // Provisioning state — set during/after Add or Retry Provisioning.
+  // When a system is added but reachability/SSH/deploy fails, it's still saved
+  // with provisionStatus='failed' so the user can retry later.
+  provisionStatus?: ProvisionStatus;
+  provisionError?: string;
+  provisionSteps?: ProvisionStep[];
+  provisionedAt?: number;
+  provisionFailedStep?: string; // e.g. 'ping', 'ssh-test', 'deploy'
 }
 
 export interface SystemFilters {

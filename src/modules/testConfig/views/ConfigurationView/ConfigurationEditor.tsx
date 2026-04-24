@@ -10,8 +10,10 @@ import {
   Maximize2,
   Minimize2,
   Check,
-  FileJson
+  FileJson,
+  Pencil
 } from 'lucide-react';
+import { extractBuilderMeta } from '../../components/ConfigBuilder';
 import { ConfigItem } from '../../types';
 import { Editor } from '../../components/ConfigEditor/Editor';
 import { cn } from '@/lib/utils';
@@ -122,6 +124,33 @@ export const ConfigurationEditor: React.FC<ConfigurationEditorProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Edit in Builder — only shown if the config has @builder metadata */}
+          {config && extractBuilderMeta(config.content || '') && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // Stash the config ID so CreateTestView auto-loads it, and
+                    // dispatch a nav event that the dashboard layout listens for.
+                    sessionStorage.setItem('simtool_load_config_id', config.id);
+                    window.dispatchEvent(new CustomEvent('simtool:navigate', {
+                      detail: { section: 'create-test' },
+                    }));
+                  }}
+                  className="bg-indigo-600 text-white hover:bg-indigo-700 border-0"
+                >
+                  <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                  Edit in Builder
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Open this config in the visual block-based builder
+              </TooltipContent>
+            </Tooltip>
+          )}
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

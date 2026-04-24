@@ -22,7 +22,8 @@ import {
   Code,
   Bell,
   Shield,
-  User
+  User,
+  Package
 } from 'lucide-react';
 
 interface DashboardSidebarProps {
@@ -74,6 +75,11 @@ export const DashboardSidebar = ({
       icon: Server,
       label: 'Test Systems',
       badge: '2'
+    },
+    {
+      id: 'sw-management',
+      icon: Package,
+      label: 'SW Management'
     },
     {
       id: 'remote-api',

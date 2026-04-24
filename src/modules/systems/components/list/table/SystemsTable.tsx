@@ -5,6 +5,7 @@ import { SystemDialog } from '../../shared/SystemDialog';
 import { toast } from "@/components/ui/use-toast";
 import type { System } from '../../../types';
 import type { ConnectionStatus } from '../../../types/connection';
+import type { ProvisionResult } from '../../../services/provision';
 
 interface SystemsTableProps {
   systems: System[];
@@ -12,14 +13,18 @@ interface SystemsTableProps {
   onRefreshSystem: (systemId: number) => Promise<void>;
   onEditSystem: (systemId: number, updates: Partial<System>) => Promise<void>;
   onDeleteSystem: (systemId: number) => Promise<void>;
+  onProvisionComplete?: (systemId: number, result: ProvisionResult) => void;
+  updateSystemProvisionStatus?: (systemId: number, patch: Partial<System>) => void;
 }
 
-export function SystemsTable({ 
-  systems, 
+export function SystemsTable({
+  systems,
   connections = new Map(),
   onRefreshSystem,
   onEditSystem,
-  onDeleteSystem 
+  onDeleteSystem,
+  onProvisionComplete,
+  updateSystemProvisionStatus,
 }: SystemsTableProps) {
   const [editingSystem, setEditingSystem] = useState<System | null>(null);
   const [localConnections, setLocalConnections] = useState(connections);
@@ -88,6 +93,8 @@ export function SystemsTable({
                 onEdit={() => setEditingSystem(system)}
                 onDelete={() => onDeleteSystem(system.id)}
                 onConnectionUpdate={(status) => handleConnectionUpdate(system.id, status)}
+                onProvisionComplete={onProvisionComplete}
+                updateSystemProvisionStatus={updateSystemProvisionStatus}
               />
             ))}
           </tbody>

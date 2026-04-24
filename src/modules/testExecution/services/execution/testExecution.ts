@@ -41,7 +41,8 @@ class TestExecutionService {
       const config = await configResponse.json();
 
       // 2. Execute the configuration on the node server
-      const executeResponse = await fetch(`http://localhost:3001/api/configs/${moduleConfig.module}/execute`, {
+      const executionBase = process.env.NEXT_PUBLIC_EXECUTION_SERVER_URL || 'http://localhost:3001';
+      const executeResponse = await fetch(`${executionBase}/api/configs/${moduleConfig.module}/execute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

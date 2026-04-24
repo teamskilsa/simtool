@@ -5,9 +5,15 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
+// Validate IP/hostname to prevent command injection
+function isValidHost(ip: string): boolean {
+  // Allow IPv4, IPv6, and simple hostnames (no shell metacharacters)
+  return /^[a-zA-Z0-9.:_-]+$/.test(ip);
+}
+
 async function pingHost(ip: string): Promise<boolean> {
+  if (!isValidHost(ip)) return false;
   try {
-    // Use different ping command based on OS
     const command = process.platform === 'win32'
       ? `ping -n 1 -w 1000 ${ip}`
       : `ping -c 1 -W 1 ${ip}`;
@@ -20,7 +26,16 @@ async function pingHost(ip: string): Promise<boolean> {
 }
 
 async function checkSSHPort(ip: string): Promise<boolean> {
+  if (!isValidHost(ip)) return false;
   try {
+    if (process.platform === 'win32') {
+      // Use PowerShell Test-NetConnection on Windows (nc not available)
+      const { stdout } = await execAsync(
+        `powershell -Command "Test-NetConnection -ComputerName ${ip} -Port 22 -InformationLevel Quiet"`,
+        { timeout: 5000 }
+      );
+      return stdout.trim().toLowerCase() === 'true';
+    }
     const { stdout } = await execAsync(`nc -zv -w1 ${ip} 22 2>&1`);
     return stdout.includes('succeeded') || stdout.includes('open');
   } catch {
