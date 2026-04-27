@@ -188,21 +188,15 @@ export function SystemsListView() {
         
         {/* Main Content */}
         <div className="p-6">
-          <div className={`
-            rounded-xl 
-            shadow-lg
-            backdrop-blur-md
-            ${themeConfig.surfaces.card.background}
-            ${themeConfig.surfaces.card.border}
-            ${themeConfig.effects.glass.medium}
-          `}>
+          <div
+            className="rounded-xl shadow-lg backdrop-blur-sm bg-white/90 border"
+            style={{ borderColor: themeConfig.surfaces.card.border }}
+          >
             {/* Filters Section */}
-            <div className={`
-              px-6 py-4 
-              border-b 
-              backdrop-blur-sm
-              ${themeConfig.surfaces.card.border}
-            `}>
+            <div
+              className="px-6 py-4 border-b"
+              style={{ borderColor: themeConfig.surfaces.card.border }}
+            >
               <SystemsFilters 
                 filters={filters} 
                 setFilters={setFilters}
