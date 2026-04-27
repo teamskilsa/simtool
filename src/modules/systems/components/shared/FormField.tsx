@@ -1,7 +1,6 @@
 // modules/systems/components/shared/FormField.tsx
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useTheme } from '@/components/theme/context/theme-context';
 import type { LucideIcon } from 'lucide-react';
 
 interface FormFieldProps {
@@ -14,25 +13,23 @@ interface FormFieldProps {
   autoComplete?: string;
 }
 
-export function FormField({ 
-  label, 
-  value, 
-  onChange, 
+export function FormField({
+  label,
+  value,
+  onChange,
   placeholder,
   type = 'text',
   icon: Icon,
   autoComplete
 }: FormFieldProps) {
-  const { mode } = useTheme();
-
   return (
-    <div className="space-y-2">
-      <Label className="text-sm font-medium text-slate-900 dark:text-slate-200">
+    <div className="space-y-1.5">
+      <Label className="text-sm font-medium text-foreground">
         {label}
       </Label>
       <div className="relative">
         {Icon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
             <Icon className="w-4 h-4" />
           </div>
         )}
@@ -43,15 +40,11 @@ export function FormField({
           placeholder={placeholder}
           autoComplete={autoComplete}
           className={`
-            ${Icon ? 'pl-9' : 'pl-3'}
-            ${mode === 'light' 
-              ? 'bg-white border-slate-200 hover:bg-slate-50/50' 
-              : 'bg-slate-800/75 border-slate-700 hover:bg-slate-800'
-            }
+            ${Icon ? 'pl-9' : ''}
+            bg-background border-input text-foreground placeholder:text-muted-foreground
+            hover:border-ring/50
+            focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:border-ring/50
             transition-colors
-            focus:ring-2
-            focus:ring-indigo-500/20
-            focus:border-indigo-500/30
           `}
         />
       </div>

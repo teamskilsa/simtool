@@ -1,7 +1,5 @@
 // modules/systems/components/list/filters.tsx
-import { Search, SlidersHorizontal, Play, Pause, RefreshCw } from 'lucide-react';
-import { useTheme } from '@/components/theme/context/theme-context';
-import { themes } from '@/components/theme/themes';
+import { Search, SlidersHorizontal, Play, Pause } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -22,7 +20,7 @@ interface MonitoringConfig {
 const DEFAULT_MONITORING: MonitoringConfig = {
   isActive: false,
   pullDuration: 60,
-  refreshInterval: 5
+  refreshInterval: 5,
 };
 
 interface SystemsFiltersProps {
@@ -33,92 +31,55 @@ interface SystemsFiltersProps {
   onStopMonitoring: () => void;
 }
 
-export function SystemsFilters({ 
-  filters, 
-  setFilters, 
+export function SystemsFilters({
+  filters,
+  setFilters,
   monitoring = DEFAULT_MONITORING,
   onStartMonitoring,
-  onStopMonitoring
+  onStopMonitoring,
 }: SystemsFiltersProps) {
-  const { theme, mode } = useTheme();
-  const themeConfig = themes[theme];
-
-  // Ensure monitoring has all required properties
-  const monitoringConfig = {
-    ...DEFAULT_MONITORING,
-    ...monitoring
-  };
-
-  const handleDurationChange = (value: string) => {
-    const duration = parseInt(value) || DEFAULT_MONITORING.pullDuration;
-    setFilters({ 
-      ...filters, 
-      monitoringConfig: { 
-        ...monitoringConfig,
-        pullDuration: duration 
-      }
-    });
-  };
-
-  const handleIntervalChange = (value: string) => {
-    const interval = parseInt(value) || DEFAULT_MONITORING.refreshInterval;
-    setFilters({ 
-      ...filters, 
-      monitoringConfig: { 
-        ...monitoringConfig,
-        refreshInterval: interval
-      }
-    });
-  };
+  const monitoringConfig = { ...DEFAULT_MONITORING, ...monitoring };
 
   return (
-    <div className="flex flex-wrap items-center gap-4">
-      {/* Search Input */}
-      <div className="relative flex-1 min-w-[240px]">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+    <div className="flex flex-wrap items-center gap-3">
+      {/* Search */}
+      <div className="relative flex-1 min-w-[200px]">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
         <input
           type="text"
-          placeholder="Search systems..."
-          value={filters.search || ''}
+          placeholder="Search systems…"
+          value={filters.search ?? ''}
           onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-          className={`
-            pl-9 pr-4 py-2 w-full 
-            rounded-lg
-            ${mode === 'light' ? 'bg-white/50' : 'bg-gray-900/50'}
-            border-${theme}-200
-            focus:border-${theme}-400
-            focus:ring-${theme}-400
-            focus:ring-2
-            focus:ring-offset-0
-            placeholder:text-gray-400
-          `}
+          className="pl-9 pr-4 py-2 w-full rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-colors text-sm"
         />
       </div>
 
-      {/* Type Filter */}
-      <Select 
-        value={filters.type || 'all'}
-        onValueChange={(value) => setFilters({ ...filters, type: value })}
+      {/* Type filter */}
+      <Select
+        value={filters.type ?? 'all'}
+        onValueChange={(v) => setFilters({ ...filters, type: v })}
       >
-        <SelectTrigger className="w-[160px] bg-white/90 dark:bg-gray-800/90">
+        <SelectTrigger className="w-[150px] bg-background border-input text-foreground">
           <SelectValue placeholder="System Type" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="bg-popover border-border">
           <SelectItem value="all">All Types</SelectItem>
           <SelectItem value="Callbox">Callbox</SelectItem>
           <SelectItem value="UESim">UE Simulator</SelectItem>
+          <SelectItem value="MME">MME</SelectItem>
+          <SelectItem value="SPGW">SPGW</SelectItem>
         </SelectContent>
       </Select>
 
-      {/* Status Filter */}
+      {/* Status filter */}
       <Select
-        value={filters.status || 'all'}
-        onValueChange={(value) => setFilters({ ...filters, status: value })}
+        value={filters.status ?? 'all'}
+        onValueChange={(v) => setFilters({ ...filters, status: v })}
       >
-        <SelectTrigger className="w-[160px] bg-white/90 dark:bg-gray-800/90">
+        <SelectTrigger className="w-[140px] bg-background border-input text-foreground">
           <SelectValue placeholder="Status" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="bg-popover border-border">
           <SelectItem value="all">All Status</SelectItem>
           <SelectItem value="running">Running</SelectItem>
           <SelectItem value="warning">Warning</SelectItem>
@@ -126,63 +87,52 @@ export function SystemsFilters({
         </SelectContent>
       </Select>
 
-      {/* Monitoring Controls */}
-      <div className="flex items-center gap-3 bg-white/90 dark:bg-gray-800/90 p-2 rounded-lg">
+      {/* Monitoring controls */}
+      <div className="flex items-center gap-2 bg-muted/50 border border-border px-3 py-1.5 rounded-lg">
         <Input
           type="number"
           placeholder="Duration (s)"
           value={monitoringConfig.pullDuration}
-          onChange={(e) => handleDurationChange(e.target.value)}
-          className="w-24 bg-white dark:bg-gray-700"
+          onChange={(e) => setFilters({
+            ...filters,
+            monitoringConfig: { ...monitoringConfig, pullDuration: parseInt(e.target.value) || 60 },
+          })}
+          className="w-24 h-7 text-sm bg-background border-input"
           min={1}
         />
-        
         <Input
           type="number"
           placeholder="Interval (s)"
           value={monitoringConfig.refreshInterval}
-          onChange={(e) => handleIntervalChange(e.target.value)}
-          className="w-24 bg-white dark:bg-gray-700"
+          onChange={(e) => setFilters({
+            ...filters,
+            monitoringConfig: { ...monitoringConfig, refreshInterval: parseInt(e.target.value) || 5 },
+          })}
+          className="w-24 h-7 text-sm bg-background border-input"
           min={1}
         />
-
         <Button
           variant="outline"
-          onClick={() => monitoringConfig.isActive ? 
-            onStopMonitoring() : 
-            onStartMonitoring(
-              monitoringConfig.pullDuration,
-              monitoringConfig.refreshInterval
-            )
+          size="sm"
+          onClick={() =>
+            monitoringConfig.isActive
+              ? onStopMonitoring()
+              : onStartMonitoring(monitoringConfig.pullDuration, monitoringConfig.refreshInterval)
           }
-          className={`
-            ${monitoringConfig.isActive 
-              ? 'bg-red-100 hover:bg-red-200 text-red-700 border-red-200' 
-              : 'bg-green-100 hover:bg-green-200 text-green-700 border-green-200'
-            }
-          `}
+          className={
+            monitoringConfig.isActive
+              ? 'border-destructive/30 text-destructive hover:bg-destructive/10'
+              : 'border-green-500/30 text-green-700 dark:text-green-400 hover:bg-green-500/10'
+          }
         >
           {monitoringConfig.isActive ? (
-            <><Pause className="w-4 h-4 mr-2" /> Stop</>
+            <><Pause className="w-3.5 h-3.5 mr-1.5" /> Stop</>
           ) : (
-            <><Play className="w-4 h-4 mr-2" /> Monitor</>
+            <><Play className="w-3.5 h-3.5 mr-1.5" /> Monitor</>
           )}
         </Button>
-
-        <Button 
-          variant="outline" 
-          size="icon" 
-          className="bg-white/90 dark:bg-gray-800/90"
-        >
-          <RefreshCw className="w-4 h-4" />
-        </Button>
-
-        <Button 
-          variant="outline" 
-          size="icon"
-          className="bg-white/90 dark:bg-gray-800/90"
-        >
-          <SlidersHorizontal className="w-4 h-4" />
+        <Button variant="outline" size="icon" className="h-7 w-7 bg-background border-input">
+          <SlidersHorizontal className="w-3.5 h-3.5" />
         </Button>
       </div>
     </div>

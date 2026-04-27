@@ -1,16 +1,18 @@
 // modules/users/components/user-management/UserList.tsx
 'use client';
 
-import { 
-  MoreVertical, 
-  Edit2, 
-  Trash2, 
-  Shield, 
+import {
+  MoreVertical,
+  Edit2,
+  Trash2,
+  Shield,
   UserCog,
-  AlertCircle
+  AlertCircle,
+  Users,
 } from 'lucide-react';
 import { useTheme } from '@/components/theme/context/theme-context';
-import { themes } from '@/components/theme/themes';
+import { THEME_CHROME_BG } from '@/components/theme/utils/theme-chrome';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { User } from '../../types';
 import {
   DropdownMenu,
@@ -42,15 +44,35 @@ interface UserListProps {
   onDelete: (userId: string) => Promise<void>;
 }
 
+// Dark-safe role badge colours
+const ROLE_BADGE: Record<string, string> = {
+  admin: 'bg-violet-500/10 text-violet-700 dark:text-violet-400 border border-violet-500/20',
+  user:  'bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20',
+};
+
+function UserSkeleton() {
+  return (
+    <div className="p-4 rounded-lg border border-border flex items-center justify-between">
+      <div className="flex items-center gap-4">
+        <Skeleton className="w-10 h-10 rounded-lg" />
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-3 w-20" />
+        </div>
+      </div>
+      <Skeleton className="h-8 w-8 rounded" />
+    </div>
+  );
+}
+
 export function UserList({ users, isLoading, error, onEdit, onDelete }: UserListProps) {
   const { theme } = useTheme();
-  const themeConfig = themes[theme];
+  const avatarBg = THEME_CHROME_BG[theme] ?? 'bg-indigo-600';
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
     if (!userToDelete) return;
-    
     try {
       setIsDeleting(true);
       await onDelete(userToDelete.id);
@@ -61,62 +83,63 @@ export function UserList({ users, isLoading, error, onEdit, onDelete }: UserList
   };
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="space-y-3">
+        {[1, 2, 3].map((n) => <UserSkeleton key={n} />)}
+      </div>
+    );
   }
 
   if (error) {
     return (
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          {error}
-        </AlertDescription>
+        <AlertDescription>{error}</AlertDescription>
       </Alert>
+    );
+  }
+
+  if (users.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4">
+          <Users className="w-7 h-7 text-muted-foreground" />
+        </div>
+        <h3 className="text-base font-semibold text-foreground mb-1">No users found</h3>
+        <p className="text-sm text-muted-foreground max-w-xs">
+          No users match your current search or filter criteria.
+        </p>
+      </div>
     );
   }
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="space-y-3">
         {users.map((user) => (
           <div
             key={user.id}
-            className={`
-              p-4 rounded-lg
-              ${themeConfig.surfaces.card.background}
-              ${themeConfig.surfaces.card.border}
-              flex items-center justify-between
-            `}
+            className="p-4 rounded-lg border border-border bg-card flex items-center justify-between hover:bg-muted/30 transition-colors"
           >
-            <div className="flex items-center space-x-4">
-              <div className={`
-                w-10 h-10 rounded-lg
-                ${themeConfig.components.button.variants.default}
-                flex items-center justify-center
-              `}>
-                <span className="text-white font-medium">
+            <div className="flex items-center gap-4">
+              <div className={`w-10 h-10 rounded-lg ${avatarBg} flex items-center justify-center flex-shrink-0`}>
+                <span className="text-white font-medium text-sm">
                   {user.username[0].toUpperCase()}
                 </span>
               </div>
               <div>
-                <div className="flex items-center space-x-2">
-                  <h3 className="font-medium">{user.username}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-medium text-foreground">{user.username}</h3>
                   {user.role === 'admin' && (
-                    <Shield className="w-4 h-4 text-purple-500" />
+                    <Shield className="w-3.5 h-3.5 text-violet-500" />
                   )}
                 </div>
-                <div className="flex items-center space-x-2 text-sm text-gray-500">
-                  <span className={`
-                    px-2 py-0.5 rounded-full text-xs
-                    ${user.role === 'admin' 
-                      ? 'bg-purple-100 text-purple-700' 
-                      : 'bg-blue-100 text-blue-700'
-                    }
-                  `}>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ROLE_BADGE[user.role] ?? ROLE_BADGE.user}`}>
                     {user.role}
                   </span>
                   {user.team && (
-                    <span>• {user.team}</span>
+                    <span className="text-xs text-muted-foreground">· {user.team}</span>
                   )}
                 </div>
               </div>
@@ -124,11 +147,12 @@ export function UserList({ users, isLoading, error, onEdit, onDelete }: UserList
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
+                <Button variant="ghost" size="icon" className="h-8 w-8 focus-visible:ring-2 focus-visible:ring-ring">
                   <MoreVertical className="h-4 w-4" />
+                  <span className="sr-only">User options</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="bg-popover border-border">
                 <DropdownMenuItem onClick={() => onEdit(user)}>
                   <Edit2 className="w-4 h-4 mr-2" />
                   Edit User
@@ -138,9 +162,9 @@ export function UserList({ users, isLoading, error, onEdit, onDelete }: UserList
                   Preferences
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   onClick={() => setUserToDelete(user)}
-                  className="text-red-600"
+                  className="text-destructive focus:text-destructive focus:bg-destructive/10"
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Delete User
@@ -149,37 +173,24 @@ export function UserList({ users, isLoading, error, onEdit, onDelete }: UserList
             </DropdownMenu>
           </div>
         ))}
-
-        {users.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            No users found matching your search criteria
-          </div>
-        )}
       </div>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete confirmation */}
       <Dialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
-        <DialogContent>
+        <DialogContent className="bg-background border-border">
           <DialogHeader>
             <DialogTitle>Delete User</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete {userToDelete?.username}? 
+            <DialogDescription className="text-muted-foreground">
+              Are you sure you want to delete <strong>{userToDelete?.username}</strong>?
               This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setUserToDelete(null)}
-            >
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setUserToDelete(null)}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={isDeleting}
-            >
-              {isDeleting ? 'Deleting...' : 'Delete'}
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? 'Deleting…' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>

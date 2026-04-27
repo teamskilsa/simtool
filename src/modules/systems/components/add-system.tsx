@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { SystemDialog } from './shared/SystemDialog';
 import { useTheme } from '@/components/theme/context/theme-context';
+import { THEME_CHROME_BG } from '@/components/theme/utils/theme-chrome';
 import type { System } from '../types';
 import type { ProvisionResult } from '../services/provision';
 
@@ -15,28 +16,20 @@ interface AddSystemProps {
 export function AddSystem({ onAddSystem, onProvisionComplete }: AddSystemProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { theme } = useTheme();
+  const btnBg = THEME_CHROME_BG[theme] ?? 'bg-indigo-600';
 
   const handleSubmit = async (_mode: 'add' | 'edit', _: number | undefined, data: Partial<System>) => {
-    // Don't catch here — errors should bubble up to SystemDialog so the error banner shows.
     return await onAddSystem(data);
-  };
-
-  const getButtonClass = () => {
-    switch (theme) {
-      case 'teal': return 'bg-teal-600 hover:bg-teal-700';
-      case 'rose': return 'bg-rose-600 hover:bg-rose-700';
-      case 'light': return 'bg-gray-900 hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100 dark:text-gray-900';
-      default: return 'bg-indigo-600 hover:bg-indigo-700';
-    }
   };
 
   return (
     <>
-      <Button 
+      <Button
+        id="add-system-trigger"
         onClick={() => setIsOpen(true)}
-        className={`${getButtonClass()} text-white`}
+        className={`${btnBg} text-white hover:opacity-90 gap-2 focus-visible:ring-2 focus-visible:ring-ring`}
       >
-        <Plus className="w-4 h-4 mr-2" />
+        <Plus className="w-4 h-4" />
         Add System
       </Button>
 

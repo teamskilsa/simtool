@@ -3,8 +3,8 @@
 
 import { useState } from 'react';
 import { useTheme } from '@/components/theme/context/theme-context';
-import { themes } from '@/components/theme/themes';
-import { Plus, Search, Filter } from 'lucide-react';
+import { THEME_CHROME_BG } from '@/components/theme/utils/theme-chrome';
+import { Plus, Search } from 'lucide-react';
 import { useUserOperations } from '../../hooks/use-user-operations';
 import { CreateUserDialog } from './CreateUserDialog';
 import { EditUserDialog } from './EditUserDialog';
@@ -22,24 +22,19 @@ import { Button } from "@/components/ui/button";
 
 export function UserManagement() {
   const { theme } = useTheme();
-  const themeConfig = themes[theme];
+  const btnBg = THEME_CHROME_BG[theme] ?? 'bg-indigo-600';
   const { users, loading, error, deleteUser } = useUserOperations();
-  
-  const [filters, setFilters] = useState<UserFilters>({
-    role: undefined,
-    search: ''
-  });
+
+  const [filters, setFilters] = useState<UserFilters>({ role: undefined, search: '' });
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
-  // Filter users based on search term and role
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = !filters.search || 
+  const filteredUsers = users.filter((user) => {
+    const matchesSearch =
+      !filters.search ||
       user.username.toLowerCase().includes(filters.search.toLowerCase()) ||
       user.team?.toLowerCase().includes(filters.search.toLowerCase());
-
     const matchesRole = !filters.role || user.role === filters.role;
-
     return matchesSearch && matchesRole;
   });
 
@@ -49,44 +44,44 @@ export function UserManagement() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+      {/* Page header */}
+      <div className="flex justify-between items-start">
         <div>
-          <h2 className="text-2xl font-semibold">User Management</h2>
-          <p className="text-sm text-gray-500 mt-1">
+          <h2 className="text-2xl font-semibold text-foreground">User Management</h2>
+          <p className="text-sm text-muted-foreground mt-1">
             Manage users and their permissions
           </p>
         </div>
         <Button
           onClick={() => setShowCreateDialog(true)}
-          className={themeConfig.components.button.variants.default}
+          className={`${btnBg} text-white hover:opacity-90 gap-2 focus-visible:ring-2 focus-visible:ring-ring`}
         >
-          <Plus className="w-4 h-4 mr-2" />
+          <Plus className="w-4 h-4" />
           Add User
         </Button>
       </div>
 
       {/* Filters */}
-      <div className="flex space-x-4">
+      <div className="flex gap-3">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4 pointer-events-none" />
           <Input
-            placeholder="Search users..."
+            placeholder="Search users…"
             value={filters.search}
-            onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-            className="pl-10"
+            onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+            className="pl-9 bg-background border-input"
           />
         </div>
         <Select
-          value={filters.role || 'all'}
-          onValueChange={(value: any) =>
-            setFilters(prev => ({ ...prev, role: value === 'all' ? undefined : value }))
+          value={filters.role ?? 'all'}
+          onValueChange={(v: any) =>
+            setFilters((prev) => ({ ...prev, role: v === 'all' ? undefined : v }))
           }
         >
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[160px] bg-background border-input">
             <SelectValue placeholder="All Roles" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="bg-popover border-border">
             <SelectItem value="all">All Roles</SelectItem>
             <SelectItem value="admin">Admin</SelectItem>
             <SelectItem value="user">User</SelectItem>
@@ -94,7 +89,7 @@ export function UserManagement() {
         </Select>
       </div>
 
-      {/* User List */}
+      {/* List */}
       <UserList
         users={filteredUsers}
         isLoading={loading}
@@ -104,11 +99,7 @@ export function UserManagement() {
       />
 
       {/* Dialogs */}
-      <CreateUserDialog 
-        open={showCreateDialog}
-        onOpenChange={setShowCreateDialog}
-      />
-
+      <CreateUserDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
       {editingUser && (
         <EditUserDialog
           user={editingUser}

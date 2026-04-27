@@ -2,13 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Surface tokens — Light mode
+   These map directly to Tailwind's `bg-background`, `text-foreground`, etc.
+   and are consumed by every shadcn/ui component.
+   ───────────────────────────────────────────────────────────────────────────── */
 :root {
-  /* Your existing variables */
   --background: #ffffff;
   --foreground: #171717;
-  --font-inter: var(--font-inter);
-  
-  /* Theme Colors */
+
+  --card: #ffffff;
+  --card-foreground: #171717;
+
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+
+  --muted: #f8fafc;
+  --muted-foreground: #64748b;
+
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #4f46e5;
+
+  --radius: 0.5rem;
+
+  /* Legacy surface helpers (consumed by .themed-card / .themed-input) */
   --card-background: rgba(255, 255, 255, 0.95);
   --input-background: rgba(255, 255, 255, 0.8);
   --blur-background: rgba(255, 255, 255, 0.1);
@@ -16,7 +46,7 @@
   --dropdown-text: #171717;
   --dropdown-hover: rgba(0, 0, 0, 0.05);
 
-  /* Terminal specific variables */
+  /* Terminal (always dark regardless of app theme) */
   --terminal-background: #1a1a1a;
   --terminal-text: #00ff00;
   --terminal-prompt: #00ff00;
@@ -25,22 +55,55 @@
   --terminal-warning: #ffff00;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --card-background: rgba(17, 17, 17, 0.8);
-    --input-background: rgba(17, 17, 17, 0.6);
-    --blur-background: rgba(0, 0, 0, 0.1);
-    --dropdown-background: rgba(17, 17, 17, 0.98);
-    --dropdown-text: #ededed;
-    --dropdown-hover: rgba(255, 255, 255, 0.05);
-    
-    --terminal-background: #000000;
-  }
+/* ─────────────────────────────────────────────────────────────────────────────
+   Surface tokens — Dark mode
+   Applied via .dark class on <html> (Tailwind darkMode: "class").
+   ───────────────────────────────────────────────────────────────────────────── */
+.dark {
+  --background: #0f172a;
+  --foreground: #f1f5f9;
+
+  --card: #1e293b;
+  --card-foreground: #f1f5f9;
+
+  --popover: #1e293b;
+  --popover-foreground: #f1f5f9;
+
+  --primary: #6366f1;
+  --primary-foreground: #ffffff;
+
+  --secondary: #1e293b;
+  --secondary-foreground: #f1f5f9;
+
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+
+  --accent: #1e293b;
+  --accent-foreground: #f1f5f9;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+
+  --border: #334155;
+  --input: #334155;
+  --ring: #6366f1;
+
+  /* Legacy surface helpers */
+  --card-background: rgba(30, 41, 59, 0.9);
+  --input-background: rgba(30, 41, 59, 0.7);
+  --blur-background: rgba(0, 0, 0, 0.2);
+  --dropdown-background: rgba(30, 41, 59, 0.98);
+  --dropdown-text: #f1f5f9;
+  --dropdown-hover: rgba(255, 255, 255, 0.05);
+
+  --terminal-background: #000000;
 }
 
 @layer base {
+  * {
+    @apply border-border;
+  }
+
   body {
     color: var(--foreground);
     background: var(--background);
@@ -55,7 +118,7 @@
   .themed-card {
     @apply relative backdrop-blur-sm border border-white/10;
     background: var(--card-background);
-    box-shadow: 
+    box-shadow:
       0 0 0 1px rgba(0, 0, 0, 0.03),
       0 2px 4px rgba(0, 0, 0, 0.05),
       0 12px 24px rgba(0, 0, 0, 0.05);
@@ -113,22 +176,21 @@
   }
 
   .glass-modal {
-    @apply bg-background/80 
-           backdrop-blur-xl 
-           border 
-           border-white/10 
-           dark:border-white/5 
-           shadow-xl 
-           shadow-black/10 
-           dark:shadow-blue-500/10 
+    @apply bg-background/80
+           backdrop-blur-xl
+           border
+           border-border
+           shadow-xl
+           shadow-black/10
+           dark:shadow-black/30
            rounded-xl;
   }
 
   .content-scrollable {
     @apply overflow-auto;
-    max-height: calc(100vh - 12rem); /* Adjusts based on header height */
+    max-height: calc(100vh - 12rem);
   }
-  
+
   .glass-dark {
     @apply bg-black/70 backdrop-blur-md border border-white/10;
   }
@@ -196,17 +258,16 @@
 
 @layer components {
   .terminal-input {
-    @apply pl-7 
-           font-mono 
-           bg-gray-800 
-           text-white 
-           border-white/10 
-           focus:border-white/20 
-           focus:ring-white/20 
+    @apply pl-7
+           font-mono
+           bg-gray-800
+           text-white
+           border-white/10
+           focus:border-white/20
+           focus:ring-white/20
            placeholder-gray-400
            transition-colors
            duration-200
            hover:bg-gray-700;
   }
 }
-
