@@ -48,6 +48,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('theme', newTheme);
   };
 
+  // Sync Tailwind class-based dark mode with the stored mode
+  useEffect(() => {
+    const root = document.documentElement;
+    if (mode === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [mode]);
+
   const updateMode = (newMode: 'light' | 'dark') => {
     setMode(newMode);
     localStorage.setItem('mode', newMode);
