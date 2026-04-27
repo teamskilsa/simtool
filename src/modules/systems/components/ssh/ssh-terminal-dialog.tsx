@@ -1,7 +1,6 @@
 // modules/systems/components/ssh/ssh-terminal-dialog.tsx
 import { useState, useRef, useEffect } from 'react';
 import { Terminal } from 'lucide-react';
-import { agentUrl } from '@/lib/constants';
 import { Resizable } from 're-resizable';
 import {
   Dialog,
@@ -73,16 +72,18 @@ export function SSHTerminalDialog({ system, open, onOpenChange }: SSHTerminalDia
 
     try {
       setOutput(prev => [...prev, `$ ${command}`]);
-      const result = await fetch(agentUrl(system.ip, '/api/ssh/execute'), {
+      // Use Next.js server-side route — agent does not expose an ssh/execute endpoint
+      const result = await fetch('/api/systems/ssh-execute', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           command,
+          host: system.ip,
+          port: system.sshPort ?? 22,
           username: system.username,
-          password: system.password,
-          host: system.ip
+          ...(system.authMode === 'privateKey' && system.privateKey
+            ? { privateKey: system.privateKey }
+            : { password: system.password || '' }),
         })
       });
 
@@ -92,7 +93,7 @@ export function SSHTerminalDialog({ system, open, onOpenChange }: SSHTerminalDia
       } else {
         throw new Error(response.error || 'Command execution failed');
       }
-      
+
       setCommand('');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Command failed';

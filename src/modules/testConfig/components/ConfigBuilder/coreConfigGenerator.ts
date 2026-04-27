@@ -3,6 +3,18 @@
 // (ltemme-linux-2026-04-22/config/mme.cfg).
 import type { NRFormState } from './constants';
 
+/**
+ * Format PLMN string as MCC (3-digit) + MNC (2- or 3-digit, zero-padded).
+ * enb.cfg / mme.cfg: plmn — e.g. "00101" (MCC=001, MNC=01)
+ * Bug fix: a bare 1-digit MNC ("1") would have concatenated to "0011" instead of "00101".
+ */
+function formatPlmn(mcc: string, mnc: string): string {
+  const paddedMcc = mcc.padStart(3, '0').slice(-3);
+  const mncLen = mnc.length >= 3 ? 3 : 2;
+  const paddedMnc = mnc.padStart(mncLen, '0').slice(-mncLen);
+  return `${paddedMcc}${paddedMnc}`;
+}
+
 export function generateCoreConfig(form: NRFormState): string {
   const L = (form as any).layers || {};
   const lvl = L.logLevel || 'error';
@@ -81,7 +93,9 @@ ${entries}
   /* bind address for GTP-U */
   gtp_addr: "${form.gtpAddr}",
 
-  plmn: "${form.plmn.mcc}${form.plmn.mnc}",
+  // mme.cfg: plmn — MCC (3-digit) + MNC (2- or 3-digit, zero-padded)
+  plmn: "${formatPlmn(form.plmn.mcc, form.plmn.mnc)}",
+  tac: ${form.tac},
   mme_group_id: 32769,
   mme_code: 1,
 

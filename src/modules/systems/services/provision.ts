@@ -24,8 +24,10 @@ async function fetchWithTimeout(url: string, opts: RequestInit, timeoutMs: numbe
 }
 
 export async function provisionSystem(system: System): Promise<ProvisionResult> {
+  const sshPort = system.sshPort ?? 22;
   const credentials = {
     host: system.ip,
+    port: sshPort,
     username: system.username,
     ...(system.authMode === 'privateKey' && system.privateKey
       ? { privateKey: system.privateKey }
@@ -41,17 +43,17 @@ export async function provisionSystem(system: System): Promise<ProvisionResult> 
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ host: system.ip, port: 22 }),
+        body: JSON.stringify({ host: system.ip, port: sshPort }),
       },
       10000,
     ).then((r) => r.json());
 
     if (!pingRes.reachable) {
-      const detail = buildPingErrorDetail(system.ip, pingRes.icmpAlive, pingRes.tcpOpen);
+      const detail = buildPingErrorDetail(system.ip, pingRes.icmpAlive, pingRes.tcpOpen, sshPort);
       steps.push({ name: 'ping', ok: false, detail });
       return { success: false, steps, error: detail, failedStep: 'ping' };
     }
-    steps.push({ name: 'ping', ok: true, detail: 'ICMP + TCP/22 reachable' });
+    steps.push({ name: 'ping', ok: true, detail: `ICMP + TCP/${sshPort} reachable` });
   } catch (err: any) {
     const msg = err?.message || 'ping request failed';
     steps.push({ name: 'ping', ok: false, detail: msg });
@@ -113,7 +115,7 @@ export async function provisionSystem(system: System): Promise<ProvisionResult> 
   return { success: true, steps };
 }
 
-function buildPingErrorDetail(ip: string, icmpAlive: boolean, tcpOpen: boolean): string {
+function buildPingErrorDetail(ip: string, icmpAlive: boolean, tcpOpen: boolean, port = 22): string {
   if (!icmpAlive && !tcpOpen) {
     return (
       `Host ${ip} is not responding.\n\n` +
@@ -126,12 +128,12 @@ function buildPingErrorDetail(ip: string, icmpAlive: boolean, tcpOpen: boolean):
   }
   if (icmpAlive && !tcpOpen) {
     return (
-      `Host ${ip} is online but SSH (port 22) is not accessible.\n\n` +
+      `Host ${ip} is online but SSH (port ${port}) is not accessible.\n\n` +
       `Possible causes:\n` +
       `• SSH service is not running — start with: sudo systemctl start ssh\n` +
-      `• Firewall is blocking port 22 — check: sudo ufw status\n` +
-      `• SSH is listening on a non-standard port`
+      `• Firewall is blocking port ${port} — check: sudo ufw status\n` +
+      `• SSH is listening on a different port — update the SSH Port field`
     );
   }
-  return `Host ${ip}:22 is not reachable`;
+  return `Host ${ip}:${port} is not reachable`;
 }

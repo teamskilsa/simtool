@@ -68,74 +68,221 @@ export const DEFAULT_LTE_EARFCN: Record<number, number> = {
 export const LTE_TDD_BANDS = [33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48];
 
 export interface LTEFormState {
-  // Cell
+  // ── Cell identity ────────────────────────────────────────────────────────────
+  // enb.cfg: cell_list[].cell_id
   cellId: number;
+  // enb.cfg: cell_list[].n_id_cell  (PCI 0–503)
   pci: number;
+  // enb.cfg: cell_list[].tac
   tac: number;
+  // enb.cfg: cell_list[].rf_port
+  rfPort: number;
+  // enb.cfg: cell_list[].plmn_list[].plmn  (MCC + MNC concatenated)
   plmn: { mcc: string; mnc: string };
-  // Band
+  // enb.cfg: cell_list[].plmn_list[].attach_without_pdn
+  attachWithoutPdn: boolean;
+  // enb.cfg: cell_list[].plmn_list[].reserved
+  plmnReserved: boolean;
+
+  // ── Band / frequency ─────────────────────────────────────────────────────────
   band: number;
+  // enb.cfg: cell_list[].bandwidth
   bandwidth: number;
+  // enb.cfg: cell_list[].dl_earfcn
   dlEarfcn: number;
-  // Duplex
+
+  // ── Duplex ───────────────────────────────────────────────────────────────────
+  // enb.cfg: cell_list[].cyclic_prefix
   cpMode: 'normal' | 'extended';
+  // enb.cfg: cell_list[].phich_duration
   phichDuration: 'normal' | 'extended';
+  // enb.cfg: cell_list[].phich_resource
   phichResource: string;
+  // enb.cfg: cell_list[].tdd_ul_dl_config  (TDD bands only)
   tddConfig: number;
+  // enb.cfg: cell_list[].tdd_special_subframe_pattern  (TDD bands only)
   tddSpecialSubframe: number;
-  // Antenna
+
+  // ── Antenna ──────────────────────────────────────────────────────────────────
+  // enb.cfg: cell_list[].n_antenna_dl
   nAntennaDl: number;
+  // enb.cfg: cell_list[].n_antenna_ul
   nAntennaUl: number;
-  // RF
+
+  // ── RF driver ────────────────────────────────────────────────────────────────
+  // enb.cfg: rf_driver.name
   rfMode: 'sdr' | 'split' | 'ip';
+  // enb.cfg: tx_gain
   txGain: number;
+  // enb.cfg: rx_gain
   rxGain: number;
+  // enb.cfg: rf_driver.rx_antenna
   rxAntenna: string;
-  // Network
+
+  // ── Network / S1 ─────────────────────────────────────────────────────────────
+  // enb.cfg: mme_list[].mme_addr
   mmeAddr: string;
+  // enb.cfg: gtp_addr
   gtpAddr: string;
+  // enb.cfg: enb_id
   enbId: string;
-  // NB-IoT specific
+
+  // ── Cell access / SIB1 ───────────────────────────────────────────────────────
+  // enb.cfg: cell_list[].cell_barred
+  cellBarred: boolean;
+  // enb.cfg: cell_list[].intra_freq_reselection
+  intraFreqReselection: boolean;
+  // enb.cfg: cell_list[].q_rx_lev_min  (dBm, −140 to −44)
+  qRxLevMin: number;
+  // enb.cfg: cell_list[].p_max  (dBm)
+  pMax: number;
+
+  // ── System Information ────────────────────────────────────────────────────────
+  // enb.cfg: cell_list[].si_coderate  (0.0–1.0)
+  siCoderate: number;
+  // TODO(amarisoft-doc-verify): enb.cfg: cell_list[].si_window_length (ms) — inferred from secondary sources
+  siWindowLength: number;
+
+  // ── Scheduler ────────────────────────────────────────────────────────────────
+  // enb.cfg: cell_list[].sr_period  (ms)
+  srPeriod: number;
+  // enb.cfg: cell_list[].cqi_period  (ms)
+  cqiPeriod: number;
+
+  // ── MAC / HARQ ────────────────────────────────────────────────────────────────
+  // enb.cfg: cell_list[].mac_config.ul_max_harq_tx
+  ulMaxHarqTx: number;
+  // enb.cfg: cell_list[].mac_config.dl_max_harq_tx
+  dlMaxHarqTx: number;
+
+  // ── Power control ─────────────────────────────────────────────────────────────
+  // enb.cfg: cell_list[].dpc  (downlink power control)
+  dpc: boolean;
+  // enb.cfg: cell_list[].dpc_pusch_snr_target  (dB)
+  dpcPuschSnrTarget: number;
+  // enb.cfg: cell_list[].dpc_pucch_snr_target  (dB)
+  dpcPucchSnrTarget: number;
+
+  // ── Timers ────────────────────────────────────────────────────────────────────
+  // enb.cfg: cell_list[].inactivity_timer  (ms)
+  inactivityTimer: number;
+
+  // ── Bearers ───────────────────────────────────────────────────────────────────
+  // enb.cfg: cell_list[].drb_config  (path to drb.cfg)
+  drbConfig: string;
+
+  // ── Security ──────────────────────────────────────────────────────────────────
+  // enb.cfg: cell_list[].cipher_algo_pref  (ordered list of ciphering algorithms)
+  cipherAlgoPref: string[];
+  // enb.cfg: cell_list[].integ_algo_pref  (ordered list of integrity algorithms)
+  integAlgoPref: string[];
+
+  // ── NB-IoT specific ──────────────────────────────────────────────────────────
+  // enb.cfg: cell_list[].nb_iot
   nbIot: boolean;
+  // enb.cfg: cell_list[].nb_iot_mode  ("standalone"|"inband"|"guardband")
   nbIotMode: 'standalone' | 'inband' | 'guardband';
+  // enb.cfg: cell_list[].nb_iot_prb_index
   nbIotPrbIndex: number;
-  // CAT-M specific
+
+  // ── CAT-M specific ───────────────────────────────────────────────────────────
+  // enb.cfg: cell_list[].ce_mode  (coverage enhancement mode A or B)
   catM: boolean;
   catMCeMode: 'A' | 'B';
+  // enb.cfg: cell_list[].max_repetitions
   catMRepetitions: number;
-  // Logging
+
+  // ── Logging ───────────────────────────────────────────────────────────────────
+  // enb.cfg: log_filename
   logFilename: string;
+  // enb.cfg: log_options — global level
   logLevel: string;
+  // enb.cfg: log_options — per-layer overrides (e.g. { nas: "debug", s1ap: "debug" })
+  logLayers: Record<string, string>;
 }
 
 export const DEFAULT_LTE_FORM: LTEFormState = {
+  // Cell identity
   cellId: 1,
   pci: 0,
   tac: 1,
+  rfPort: 0,
   plmn: { mcc: '001', mnc: '01' },
+  attachWithoutPdn: true,
+  plmnReserved: false,
+
+  // Band / frequency
   band: 7,
   bandwidth: 20,
   dlEarfcn: 3100,
+
+  // Duplex
   cpMode: 'normal',
   phichDuration: 'normal',
   phichResource: '1',
   tddConfig: 2,
   tddSpecialSubframe: 7,
+
+  // Antenna
   nAntennaDl: 1,
   nAntennaUl: 1,
+
+  // RF
   rfMode: 'sdr',
   txGain: 80,
   rxGain: 40,
   rxAntenna: 'rx',
+
+  // Network
   mmeAddr: '127.0.1.100',
   gtpAddr: '127.0.1.1',
   enbId: '0x1A2D0',
+
+  // Cell access / SIB1
+  cellBarred: false,
+  intraFreqReselection: true,
+  qRxLevMin: -70,
+  pMax: 23,
+
+  // System Information
+  siCoderate: 0.20,
+  siWindowLength: 40,
+
+  // Scheduler
+  srPeriod: 20,
+  cqiPeriod: 40,
+
+  // MAC / HARQ
+  ulMaxHarqTx: 5,
+  dlMaxHarqTx: 5,
+
+  // Power control
+  dpc: true,
+  dpcPuschSnrTarget: 25,
+  dpcPucchSnrTarget: 15,
+
+  // Timers
+  inactivityTimer: 10000,
+
+  // Bearers
+  drbConfig: 'drb.cfg',
+
+  // Security
+  cipherAlgoPref: ['eea0', 'eea2', 'eea3'],
+  integAlgoPref: ['eia2', 'eia3'],
+
+  // NB-IoT
   nbIot: false,
   nbIotMode: 'inband',
   nbIotPrbIndex: 0,
+
+  // CAT-M
   catM: false,
   catMCeMode: 'A',
   catMRepetitions: 1,
+
+  // Logging
   logFilename: '/tmp/enb0.log',
   logLevel: 'error',
+  logLayers: {},
 };

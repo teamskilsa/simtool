@@ -9,7 +9,7 @@ interface FormFieldProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
-  type?: 'text' | 'password';
+  type?: 'text' | 'password' | 'number';
   icon?: LucideIcon;
   autoComplete?: string;
 }

@@ -16,6 +16,7 @@ export interface System {
   name: string;
   type: SystemType;
   ip: string;
+  sshPort?: number;
   status: 'running' | 'warning' | 'stopped';
   username?: string;
   password?: string;

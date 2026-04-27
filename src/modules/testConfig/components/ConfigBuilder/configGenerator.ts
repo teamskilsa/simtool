@@ -3,6 +3,19 @@
 // (lteenb-linux-2026-04-22/config/gnb-sa.cfg).
 import type { NRFormState } from './constants';
 
+/**
+ * Format PLMN string as MCC (3-digit) + MNC (2- or 3-digit, zero-padded).
+ * Amarisoft enb.cfg: plmn_list[].plmn — e.g. "00101" (MCC=001, MNC=01)
+ * Bug fix: a bare 1-digit MNC ("1") would have concatenated to "0011" instead of "00101".
+ */
+function formatPlmn(mcc: string, mnc: string): string {
+  const paddedMcc = mcc.padStart(3, '0').slice(-3);
+  // Preserve declared length: if user entered 3 digits keep 3, else pad to min 2
+  const mncLen = mnc.length >= 3 ? 3 : 2;
+  const paddedMnc = mnc.padStart(mncLen, '0').slice(-mncLen);
+  return `${paddedMcc}${paddedMnc}`;
+}
+
 export function generateNRConfig(form: NRFormState): string {
   const isTdd = form.nrTdd === 1;
   const isFR2 = form.fr2 === 1;
@@ -223,6 +236,23 @@ ${isTdd ? tddBlock() : ''}
 ${plmnBlock}
     si_window_length: 40,
 
+    plmn_list: [{
+      tac: ${form.tac},
+      // enb.cfg: nr_cell_default.plmn_list[].plmn — MCC (3-digit) + MNC (2- or 3-digit, zero-padded)
+      plmn: "${formatPlmn(form.plmn.mcc, form.plmn.mnc)}",
+      reserved: false,
+      nssai: [{ sst: 1 }],
+    }],
+
+    dmrs_type_a_pos: ${form.dmrsTypeAPos},
+
+    /* Frequently Used */
+    sr_period: ${L.srPeriod ?? 20},
+    cqi_period: ${L.cqiPeriod ?? 40},
+    dl_256qam: ${L.dl256qam ?? true},
+    ul_64qam: ${L.ul64qam ?? true},
+
+    /* SIB1 — Cell Access */
     cell_barred: ${L.sibCellBarred ?? false},
     intra_freq_reselection: ${L.sibIntraFreqReselection ?? true},
     q_rx_lev_min: ${L.qRxLevMin ?? -70},
@@ -230,11 +260,6 @@ ${plmnBlock}
 ${L.pMax !== undefined && L.pMax !== null ? `    p_max: ${L.pMax}, /* dBm */` : '    // p_max: 10, /* dBm (default) */'}
 
     root_sequence_index: ${L.prachRootSeqIndex ?? 1}, /* PRACH root sequence index */
-
-    /* Scheduling request period (slots) */
-    sr_period: ${L.srPeriod ?? 40},
-
-    dmrs_type_a_pos: ${form.dmrsTypeAPos},
 ${prachBlock()}
 ${pdcchBlock}
 ${pdschBlock}

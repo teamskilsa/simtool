@@ -21,6 +21,7 @@ type FormState = {
   type: string;
   name: string;
   ip: string;
+  sshPort: number;
   username: string;
   password: string;
   authMode: 'password' | 'privateKey';
@@ -31,6 +32,7 @@ const initialFormState: FormState = {
   type: '',
   name: '',
   ip: '',
+  sshPort: 22,
   username: '',
   password: '',
   authMode: 'password',
@@ -47,6 +49,7 @@ export function SystemDialog({ mode, system, open, onOpenChange, onSubmit, onPro
         type: system.type,
         name: system.name,
         ip: system.ip,
+        sshPort: system.sshPort ?? 22,
         username: system.username || '',
         password: system.password || '',
         authMode: system.authMode || 'password',
