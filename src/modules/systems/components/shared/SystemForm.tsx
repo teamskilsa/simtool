@@ -16,6 +16,7 @@ interface SystemFormData {
   type: string;
   name: string;
   ip: string;
+  sshPort: number;
   username: string;
   password: string;
   authMode: 'password' | 'privateKey';
@@ -84,6 +85,13 @@ export function SystemForm({ data, onChange }: SystemFormProps) {
 
       <FormField label="System Name" value={data.name} onChange={(v) => onChange('name', v)} placeholder="Enter system name" />
       <FormField label="IP Address" value={data.ip} onChange={(v) => onChange('ip', v)} placeholder="192.168.1.100" />
+      <FormField
+        label="SSH Port"
+        value={String(data.sshPort)}
+        onChange={(v) => onChange('sshPort', parseInt(v, 10) || 22)}
+        placeholder="22"
+        type="number"
+      />
 
       <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
         <div className="text-sm font-medium text-slate-900 dark:text-slate-200 mb-4 flex items-center gap-2">
