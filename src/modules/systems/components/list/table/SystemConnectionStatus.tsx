@@ -16,53 +16,58 @@ interface ConnectionProps {
   };
 }
 
-export function SystemConnectionStatus({ connection }: ConnectionProps) {
-  const renderNetworkStatus = () => (
+function ConnectionIcon({
+  ok,
+  icon: Icon,
+  label,
+  errorMessage,
+}: {
+  ok?: boolean;
+  icon: React.ElementType;
+  label: string;
+  errorMessage?: string;
+}) {
+  return (
     <Tooltip>
-      <TooltipTrigger>
-        <div className={`
-          rounded-full p-1
-          ${connection?.pingOk 
-            ? 'bg-green-100 text-green-600' 
-            : 'bg-red-100 text-red-600'}
-        `}>
-          <Wifi className="w-4 h-4" />
+      <TooltipTrigger asChild>
+        <div
+          className={`
+            rounded-full p-1.5 cursor-default
+            ${ok
+              ? 'bg-green-500/10 text-green-600 dark:bg-green-500/15 dark:text-green-400'
+              : 'bg-red-500/10 text-red-600 dark:bg-red-500/15 dark:text-red-400'
+            }
+          `}
+        >
+          <Icon className="w-3.5 h-3.5" />
         </div>
       </TooltipTrigger>
-      <TooltipContent>
-        <p>Network: {connection?.pingOk ? 'Connected' : 'Disconnected'}</p>
-      </TooltipContent>
-    </Tooltip>
-  );
-
-  const renderSSHStatus = () => (
-    <Tooltip>
-      <TooltipTrigger>
-        <div className={`
-          rounded-full p-1
-          ${connection?.sshOk 
-            ? 'bg-green-100 text-green-600' 
-            : 'bg-red-100 text-red-600'}
-        `}>
-          <Shield className="w-4 h-4" />
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>
-        <p>SSH: {connection?.sshOk ? 'Available' : 'Unavailable'}</p>
-        {connection?.lastError && (
-          <p className="text-xs text-red-500">{connection.lastError}</p>
+      <TooltipContent side="top" className="text-xs">
+        <p className="font-medium">{label}: {ok ? 'OK' : 'Failed'}</p>
+        {!ok && errorMessage && (
+          <p className="text-muted-foreground mt-0.5 max-w-[200px]">{errorMessage}</p>
         )}
       </TooltipContent>
     </Tooltip>
   );
+}
 
+export function SystemConnectionStatus({ connection }: ConnectionProps) {
   return (
-    <div className="flex items-center gap-2">
-      <TooltipProvider>
-        {renderNetworkStatus()}
-        {renderSSHStatus()}
+    <div className="flex items-center gap-1.5">
+      <TooltipProvider delayDuration={200}>
+        <ConnectionIcon
+          ok={connection?.pingOk}
+          icon={Wifi}
+          label="Network"
+        />
+        <ConnectionIcon
+          ok={connection?.sshOk}
+          icon={Shield}
+          label="SSH"
+          errorMessage={connection?.lastError}
+        />
       </TooltipProvider>
     </div>
   );
 }
-

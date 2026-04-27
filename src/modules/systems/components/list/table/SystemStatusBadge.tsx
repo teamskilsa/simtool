@@ -1,100 +1,54 @@
-// modules/systems/components/list/table/SystemConnectionStatus.tsx
-import { Wifi, Shield } from 'lucide-react';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-
-interface ConnectionProps {
-  connection?: {
-    status: 'disconnected' | 'connecting' | 'connected' | 'error';
-    lastError?: string;
-    pingOk?: boolean;
-    sshOk?: boolean;
-  };
-}
-
-export function SystemConnectionStatus({ connection }: ConnectionProps) {
-  const renderNetworkStatus = () => (
-    <Tooltip>
-      <TooltipTrigger>
-        <div className={`
-          rounded-full p-1
-          ${connection?.pingOk 
-            ? 'bg-green-100 text-green-600' 
-            : 'bg-red-100 text-red-600'}
-        `}>
-          <Wifi className="w-4 h-4" />
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>
-        <p>Network: {connection?.pingOk ? 'Connected' : 'Disconnected'}</p>
-      </TooltipContent>
-    </Tooltip>
-  );
-
-  const renderSSHStatus = () => (
-    <Tooltip>
-      <TooltipTrigger>
-        <div className={`
-          rounded-full p-1
-          ${connection?.sshOk 
-            ? 'bg-green-100 text-green-600' 
-            : 'bg-red-100 text-red-600'}
-        `}>
-          <Shield className="w-4 h-4" />
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>
-        <p>SSH: {connection?.sshOk ? 'Available' : 'Unavailable'}</p>
-        {connection?.lastError && (
-          <p className="text-xs text-red-500">{connection.lastError}</p>
-        )}
-      </TooltipContent>
-    </Tooltip>
-  );
-
-  return (
-    <div className="flex items-center gap-2">
-      <TooltipProvider>
-        {renderNetworkStatus()}
-        {renderSSHStatus()}
-      </TooltipProvider>
-    </div>
-  );
-}
-
 // modules/systems/components/list/table/SystemStatusBadge.tsx
+import { Wifi, WifiOff, Loader2 } from 'lucide-react';
+
 interface StatusBadgeProps {
   connection?: {
     status: 'disconnected' | 'connecting' | 'connected' | 'error';
   };
 }
 
+const STATUS_CONFIG = {
+  connected: {
+    label: 'Connected',
+    icon: Wifi,
+    className:
+      'bg-green-500/10 text-green-700 border-green-500/20 dark:bg-green-500/15 dark:text-green-400 dark:border-green-500/25',
+    dotClass: 'bg-green-500',
+  },
+  connecting: {
+    label: 'Connecting',
+    icon: Loader2,
+    className:
+      'bg-amber-500/10 text-amber-700 border-amber-500/20 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/25',
+    dotClass: 'bg-amber-500 animate-pulse',
+  },
+  error: {
+    label: 'Error',
+    icon: WifiOff,
+    className:
+      'bg-red-500/10 text-red-700 border-red-500/20 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/25',
+    dotClass: 'bg-red-500',
+  },
+  disconnected: {
+    label: 'Disconnected',
+    icon: WifiOff,
+    className:
+      'bg-slate-500/10 text-slate-600 border-slate-500/20 dark:bg-slate-500/15 dark:text-slate-400 dark:border-slate-500/25',
+    dotClass: 'bg-slate-400',
+  },
+} as const;
+
 export function SystemStatusBadge({ connection }: StatusBadgeProps) {
-  const getStatusStyles = () => {
-    switch (connection?.status) {
-      case 'connected':
-        return 'bg-green-100 text-green-600';
-      case 'connecting':
-        return 'bg-yellow-100 text-yellow-600';
-      case 'error':
-      case 'disconnected':
-      default:
-        return 'bg-red-100 text-red-600';
-    }
-  };
+  const status = connection?.status ?? 'disconnected';
+  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.disconnected;
+  const IconComponent = cfg.icon;
 
   return (
-    <div className={`
-      inline-flex items-center px-2.5 py-0.5 
-      rounded-full text-xs font-medium
-      ${getStatusStyles()}
-    `}>
-      <span className="w-1 h-1 mr-1.5 rounded-full bg-current" />
-      {connection?.status || 'disconnected'}
-    </div>
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${cfg.className}`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dotClass}`} />
+      {cfg.label}
+    </span>
   );
 }

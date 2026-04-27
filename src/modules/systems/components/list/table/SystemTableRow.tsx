@@ -10,6 +10,7 @@ import { useSystemConnection } from '../../../hooks/use-system-connection';
 import { useSystemStats } from '../../../hooks/use-system-stats';
 import { toast } from "@/components/ui/use-toast";
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { provisionSystem as runProvisionSystem, type ProvisionResult } from '../../../services/provision';
 import type { System } from '../../../types';
@@ -150,9 +151,19 @@ export function SystemTableRow({
   const renderResources = () => {
     if (statsLoading) {
       return (
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          <span>Loading stats...</span>
+        <div className="space-y-1.5">
+          <div className="flex gap-4">
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 w-12" />
+            <Skeleton className="h-4 w-14" />
+          </div>
+          <div className="flex gap-4">
+            <Skeleton className="h-3 w-10" />
+            <Skeleton className="h-3 w-14" />
+            <Skeleton className="h-3 w-8" />
+            <Skeleton className="h-3 w-12" />
+          </div>
         </div>
       );
     }
@@ -208,7 +219,7 @@ export function SystemTableRow({
   const renderProvisionBadge = () => {
     if (provisionStatus === 'provisioning' || retrying) {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20">
           <Loader2 className="w-3 h-3 animate-spin" /> Provisioning…
         </span>
       );
@@ -218,11 +229,11 @@ export function SystemTableRow({
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-red-50 text-red-700 border border-red-200 cursor-help">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20 cursor-help">
                 <AlertTriangle className="w-3 h-3" /> Provision failed{provisionFailedStep ? ` (${provisionFailedStep})` : ''}
               </span>
             </TooltipTrigger>
-            <TooltipContent className="max-w-sm whitespace-pre-line">
+            <TooltipContent className="max-w-sm whitespace-pre-line bg-popover border-border text-popover-foreground">
               {provisionError || 'Provisioning did not complete.'}
             </TooltipContent>
           </Tooltip>
@@ -231,7 +242,7 @@ export function SystemTableRow({
     }
     if (provisionStatus === 'success') {
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-50 text-green-700 border border-green-200">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20">
           <CheckCircle2 className="w-3 h-3" /> Provisioned
         </span>
       );
@@ -240,7 +251,7 @@ export function SystemTableRow({
   };
 
   return (
-    <tr className="border-t border-gray-200 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors">
+    <tr className="border-t border-border hover:bg-muted/30 transition-colors">
       <td className="px-4 py-4">
         <div className="space-y-1.5">
           <SystemInfo system={system} />
