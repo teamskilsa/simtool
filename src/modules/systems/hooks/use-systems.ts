@@ -29,6 +29,21 @@ export function useSystems() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(systems));
   }, [systems]);
 
+  // Sync React state when localStorage is updated from another tab/window
+  useEffect(() => {
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY && e.newValue) {
+        try {
+          setSystems(JSON.parse(e.newValue));
+        } catch {
+          // ignore malformed data
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageEvent);
+    return () => window.removeEventListener('storage', handleStorageEvent);
+  }, []);
+
   const connectSystem = async (system: System) => {
     try {
       setConnections(prev => {

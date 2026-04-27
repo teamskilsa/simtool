@@ -68,13 +68,24 @@ export function SystemTableRow({
   const handleRetryProvision = async () => {
     if (retrying) return;
     setRetrying(true);
-    if (updateSystemProvisionStatus) {
-      updateSystemProvisionStatus(system.id, { provisionStatus: 'provisioning' } as any);
-    }
+    // Mark as provisioning immediately so the spinner shows
+    updateSystemProvisionStatus?.(system.id, { provisionStatus: 'provisioning' } as any);
     toast({ title: 'Retrying provisioning', description: `Re-attempting ${system.name}…` });
     try {
       const result = await runProvisionSystem(system);
+
+      // Update provision state directly — don't rely solely on the parent callback
+      updateSystemProvisionStatus?.(system.id, {
+        provisionStatus: result.success ? 'success' : 'failed',
+        provisionError: result.error,
+        provisionSteps: result.steps,
+        provisionedAt: Date.now(),
+        provisionFailedStep: result.failedStep,
+      } as any);
+
+      // Also notify parent (e.g. for any extra handling in SystemsListView)
       onProvisionComplete?.(system.id, result);
+
       toast({
         title: result.success ? 'Provisioning Successful' : 'Provisioning Failed',
         description: result.success
