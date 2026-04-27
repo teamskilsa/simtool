@@ -7,10 +7,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
 import { useSystems } from '@/modules/systems/hooks/use-systems';
 import { SystemSelector } from './SystemSelector';
-import { InstallForm } from './InstallForm';
+import { InstallForm, type BuildInstallOptions } from './InstallForm';
 import { InstallProgress } from './InstallProgress';
 import { LicenseView } from './LicenseView';
-import type { InstallResult, InstallComponents, SoftwareSource, TrxDriver } from '../types';
+import type { InstallResult } from '../types';
 
 export function SWManagementView() {
   const { systems } = useSystems();
@@ -20,17 +20,7 @@ export function SWManagementView() {
 
   const selectedSystem = systems.find((s) => String(s.id) === selectedSystemId) || null;
 
-  const handleInstall = async (opts: {
-    source: SoftwareSource;
-    remotePath?: string;
-    file?: File;
-    components: InstallComponents;
-    trxDriver: TrxDriver;
-    mimo: boolean;
-    useNat: boolean;
-    useIPv6: boolean;
-    ruIpAddress?: string;
-  }) => {
+  const handleInstall = async (opts: BuildInstallOptions) => {
     if (!selectedSystem) return;
     setIsInstalling(true);
     setResult(null);
@@ -44,21 +34,27 @@ export function SWManagementView() {
       } else {
         formData.append('password', selectedSystem.password || '');
       }
+
       formData.append('source', opts.source);
       if (opts.remotePath) formData.append('remotePath', opts.remotePath);
       if (opts.file) formData.append('file', opts.file);
+      if (opts.installScript) formData.append('installScript', opts.installScript);
 
-      for (const [key, value] of Object.entries(opts.components)) {
-        formData.append(key, String(value));
+      // Component selections — prefixed with comp_ so the server can pick them up
+      for (const [id, on] of Object.entries(opts.components)) {
+        formData.append(`comp_${id}`, String(on));
       }
-      formData.append('trxDriver', opts.trxDriver);
+      if (opts.trxDriver) formData.append('trxDriver', opts.trxDriver);
+      if (opts.targetArch) formData.append('targetArch', opts.targetArch);
+
       formData.append('mimo', String(opts.mimo));
-      formData.append('useNat', String(opts.useNat));
-      formData.append('useIPv6', String(opts.useIPv6));
-      if (opts.ruIpAddress) formData.append('ruIpAddress', opts.ruIpAddress);
+      formData.append('nat', String(opts.nat));
+      formData.append('ipv6', String(opts.ipv6));
+      formData.append('autostart', String(opts.autostart));
+      formData.append('licenseUpdate', String(opts.licenseUpdate));
 
       const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 10 * 60 * 1000);
+      const timer = setTimeout(() => ac.abort(), 15 * 60 * 1000); // 15 min
 
       const response = await fetch('/api/systems/sw-install', {
         method: 'POST',
@@ -79,7 +75,7 @@ export function SWManagementView() {
       });
     } catch (err: any) {
       const errorMsg = err?.name === 'AbortError'
-        ? 'Installation timed out after 10 minutes'
+        ? 'Installation timed out after 15 minutes'
         : err?.message || 'Installation failed';
       setResult({ success: false, steps: [], error: errorMsg });
       toast({ title: 'Error', description: errorMsg, variant: 'destructive' });
@@ -94,7 +90,9 @@ export function SWManagementView() {
         <Package className="h-8 w-8 text-indigo-600" />
         <div>
           <h2 className="text-2xl font-semibold">SW Management</h2>
-          <p className="text-sm text-muted-foreground">Install software and manage licenses on remote systems</p>
+          <p className="text-sm text-muted-foreground">
+            Auto-detect & install Amarisoft software · manage licenses on remote systems
+          </p>
         </div>
       </div>
 
@@ -121,8 +119,7 @@ export function SWManagementView() {
                   onSelect={setSelectedSystemId}
                 />
                 <InstallForm
-                  hasSystem={!!selectedSystem}
-                  systemType={selectedSystem?.type}
+                  system={selectedSystem}
                   isInstalling={isInstalling}
                   onInstall={handleInstall}
                 />
@@ -136,7 +133,7 @@ export function SWManagementView() {
               <CardContent>
                 {!isInstalling && !result && (
                   <p className="text-sm text-muted-foreground py-8 text-center">
-                    Select a system and start an installation to see progress here.
+                    Select a system, detect the package, then install to see progress here.
                   </p>
                 )}
                 <InstallProgress result={result} isInstalling={isInstalling} />

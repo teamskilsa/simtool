@@ -1,3 +1,7 @@
+// Run the Amarisoft installer non-interactively using the install.sh CLI flags.
+// The new approach: build a --<comp> / --no-<comp> / --trx / --target command line
+// based on what the user selected (after auto-detection). No more fragile
+// answer-stream piping.
 import { NextApiRequest, NextApiResponse } from 'next';
 import { NodeSSH } from 'node-ssh';
 import * as fs from 'fs/promises';
@@ -11,11 +15,6 @@ interface InstallStep {
   ok: boolean;
   detail?: string;
 }
-
-// Map TRX driver name to the numeric option in Amarisoft install.sh
-const TRX_OPTION_MAP: Record<string, string> = {
-  sdr: '1', n2x0: '2', b2x0: '3', x3x0: '4', n3x0: '5', s72: '6',
-};
 
 async function parseRequest(req: NextApiRequest): Promise<{
   fields: Record<string, string>;
@@ -40,95 +39,63 @@ async function parseRequest(req: NextApiRequest): Promise<{
   });
 }
 
-/**
- * Build the answer stream for Amarisoft install.sh based on user selections.
- * Questions are asked in this order (from the real script):
- *   1. Install LTE automatic service? [Yn]
- *      if y: package install [Yn], enable service? [Yn], NAT IPv4? [Yn], IPv6? [Yn]
- *   2. Install EPC? [Yn]
- *      if y: package install [Yn], install IMS? [Yn], install sim server? [yN]
- *   3. Install eNB? [Yn]
- *      if y: package install [Yn] (conditional), TRX selection (1-6), MIMO? [Yn]
- *   4. Install UE simulator? [yN]
- *   5. Install Satellite utilities? [yN]
- *   6. Install MBMS gateway? [Yn]
- *      if y: package install [Yn]
- *   7. Install Web interface? [Yn]
- *      if y: package install [Yn]
- *   8. Install license server? [yN]
- */
-function buildAnswerStream(opts: {
-  components: any;
-  trxDriver: string;
-  mimo: boolean;
-  useNat: boolean;
-  useIPv6: boolean;
+// Shell-quote a single value safely for inclusion in a command line.
+function q(s: string | undefined | null): string {
+  if (s === undefined || s === null) return "''";
+  return `'${String(s).replace(/'/g, "'\\''")}'`;
+}
+
+/** Build the install.sh CLI from user selections + detected components. */
+function buildInstallCmd(opts: {
+  installScript: string;      // absolute remote path to install.sh
+  components: Record<string, boolean>;  // id → install?
+  trx?: string;
+  targetArch?: string;        // 'aarch64' | 'linux' | undefined
+  mimo?: boolean;
+  nat?: boolean;
+  ipv6?: boolean;
+  autostart?: boolean;
+  licenseUpdate?: boolean;
 }): string {
-  const { components: c, trxDriver, mimo, useNat, useIPv6 } = opts;
-  const answers: string[] = [];
-  const yn = (b: boolean) => (b ? 'y' : 'n');
+  const flags: string[] = ['--default'];  // pick defaults for anything we don't explicitly set
 
-  // 1. LTE automatic service
-  answers.push(yn(c.ltService));
-  if (c.ltService) {
-    answers.push('y'); // accept package install (screen, zlib)
-    answers.push(yn(c.ltServiceEnable));
-    answers.push(yn(useNat));
-    answers.push(yn(useIPv6));
+  // Component flags: --<id> or --no-<id>
+  for (const [id, on] of Object.entries(opts.components)) {
+    flags.push(on ? `--${id}` : `--no-${id}`);
   }
 
-  // 2. EPC
-  answers.push(yn(c.epc));
-  if (c.epc) {
-    answers.push('y'); // accept lksctp-tools
-    answers.push(yn(c.ims));
-    answers.push(yn(c.simServer));
-  }
+  // TRX driver
+  if (opts.trx) flags.push('--trx', q(opts.trx));
 
-  // 3. eNB
-  answers.push(yn(c.enb));
-  if (c.enb) {
-    // Package prompt only fires if lksctp wasn't already installed above
-    if (!c.epc) answers.push('y');
-    // TRX selection
-    answers.push(TRX_OPTION_MAP[trxDriver] || '1');
-    answers.push(yn(mimo));
-  }
+  // Target architecture (linux | aarch64 | e310)
+  if (opts.targetArch) flags.push('--target', q(opts.targetArch));
 
-  // 4. UE simulator
-  answers.push(yn(c.ueSimulator));
+  // Feature flags
+  if (opts.mimo !== undefined) flags.push(opts.mimo ? '--mimo' : '--no-mimo');
+  if (opts.nat !== undefined)  flags.push(opts.nat  ? '--nat'  : '--no-nat');
+  if (opts.ipv6 !== undefined) flags.push(opts.ipv6 ? '--ipv6' : '--no-ipv6');
+  if (opts.autostart !== undefined) flags.push(opts.autostart ? '--srv' : '--no-srv');
+  if (opts.licenseUpdate === false) flags.push('--no-license-update');
 
-  // 5. Satellite
-  answers.push(yn(c.satellite));
+  // Don't ever prompt for removal of old versions — safer default
+  flags.push('--no-clean');
 
-  // 6. MBMS
-  answers.push(yn(c.mbms));
-  if (c.mbms) answers.push('y'); // accept package install
-
-  // 7. Web interface
-  answers.push(yn(c.webInterface));
-  if (c.webInterface) answers.push('y'); // accept apache, php package install
-
-  // 8. License server
-  answers.push(yn(c.licenseServer));
-
-  return answers.join('\n') + '\n';
+  return `bash ${q(opts.installScript)} ${flags.join(' ')}`;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   let parsed;
-  try {
-    parsed = await parseRequest(req);
-  } catch (e: any) {
-    return res.status(400).json({ error: `Invalid request: ${e?.message}` });
-  }
+  try { parsed = await parseRequest(req); }
+  catch (e: any) { return res.status(400).json({ error: `Invalid request: ${e?.message}` }); }
+
   const { fields, filePath: uploadedFile } = parsed;
 
   const {
     host, port = '22', username, password, privateKey, passphrase,
-    source, remotePath, trxDriver = 'sdr', ruIpAddress,
+    source, remotePath, installScript,
+    trxDriver, targetArch,
   } = fields;
 
   if (!host || !username) return res.status(400).json({ error: 'host and username are required' });
@@ -136,40 +103,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (source === 'remote-path' && !remotePath) return res.status(400).json({ error: 'remotePath is required' });
   if (source === 'upload' && !uploadedFile) return res.status(400).json({ error: 'no file uploaded' });
 
-  // Parse components + booleans from form fields (they come as strings)
-  const components = {
-    enb: fields.enb === 'true',
-    epc: fields.epc === 'true',
-    ims: fields.ims === 'true',
-    simServer: fields.simServer === 'true',
-    mbms: fields.mbms === 'true',
-    ueSimulator: fields.ueSimulator === 'true',
-    satellite: fields.satellite === 'true',
-    webInterface: fields.webInterface === 'true',
-    licenseServer: fields.licenseServer === 'true',
-    ltService: fields.ltService === 'true',
-    ltServiceEnable: fields.ltServiceEnable === 'true',
-  };
+  // Parse component map from form fields (they all come as strings)
+  const components: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (k.startsWith('comp_')) components[k.slice(5)] = v === 'true';
+  }
+
   const mimo = fields.mimo === 'true';
-  const useNat = fields.useNat === 'true';
-  const useIPv6 = fields.useIPv6 === 'true';
+  const nat  = fields.nat  === 'true';
+  const ipv6 = fields.ipv6 === 'true';
+  const autostart = fields.autostart === 'true';
+  const licenseUpdate = fields.licenseUpdate !== 'false';
 
   const steps: InstallStep[] = [];
   let installLog = '';
   const ssh = new NodeSSH();
 
   try {
-    // Step 1: SSH connect
+    // 1. SSH
     await ssh.connect({
-      host: String(host),
-      port: Number(port),
-      username: String(username),
+      host: String(host), port: Number(port), username: String(username),
       ...(privateKey ? { privateKey: String(privateKey), passphrase } : { password: String(password) }),
       readyTimeout: 10000,
     });
     steps.push({ name: 'ssh-connect', ok: true });
 
-    // Step 2: Upload file if needed
+    const pwd = password ? String(password) : '';
+    const escapedPwd = pwd.replace(/'/g, "'\\''");
+    const sudoPrefix = pwd ? `echo '${escapedPwd}' | sudo -S -p ''` : 'sudo';
+
+    // 2. Upload if needed
     let tarPath = remotePath || '';
     if (source === 'upload' && uploadedFile) {
       const remoteTmp = `/tmp/amarisoft-upload-${Date.now()}.tar.gz`;
@@ -178,15 +141,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       steps.push({ name: 'scp-upload', ok: true, detail: remoteTmp });
     }
 
-    // Step 3: Verify tar exists
-    const verifyRes = await ssh.execCommand(`test -f '${tarPath}' && echo ok`);
+    // 3. Verify tar
+    const verifyRes = await ssh.execCommand(`test -f ${q(tarPath)} && echo ok`);
     if (verifyRes.stdout.trim() !== 'ok') {
       steps.push({ name: 'verify-tar', ok: false, detail: `File not found: ${tarPath}` });
       return res.status(200).json({ success: false, steps, error: `Tar file not found at ${tarPath}` });
     }
     steps.push({ name: 'verify-tar', ok: true, detail: tarPath });
 
-    // Step 4: Create workspace
+    // 4. Create workspace + extract
     const mkdirRes = await ssh.execCommand('mktemp -d /tmp/amarisoft-install-XXXXX');
     const workspace = mkdirRes.stdout.trim();
     if (!workspace || mkdirRes.code !== 0) {
@@ -195,72 +158,55 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     steps.push({ name: 'create-workspace', ok: true, detail: workspace });
 
-    // Step 5: Extract main archive
-    const extractRes = await ssh.execCommand(`tar xf '${tarPath}' -C '${workspace}'`);
+    const extractRes = await ssh.execCommand(`tar xf ${q(tarPath)} -C ${q(workspace)}`);
     if (extractRes.code !== 0) {
-      steps.push({ name: 'extract-main', ok: false, detail: extractRes.stderr });
+      steps.push({ name: 'extract', ok: false, detail: extractRes.stderr });
       return res.status(200).json({ success: false, steps, error: 'Failed to extract archive' });
     }
-    steps.push({ name: 'extract-main', ok: true });
+    steps.push({ name: 'extract', ok: true });
 
-    // Step 6: Locate install.sh (usually inside a versioned subdirectory)
-    const findRes = await ssh.execCommand(`find '${workspace}' -maxdepth 3 -name 'install.sh' -type f | head -1`);
-    const installScript = findRes.stdout.trim();
-    if (!installScript) {
-      steps.push({ name: 'locate-installer', ok: false, detail: 'install.sh not found in archive' });
+    // 5. Locate install.sh
+    let resolvedInstallScript = installScript;
+    if (!resolvedInstallScript) {
+      const findRes = await ssh.execCommand(`find ${q(workspace)} -maxdepth 3 -name 'install.sh' -type f | head -1`);
+      resolvedInstallScript = findRes.stdout.trim();
+    } else if (!resolvedInstallScript.startsWith('/')) {
+      // A relative path from the tar — prepend workspace
+      resolvedInstallScript = `${workspace}/${resolvedInstallScript}`;
+    }
+
+    if (!resolvedInstallScript) {
+      steps.push({ name: 'locate-installer', ok: false, detail: 'install.sh not found' });
       return res.status(200).json({ success: false, steps, error: 'install.sh not found in extracted archive' });
     }
-    steps.push({ name: 'locate-installer', ok: true, detail: installScript });
+    steps.push({ name: 'locate-installer', ok: true, detail: resolvedInstallScript });
 
-    // Step 7: Run install.sh with piped answers (requires sudo/root)
-    const answerStream = buildAnswerStream({ components, trxDriver, mimo, useNat, useIPv6 });
-    const installDir = installScript.replace(/\/install\.sh$/, '');
+    // 6. Build the non-interactive install command
+    const cmd = buildInstallCmd({
+      installScript: resolvedInstallScript,
+      components,
+      trx: trxDriver,
+      targetArch,
+      mimo, nat, ipv6, autostart, licenseUpdate,
+    });
+    steps.push({ name: 'build-cmd', ok: true, detail: cmd });
 
-    // Write answers to a heredoc file on the remote, then pipe to install.sh
-    // Using a file avoids shell escaping issues with the newlines
-    const answerFile = `${workspace}/install-answers.txt`;
-    const encodedAnswers = Buffer.from(answerStream).toString('base64');
-    await ssh.execCommand(`echo '${encodedAnswers}' | base64 -d > '${answerFile}'`);
-
-    // Run install.sh as root via sudo -i (login shell — needed for proper PATH/env).
-    // Password is sent first to sudo's stdin, then the install answers flow in.
-    // This avoids the conflict of piping password AND redirecting stdin.
-    const passwordForSudo = password ? String(password) : '';
-    const escapedPwd = passwordForSudo.replace(/'/g, "'\\''");
-    const escapedInstallDir = installDir.replace(/'/g, "'\\''");
-    const escapedAnswerFile = answerFile.replace(/'/g, "'\\''");
-
-    // (echo password; cat answers) | sudo -S -i bash -c "cd dir && bash install.sh"
-    // sudo consumes the first line for auth, then the rest becomes stdin for install.sh
-    const installCmd = passwordForSudo
-      ? `(echo '${escapedPwd}'; cat '${escapedAnswerFile}') | sudo -S -i -p '' bash -c "cd '${escapedInstallDir}' && bash install.sh" 2>&1`
-      : `sudo -i bash -c "cd '${escapedInstallDir}' && bash install.sh < '${escapedAnswerFile}'" 2>&1`;
-
-    const installRes = await ssh.execCommand(installCmd, { execOptions: { pty: false } });
-    installLog = (installRes.stdout + '\n' + installRes.stderr).slice(-4000); // last 4KB
-    const installOk = installRes.code === 0;
+    // 7. Run installer (as root). Pass the sudo password via stdin; install.sh
+    //    is now non-interactive so stdin isn't consumed further.
+    const fullCmd = `(echo ${q(pwd)}) | ${sudoPrefix} -i bash -c ${q(`cd ${q(workspace)} && ${cmd}`)} 2>&1`;
+    const runRes = await ssh.execCommand(fullCmd, { execOptions: { pty: false } });
+    installLog = (runRes.stdout + '\n' + runRes.stderr).slice(-8000);
+    const installOk = runRes.code === 0;
     steps.push({
       name: 'run-installer',
       ok: installOk,
-      detail: installOk ? 'install.sh completed' : `exit code ${installRes.code}. See log below.`,
+      detail: installOk ? 'install.sh completed' : `exit code ${runRes.code}`,
     });
 
-    // Step 8: If s72 (DU) selected, note RU IP config needed
-    if (trxDriver === 's72' && ruIpAddress) {
-      steps.push({
-        name: 'note-trx-ip',
-        ok: true,
-        detail: `DU mode selected. Update /root/enb/config/<cfg>.cfg rf_driver to: { name: "ip", trx_ip: "${ruIpAddress}" }`,
-      });
-    }
-
-    // Step 9: Restart service (if installed)
-    if (components.ltService && installOk) {
-      const restartSudo = passwordForSudo
-        ? `echo '${escapedPwd}' | sudo -S -p ''`
-        : 'sudo';
+    // 8. Optional: restart service if LTE auto service was installed
+    if (components.ots && installOk) {
       const restartRes = await ssh.execCommand(
-        `${restartSudo} service lte restart 2>&1 || ${restartSudo} systemctl restart lte 2>&1`
+        `${sudoPrefix} service lte restart 2>&1 || ${sudoPrefix} systemctl restart lte 2>&1`
       );
       steps.push({
         name: 'restart-service',
@@ -269,20 +215,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // Step 10: Cleanup workspace
-    await ssh.execCommand(`rm -rf '${workspace}'`);
+    // 9. Cleanup
+    await ssh.execCommand(`rm -rf ${q(workspace)}`);
     steps.push({ name: 'cleanup', ok: true });
 
-    // Cleanup uploaded temp file
     if (source === 'upload' && uploadedFile) {
       await fs.unlink(uploadedFile).catch(() => {});
     }
 
-    const criticalStepsOk = steps
-      .filter((s) => ['ssh-connect', 'extract-main', 'locate-installer', 'run-installer'].includes(s.name))
-      .every((s) => s.ok);
+    const criticalOk = steps
+      .filter(s => ['ssh-connect', 'extract', 'locate-installer', 'run-installer'].includes(s.name))
+      .every(s => s.ok);
 
-    return res.status(200).json({ success: criticalStepsOk, steps, installLog });
+    return res.status(200).json({ success: criticalOk, steps, installLog });
   } catch (error: any) {
     return res.status(200).json({
       success: false,

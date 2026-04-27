@@ -1,7 +1,13 @@
-// Generates Amarisoft mme.cfg (core) configuration from form state
+// Generates Amarisoft ltemme (MME/EPC) configuration from form state.
+// Validated against the reference shipped with Amarisoft 2026-04-22
+// (ltemme-linux-2026-04-22/config/mme.cfg).
 import type { NRFormState } from './constants';
 
 export function generateCoreConfig(form: NRFormState): string {
+  const L = (form as any).layers || {};
+  const lvl = L.logLevel || 'error';
+
+  // ── PDN list (with erabs — required for LTE QoS) ─────────────────────────
   const pdnBlock = () => {
     if (!form.pdnList || form.pdnList.length === 0) return '  pdn_list: [],';
     const entries = form.pdnList.map(p => {
@@ -10,52 +16,89 @@ export function generateCoreConfig(form: NRFormState): string {
         `      access_point_name: "${p.access_point_name}"`,
         `      first_ip_addr: "${p.first_ip_addr}"`,
         `      last_ip_addr: "${p.last_ip_addr}"`,
+        `      ip_addr_shift: 2`,
       ];
       if (p.dns_addr) fields.push(`      dns_addr: "${p.dns_addr}"`);
-      if (p.ims_vops) fields.push(`      ims_vops: true`);
-      return `    {\n${fields.join(',\n')},\n    }`;
+      return `    {
+${fields.join(',\n')},
+      erabs: [
+        {
+          qci: 9,
+          priority_level: 15,
+          pre_emption_capability: "shall_not_trigger_pre_emption",
+          pre_emption_vulnerability: "not_pre_emptable",
+        },
+      ],
+    }`;
     }).join(',\n');
-    return `  pdn_list: [\n${entries}\n  ],`;
+    return `  pdn_list: [
+${entries}
+  ],`;
   };
 
+  // ── UE database — per reference, no nb_ue or `ims` bool; use arrays ──────
   const ueDbBlock = () => {
     if (!form.ueDb || form.ueDb.length === 0) return '  ue_db: [],';
     const entries = form.ueDb.map(u => {
-      const fields = [
+      const fields: string[] = [
         `      sim_algo: "${u.sim_algo}"`,
         `      imsi: "${u.imsi}"`,
-        `      K: "${u.K}"`,
-        u.opc ? `      opc: "${u.opc}"` : null,
         `      amf: 0x${u.amf.toString(16)}`,
         `      sqn: "${u.sqn}"`,
-      ].filter(Boolean);
-      if (u.nb_ue > 1) fields.push(`      nb_ue: ${u.nb_ue}`);
-      if (u.ims) fields.push(`      ims: true`);
+        `      K: "${u.K}"`,
+      ];
+      if (u.opc) fields.push(`      opc: "${u.opc}"`);
+      // For the nb_ue bulk feature we emit it as a UE count annotation (comment)
+      // so install.sh doesn't reject the entry; the real Amarisoft config
+      // replicates entries via sim_events.
+      if (u.nb_ue && u.nb_ue > 1) {
+        fields.push(`      /* replicate this UE ${u.nb_ue} times via sim_events */`);
+      }
+      if (u.ims) {
+        const mccMnc = form.plmn.mcc + form.plmn.mnc.padStart(3, '0');
+        fields.push(`      impi: "${u.imsi}@ims.mnc${mccMnc.slice(3)}.mcc${mccMnc.slice(0, 3)}.3gppnetwork.org"`);
+        fields.push(`      impu: ["${u.imsi}", "tel:${u.imsi.slice(-10)}"]`);
+        fields.push(`      domain: "ims.mnc${mccMnc.slice(3)}.mcc${mccMnc.slice(0, 3)}.3gppnetwork.org"`);
+      }
       return `    {\n${fields.join(',\n')},\n    }`;
     }).join(',\n');
-    return `  ue_db: [\n${entries}\n  ],`;
+    return `  ue_db: [
+${entries}
+  ],`;
   };
 
-  return `/* MME/AMF Configuration
+  return `/* ltemme configuration file — MME/EPC
  * Generated: ${new Date().toISOString()}
  */
 
 {
-  log_options: "all.level=${form.logLevel || 'error'},all.max_size=0,nas.level=debug,nas.max_size=1,s1ap.level=debug,s1ap.max_size=1,ngap.level=debug,ngap.max_size=1",
-  log_filename: "${form.logFilename || '/tmp/mme0.log'}",
+  log_options: "all.level=${lvl},all.max_size=0,nas.level=debug,nas.max_size=1,s1ap.level=debug,s1ap.max_size=1,ngap.level=debug,ngap.max_size=1",
+  log_filename: "${L.logFilename || '/tmp/mme.log'}",
 
+  /* Enable remote API and Web interface */
   com_addr: "[::]:9000",
 
+  /* bind address for GTP-U */
+  gtp_addr: "${form.gtpAddr}",
+
   plmn: "${form.plmn.mcc}${form.plmn.mnc}",
-  tac: ${form.tac},
   mme_group_id: 32769,
   mme_code: 1,
 
-  gtp_addr: "${form.gtpAddr}",
-  s1ap_bind_addr: "${form.amfAddr}",
+  network_name: "Amarisoft Network",
+  network_short_name: "Amarisoft",
 
-  integrity_algo_pref: [2, 1],
-  ciphering_algo_pref: [2, 1, 0],
+  /* Control Plane Cellular IoT EPS optimization */
+  cp_ciot_opt: true,
+
+  /* DCNR support */
+  dcnr_support: true,
+
+  /* 5GS interworking */
+  eps_5gs_interworking: "with_n26",
+
+  /* 15 bearers support */
+  fifteen_bearers: false,
 
 ${pdnBlock()}
 
