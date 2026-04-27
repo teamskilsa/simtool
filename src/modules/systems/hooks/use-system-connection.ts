@@ -4,6 +4,18 @@ import { toast } from "@/components/ui/use-toast";
 import type { System } from '../types';
 import { agentUrl } from '@/lib/constants';
 
+/** Build SSH credential payload consistent with /api/systems/ssh-test & ssh-execute */
+function sshCredentials(system: System) {
+  return {
+    host: system.ip,
+    port: system.sshPort ?? 22,
+    username: system.username,
+    ...(system.authMode === 'privateKey' && system.privateKey
+      ? { privateKey: system.privateKey }
+      : { password: system.password || '' }),
+  };
+}
+
 interface ConnectionStatus {
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
   lastError?: string;
@@ -34,28 +46,19 @@ export function useSystemConnection() {
     console.log('Testing SSH connection for:', system.ip);
     try {
       const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 8000);
-      const response = await fetch(agentUrl(system.ip, '/api/ssh/test'), {
+      const timer = setTimeout(() => ac.abort(), 10000);
+      // Use the Next.js server-side route — the agent does not expose an ssh/test endpoint
+      const response = await fetch('/api/systems/ssh-test', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: system.username,
-          password: system.password,
-          host: system.ip
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sshCredentials(system)),
         signal: ac.signal,
       });
       clearTimeout(timer);
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'SSH connection failed');
-      }
-
+      if (!response.ok) return false;
       const result = await response.json();
-      return result.success;
+      return result.success === true;
     } catch (error) {
       console.error('SSH connection failed:', error);
       return false;
@@ -67,17 +70,11 @@ export function useSystemConnection() {
     try {
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), 30000);
-      const response = await fetch(agentUrl(system.ip, '/api/ssh/execute'), {
+      // Use the Next.js server-side route — the agent does not expose an ssh/execute endpoint
+      const response = await fetch('/api/systems/ssh-execute', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          command,
-          username: system.username,
-          password: system.password,
-          host: system.ip
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...sshCredentials(system), command }),
         signal: ac.signal,
       });
       clearTimeout(timer);
@@ -88,6 +85,7 @@ export function useSystemConnection() {
       }
 
       const result = await response.json();
+      if (!result.success) throw new Error(result.error || 'Command execution failed');
       return result.output || '';
     } catch (error) {
       console.error('Command execution failed:', error);

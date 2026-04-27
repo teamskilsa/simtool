@@ -64,24 +64,28 @@ export function useSystems() {
         pingOk = false;
       }
 
-      // Try SSH if ping successful
+      // Try SSH if ping successful — use Next.js server-side route (agent has no ssh/test endpoint)
       let sshOk = false;
-      if (pingOk && system.username && system.password) {
+      if (pingOk && system.username && (system.password || system.privateKey)) {
         try {
           const ac = new AbortController();
-          const timer = setTimeout(() => ac.abort(), 8000);
-          const sshResponse = await fetch(agentUrl(system.ip, '/api/ssh/test'), {
+          const timer = setTimeout(() => ac.abort(), 10000);
+          const sshResponse = await fetch('/api/systems/ssh-test', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              host: system.ip,
+              port: system.sshPort ?? 22,
               username: system.username,
-              password: system.password
+              ...(system.authMode === 'privateKey' && system.privateKey
+                ? { privateKey: system.privateKey }
+                : { password: system.password || '' }),
             }),
             signal: ac.signal
           });
           clearTimeout(timer);
           const sshResult = await sshResponse.json();
-          sshOk = sshResult.success;
+          sshOk = sshResult.success === true;
         } catch {
           sshOk = false;
         }
