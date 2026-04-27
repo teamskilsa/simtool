@@ -1,8 +1,8 @@
 // components/dialogs/templates/FormDialog.tsx
 import { ReactNode } from 'react';
-import { Loader } from 'lucide-react';  // Changed from RefreshCw to Loader
+import { Loader2, AlertTriangle } from 'lucide-react';
 import { useTheme } from '@/components/theme/context/theme-context';
-import { themes } from '@/components/theme/themes';
+import type { ThemeVariant } from '@/components/theme/themes';
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,16 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+
+// Static lookup — avoids dynamic class strings that Tailwind can't tree-shake
+const THEME_HEADER_BG: Record<ThemeVariant, string> = {
+  indigo:  'bg-indigo-600',
+  rose:    'bg-rose-600',
+  amber:   'bg-amber-600',
+  emerald: 'bg-emerald-600',
+  sky:     'bg-sky-600',
+  teal:    'bg-teal-600',
+};
 
 interface FormDialogProps {
   open: boolean;
@@ -31,48 +41,52 @@ export function FormDialog({
   loading = false,
   error
 }: FormDialogProps) {
-  const { theme, mode } = useTheme();
-  const themeConfig = themes[theme];
+  const { theme } = useTheme();
+  const headerBg = THEME_HEADER_BG[theme] ?? 'bg-indigo-600';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader className="bg-indigo-600 -mx-6 -mt-6 px-6 py-4 rounded-t-lg">
+      <DialogContent className="sm:max-w-[500px] bg-background text-foreground overflow-hidden p-0">
+        {/* Coloured header band — adopts the active theme */}
+        <DialogHeader className={`${headerBg} px-6 py-4`}>
           <DialogTitle className="text-xl font-semibold text-white">
             {title}
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={onSubmit}>
-          <div className="py-6">
+        <form onSubmit={onSubmit} className="px-6">
+          {/* Form body */}
+          <div className="py-5">
             {children}
 
             {error && (
-              <div className="mt-4 rounded-lg bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-600 dark:text-red-400 flex items-start gap-2">
-                <span className="shrink-0">⚠️</span>
+              <div className="mt-4 rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                 <div className="whitespace-pre-line leading-relaxed">{error}</div>
               </div>
             )}
           </div>
 
-          <DialogFooter className="flex justify-end gap-3 pt-4 mt-6 border-t border-slate-200 dark:border-slate-800">
+          {/* Footer */}
+          <DialogFooter className="flex justify-end gap-3 py-4 border-t border-border">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              className="focus-visible:ring-2 focus-visible:ring-ring"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={loading}
-              className="bg-indigo-600 text-white hover:bg-indigo-700"
+              className={`${headerBg} hover:opacity-90 text-white focus-visible:ring-2 focus-visible:ring-ring`}
             >
               {loading ? (
-                <div className="flex items-center">
-                  <Loader className="w-4 h-4 mr-2 animate-spin" /> {/* Changed from RefreshCw to Loader */}
-                  <span>Submitting...</span>
-                </div>
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Submitting…
+                </span>
               ) : (
                 'Submit'
               )}

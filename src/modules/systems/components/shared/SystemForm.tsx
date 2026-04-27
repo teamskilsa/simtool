@@ -1,6 +1,4 @@
 // modules/systems/components/shared/SystemForm.tsx
-import { useTheme } from '@/components/theme/context/theme-context';
-import { themes } from '@/components/theme/themes';
 import {
   Select,
   SelectContent,
@@ -11,6 +9,7 @@ import {
 import { FormField } from './FormField';
 import { Label } from "@/components/ui/label";
 import { Server, Radio, Smartphone, Activity, User, Lock, Key } from 'lucide-react';
+import { useTheme } from '@/components/theme/context/theme-context';
 
 interface SystemFormData {
   type: string;
@@ -35,45 +34,29 @@ const SYSTEM_TYPES = [
 ];
 
 export function SystemForm({ data, onChange }: SystemFormProps) {
-  const { theme, mode } = useTheme();
-
-  const getSelectClass = () => `
-    ${mode === 'light'
-      ? 'bg-white border-slate-200 hover:bg-slate-50/50'
-      : 'bg-slate-800/75 border-slate-700 hover:bg-slate-800'
-    }
-    transition-colors focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/30
-  `;
-
-  const getSelectContentClass = `
-    ${mode === 'light' ? 'bg-white border-slate-200' : 'bg-slate-800 border-slate-700'}
-    shadow-lg rounded-md p-1 border
-  `;
+  const { theme } = useTheme();
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
+      {/* System Type */}
+      <div className="space-y-1.5">
+        <Label className="text-sm font-medium text-foreground">System Type</Label>
         <Select value={data.type} onValueChange={(value) => onChange('type', value)}>
-          <SelectTrigger className={getSelectClass()}>
+          <SelectTrigger className="bg-background border-input text-foreground hover:border-ring/50 focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-colors">
             <SelectValue placeholder="Select system type" />
           </SelectTrigger>
-          <SelectContent className={getSelectContentClass}>
+          <SelectContent className="bg-popover border-border shadow-lg">
             {SYSTEM_TYPES.map((type) => (
               <SelectItem
                 key={type.value}
                 value={type.value}
-                className={`
-                  ${mode === 'light' ? 'hover:bg-slate-50' : 'hover:bg-slate-700'}
-                  cursor-pointer rounded-md py-2 px-3 transition-colors
-                `}
+                className="cursor-pointer rounded-md py-2 px-3 text-popover-foreground hover:bg-accent hover:text-accent-foreground transition-colors focus:bg-accent focus:text-accent-foreground"
               >
                 <div className="flex items-center gap-2">
                   <type.icon className={`w-4 h-4 text-${theme}-500`} />
                   <div>
                     <div className="font-medium">{type.label}</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                      {type.description}
-                    </div>
+                    <div className="text-xs text-muted-foreground">{type.description}</div>
                   </div>
                 </div>
               </SelectItem>
@@ -85,26 +68,28 @@ export function SystemForm({ data, onChange }: SystemFormProps) {
       <FormField label="System Name" value={data.name} onChange={(v) => onChange('name', v)} placeholder="Enter system name" />
       <FormField label="IP Address" value={data.ip} onChange={(v) => onChange('ip', v)} placeholder="192.168.1.100" />
 
-      <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-        <div className="text-sm font-medium text-slate-900 dark:text-slate-200 mb-4 flex items-center gap-2">
-          <Lock className="w-4 h-4" />
+      {/* SSH Credentials */}
+      <div className="pt-4 border-t border-border">
+        <div className="text-sm font-medium text-foreground mb-4 flex items-center gap-2">
+          <Lock className="w-4 h-4 text-muted-foreground" />
           SSH Credentials
         </div>
 
         <div className="space-y-4">
           <FormField label="Username" value={data.username} onChange={(v) => onChange('username', v)} placeholder="Enter SSH username" icon={User} />
 
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-slate-900 dark:text-slate-200">Authentication</Label>
+          {/* Auth mode */}
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium text-foreground">Authentication</Label>
             <Select value={data.authMode} onValueChange={(v) => onChange('authMode', v)}>
-              <SelectTrigger className={getSelectClass()}>
+              <SelectTrigger className="bg-background border-input text-foreground hover:border-ring/50 focus:ring-2 focus:ring-ring/30 focus:border-ring/50 transition-colors">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className={getSelectContentClass}>
-                <SelectItem value="password">
+              <SelectContent className="bg-popover border-border shadow-lg">
+                <SelectItem value="password" className="cursor-pointer text-popover-foreground focus:bg-accent focus:text-accent-foreground">
                   <div className="flex items-center gap-2"><Lock className="w-4 h-4" /> Password</div>
                 </SelectItem>
-                <SelectItem value="privateKey">
+                <SelectItem value="privateKey" className="cursor-pointer text-popover-foreground focus:bg-accent focus:text-accent-foreground">
                   <div className="flex items-center gap-2"><Key className="w-4 h-4" /> Private Key</div>
                 </SelectItem>
               </SelectContent>
@@ -122,18 +107,14 @@ export function SystemForm({ data, onChange }: SystemFormProps) {
               autoComplete="new-password"
             />
           ) : (
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-slate-900 dark:text-slate-200">Private Key</Label>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium text-foreground">Private Key</Label>
               <textarea
                 value={data.privateKey}
                 onChange={(e) => onChange('privateKey', e.target.value)}
-                placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"
+                placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
                 rows={6}
-                className={`
-                  w-full rounded-md border p-3 font-mono text-xs
-                  ${mode === 'light' ? 'bg-white border-slate-200' : 'bg-slate-800/75 border-slate-700 text-slate-100'}
-                  focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/30
-                `}
+                className="w-full rounded-md border border-input p-3 font-mono text-xs bg-background text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-ring/30 focus:border-ring/50 outline-none transition-colors"
                 spellCheck={false}
               />
             </div>
