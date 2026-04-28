@@ -55,7 +55,12 @@ export function detectConfigType(
   }
   // LTE / NB-IoT / CAT-M eNB has cell_list and mme_list
   if (hasNonEmpty(ast.cell_list) || ast.mme_list !== undefined || ast.enb_id !== undefined) {
-    // Refine: check NB-IoT / CAT-M markers in the first cell
+    // NB-IoT (Amarisoft schema) — dedicated nb_cell_list / nb_cell_default
+    // takes precedence over inline cell.nb_iot flags.
+    if (hasNonEmpty(ast.nb_cell_list) || ast.nb_cell_default !== undefined) return 'nbiot';
+    // CAT-M / eMTC — Bandwidth Reduced UE block in cell_default
+    if (ast.cell_default?.br_ue !== undefined) return 'catm';
+    // Legacy inline markers
     const cell = ast.cell_list?.[0] || {};
     if (cell.nb_iot === true || cell.nb_iot_mode) return 'nbiot';
     if (cell.ce_mode || cell.max_repetitions !== undefined) return 'catm';
@@ -273,6 +278,42 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormStat
     return bestDist < 5000 ? bestBand : DEFAULT_LTE_FORM.band;
   })();
 
+  // ── NB-IoT / CAT-M block detection (Amarisoft schema) ────────────────────
+  // NB-IoT: live cells in nb_cell_list, defaults in nb_cell_default. The
+  // cell may sit in-band on top of an LTE anchor (operation_mode=same_pci),
+  // in the LTE guardband (guardband), or standalone.
+  const nbCellList: any[] = Array.isArray(ast.nb_cell_list) ? ast.nb_cell_list : [];
+  const nbCell0 = nbCellList[0] || {};
+  const isNbIot = nbCellList.length > 0 || ast.nb_cell_default !== undefined;
+  // operation_mode is: 'same_pci' | 'guardband' | 'standalone' on the NB-IoT cell.
+  // 'same_pci' is in-band (the typical NB_MODE=0 case in Amarisoft samples).
+  const nbIotModeFromAst = (() => {
+    const op = String(nbCell0.operation_mode || '').toLowerCase();
+    if (op === 'standalone') return 'standalone' as const;
+    if (op === 'guardband')  return 'guardband'  as const;
+    if (op === 'same_pci' || op === 'inband') return 'inband' as const;
+    return DEFAULT_LTE_FORM.nbIotMode;
+  })();
+  // PRB index — typically dl_prb / ul_prb in nb_cell_list (in-band) or omitted otherwise
+  const nbIotPrb = num(nbCell0.dl_prb ?? nbCell0.nb_iot_prb_index, DEFAULT_LTE_FORM.nbIotPrbIndex);
+
+  // CAT-M / eMTC: detected by the br_ue block in cell_default (Bandwidth
+  // Reduced UEs config) or legacy inline ce_mode on a cell.
+  const isCatM = ast.cell_default?.br_ue !== undefined ||
+                 (ast.cell_list?.[0]?.ce_mode !== undefined);
+
+  if (isNbIot) {
+    const nbIds = nbCellList.map((c: any) => c.cell_id ?? '?').join(', ');
+    warnings.push(
+      `NB-IoT detected: ${nbCellList.length} NB-IoT cell${nbCellList.length === 1 ? '' : 's'}` +
+      (nbIds ? ` (cell_id=${nbIds}, mode=${nbIotModeFromAst})` : '') +
+      '. The builder edits the LTE anchor; nb_cell_list / nb_cell_default round-trip is partial.'
+    );
+  }
+  if (isCatM && ast.cell_default?.br_ue !== undefined) {
+    warnings.push('CAT-M / eMTC detected: cell_default.br_ue (Bandwidth Reduced UEs) block present.');
+  }
+
   // cipher_algo_pref / integ_algo_pref live in cell_default in real Amarisoft files.
   // Numeric integrity values (e.g. [2, 1]) -> 'eia2', 'eia1' for the form.
   const rawCipher = cell0.cipher_algo_pref ?? cellDefault.cipher_algo_pref;
@@ -374,10 +415,12 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormStat
     drbConfig:            str(cv(cell0, 'drb_config'), DEFAULT_LTE_FORM.drbConfig),
     cipherAlgoPref:       cipher,
     integAlgoPref:        integ,
-    nbIot:                bool(cv(cell0, 'nb_iot'), DEFAULT_LTE_FORM.nbIot),
-    nbIotMode:            (str(cv(cell0, 'nb_iot_mode'), DEFAULT_LTE_FORM.nbIotMode) as any),
-    nbIotPrbIndex:        num(cv(cell0, 'nb_iot_prb_index'), DEFAULT_LTE_FORM.nbIotPrbIndex),
-    catM:                 cv(cell0, 'ce_mode') !== undefined,
+    nbIot:                isNbIot || bool(cv(cell0, 'nb_iot'), DEFAULT_LTE_FORM.nbIot),
+    nbIotMode:            isNbIot
+                            ? nbIotModeFromAst
+                            : (str(cv(cell0, 'nb_iot_mode'), DEFAULT_LTE_FORM.nbIotMode) as any),
+    nbIotPrbIndex:        isNbIot ? nbIotPrb : num(cv(cell0, 'nb_iot_prb_index'), DEFAULT_LTE_FORM.nbIotPrbIndex),
+    catM:                 isCatM,
     catMCeMode:           (str(cv(cell0, 'ce_mode'), 'A') as 'A' | 'B'),
     catMRepetitions:      num(cv(cell0, 'max_repetitions'), DEFAULT_LTE_FORM.catMRepetitions),
     logFilename:          str(ast.log_filename, DEFAULT_LTE_FORM.logFilename),
