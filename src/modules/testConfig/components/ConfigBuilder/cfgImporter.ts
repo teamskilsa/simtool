@@ -41,7 +41,17 @@ export function detectConfigType(
   if (ast.ue_db !== undefined || ast.pdn_list !== undefined || ast.mme_group_id !== undefined) {
     return 'core';
   }
-  // NR (gNB SA) config has nr_cell_list (or nr_cell_default) and amf_list
+
+  // NSA / EN-DC: BOTH cell_list (LTE) and nr_cell_list (NR) are non-empty,
+  // with mme_list as the core (LTE anchor + NR secondary). The LTE anchor
+  // is what binds the device to the network, so route to 'lte' (the LTE
+  // importer surfaces a warning naming the NR cells that won't be editable).
+  if (hasNonEmpty(ast.cell_list) && hasNonEmpty(ast.nr_cell_list)
+      && ast.mme_list !== undefined && ast.amf_list === undefined) {
+    return 'lte';
+  }
+
+  // NR SA (gNB Standalone): nr_cell_list + amf_list (5G core), no LTE cells
   if (ast.amf_list !== undefined || ast.gnb_id !== undefined || hasNonEmpty(ast.nr_cell_list)) {
     return 'nr';
   }
@@ -58,6 +68,7 @@ export function detectConfigType(
   if (fileName) {
     const lower = fileName.toLowerCase();
     if (/^mme|^ims|\.db$/.test(lower)) return 'core';
+    if (lower.includes('-nsa') || lower.includes('endc')) return 'lte';
     if (lower.startsWith('gnb') || lower.includes('-nr') || lower.includes('-sa')) return 'nr';
     if (lower.includes('nbiot') || lower.includes('nb-iot')) return 'nbiot';
     if (lower.includes('catm') || lower.includes('cat-m')) return 'catm';
@@ -65,6 +76,11 @@ export function detectConfigType(
   }
 
   return 'unknown';
+}
+
+/** Is this AST an NSA / EN-DC config (both LTE and NR cells present)? */
+function isNSA(ast: Record<string, any>): boolean {
+  return hasNonEmpty(ast.cell_list) && hasNonEmpty(ast.nr_cell_list);
 }
 
 function hasNonEmpty(v: any): boolean {
@@ -213,9 +229,24 @@ function astToNRForm(ast: Record<string, any>, warnings: string[]): NRFormState 
 
 function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormState {
   const cellList: any[] = Array.isArray(ast.cell_list) ? ast.cell_list : [];
+  const nrCellList: any[] = Array.isArray(ast.nr_cell_list) ? ast.nr_cell_list : [];
   const cell0 = cellList[0] || {};
 
-  // Multi-cell (carrier aggregation) — info-only when 2+ cells imported.
+  // NSA / EN-DC detection: both LTE anchor and NR secondary cells present.
+  // The builder edits the LTE anchor; NR cells are loaded read-only context.
+  if (nrCellList.length > 0) {
+    const nrSummary = nrCellList
+      .map((c: any) => `cell_id=${c.cell_id ?? '?'}, band=n${c.band ?? '?'}, ARFCN=${c.dl_nr_arfcn ?? '?'}`)
+      .join('; ');
+    warnings.push(
+      `NSA / EN-DC config: ${nrCellList.length} NR secondary cell${nrCellList.length === 1 ? '' : 's'} ` +
+      `(${nrSummary}) detected. The LTE anchor is loaded into the builder; ` +
+      `NR-side fields are NOT editable here and will be lost on save. ` +
+      `For NR-only editing, import a gNB SA config instead.`
+    );
+  }
+
+  // Multi-cell (carrier aggregation) — info-only when 2+ LTE cells imported.
   if (cellList.length > 1) {
     warnings.push(
       `Imported ${cellList.length}-cell carrier aggregation: ` +
