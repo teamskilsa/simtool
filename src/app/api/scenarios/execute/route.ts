@@ -3,15 +3,17 @@ import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 
-async function readScenarios() {
-  const storagePath = process.env.NEXT_PUBLIC_STORAGE_PATH;
-  if (!storagePath) {
-    throw new Error('Storage path not configured');
-  }
+function getStoragePath(): string {
+  return process.env.NEXT_PUBLIC_STORAGE_PATH || path.join(process.cwd(), 'data');
+}
 
-  const scenariosPath = path.join(storagePath, 'users/admin/scenarios.json');
+function getScenariosPath() {
+  return path.join(getStoragePath(), 'users/admin/scenarios.json');
+}
+
+async function readScenarios() {
   try {
-    const content = await fs.readFile(scenariosPath, 'utf-8');
+    const content = await fs.readFile(getScenariosPath(), 'utf-8');
     return JSON.parse(content);
   } catch (error) {
     console.error('[readScenarios] Error reading scenarios:', error);
@@ -66,9 +68,7 @@ export async function GET(request: Request) {
       s.id === scenarioId ? scenario : s
     );
     
-    const storagePath = process.env.NEXT_PUBLIC_STORAGE_PATH;
-    const scenariosPath = path.join(storagePath!, 'users/admin/scenarios.json');
-    await fs.writeFile(scenariosPath, JSON.stringify(updatedScenarios, null, 2));
+    await fs.writeFile(getScenariosPath(), JSON.stringify(updatedScenarios, null, 2));
 
     return NextResponse.json(scenario);
   } catch (error) {

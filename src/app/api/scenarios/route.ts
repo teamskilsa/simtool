@@ -3,13 +3,15 @@ import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 
-// Helper function to get scenarios file path
+// Helper function to get scenarios file path. Defaults to ./data when the
+// NEXT_PUBLIC_STORAGE_PATH env var isn't set (matches the rest of the
+// file-storage layer, which roots everything under cwd/data).
+function getStoragePath(): string {
+  return process.env.NEXT_PUBLIC_STORAGE_PATH || path.join(process.cwd(), 'data');
+}
+
 function getScenariosPath() {
-  const storagePath = process.env.NEXT_PUBLIC_STORAGE_PATH;
-  if (!storagePath) {
-    throw new Error('Storage path not configured');
-  }
-  return path.join(storagePath, 'users/admin/scenarios.json');
+  return path.join(getStoragePath(), 'users/admin/scenarios.json');
 }
 
 // Helper function to read scenarios
@@ -102,13 +104,7 @@ export async function DELETE(request: Request) {
     }
 
     console.log('[DELETE] Deleting scenario:', scenarioId);
-    const storagePath = process.env.NEXT_PUBLIC_STORAGE_PATH;
-    
-    if (!storagePath) {
-      throw new Error('Storage path not configured');
-    }
-
-    const scenariosPath = path.join(storagePath, 'users/admin/scenarios.json');
+    const scenariosPath = getScenariosPath();
     const content = await fs.readFile(scenariosPath, 'utf-8');
     const scenarios = JSON.parse(content);
     
@@ -131,12 +127,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Scenario ID is required' }, { status: 400 });
     }
 
-    const storagePath = process.env.NEXT_PUBLIC_STORAGE_PATH;
-    if (!storagePath) {
-      throw new Error('Storage path not configured');
-    }
-
-    const scenariosPath = path.join(storagePath, 'users/admin/scenarios.json');
+    const scenariosPath = getScenariosPath();
     const content = await fs.readFile(scenariosPath, 'utf-8');
     const scenarios = JSON.parse(content);
     
