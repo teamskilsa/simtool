@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { toast } from "@/components/ui/use-toast";
 import type { System } from '../types';
-import { agentUrl } from '@/lib/constants';
 
 /** Build SSH credential payload consistent with /api/systems/ssh-test & ssh-execute */
 function sshCredentials(system: System) {
@@ -26,17 +25,21 @@ interface ConnectionStatus {
 export function useSystemConnection() {
   const [connections, setConnections] = useState<Map<number, ConnectionStatus>>(new Map());
 
-  const testSystemReachability = async (ip: string): Promise<boolean> => {
+  const testSystemReachability = async (ip: string, sshPort = 22): Promise<boolean> => {
     console.log('Testing reachability for:', ip);
     try {
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), 5000);
-      const response = await fetch(agentUrl(ip, '/api/health'), {
-        method: 'GET',
+      // TCP probe on SSH port — no agent required on the target machine
+      const response = await fetch('/api/systems/ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host: ip, port: sshPort, timeoutMs: 4000 }),
         signal: ac.signal,
       });
       clearTimeout(timer);
-      return response.ok;
+      const result = await response.json();
+      return result.reachable || result.icmpAlive || false;
     } catch {
       return false;
     }

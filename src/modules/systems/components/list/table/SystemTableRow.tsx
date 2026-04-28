@@ -123,7 +123,7 @@ export function SystemTableRow({
     try {
       console.log('Refreshing system:', system);
       
-      const pingOk = await testSystemReachability(system.ip);
+      const pingOk = await testSystemReachability(system.ip, system.sshPort ?? 22);
       console.log('Reachability test result:', pingOk);
       
       let sshOk = false;

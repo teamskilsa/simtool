@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { toast } from "@/components/ui/use-toast";
 import type { System } from '../types';
-import { agentUrl } from '@/lib/constants';
 
 interface ConnectionStatus {
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -52,19 +51,25 @@ export function useSystems() {
         return newMap;
       });
 
-      // Try to connect to the system (with timeout to avoid ECONNRESET hangs)
+      // TCP probe on the SSH port — does not require any agent on the target
       let pingOk = false;
       try {
         const ac = new AbortController();
         const timer = setTimeout(() => ac.abort(), 5000);
-        const response = await fetch(agentUrl(system.ip, '/api/health'), { signal: ac.signal });
+        const response = await fetch('/api/systems/ping', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ host: system.ip, port: system.sshPort ?? 22, timeoutMs: 4000 }),
+          signal: ac.signal,
+        });
         clearTimeout(timer);
-        pingOk = response.ok;
+        const pingResult = await response.json();
+        pingOk = pingResult.reachable || pingResult.icmpAlive || false;
       } catch {
         pingOk = false;
       }
 
-      // Try SSH if ping successful — use Next.js server-side route (agent has no ssh/test endpoint)
+      // Try SSH if machine responds on SSH port
       let sshOk = false;
       if (pingOk && system.username && (system.password || system.privateKey)) {
         try {
