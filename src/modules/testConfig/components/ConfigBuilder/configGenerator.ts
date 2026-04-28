@@ -179,15 +179,6 @@ export function generateNRConfig(form: NRFormState): string {
       sr_trans_max: 64,
     },`;
 
-  // ── Plmn list — lives inside nr_cell_default, tac is per-plmn ────────────
-  const plmnBlock = `
-    plmn_list: [{
-      tac: ${form.tac},
-      plmn: "${form.plmn.mcc}${form.plmn.mnc}",
-      reserved: false,
-      nssai: [{ sst: 1 }],
-    }],`;
-
   return `/* lteenb configuration file — NR SA
  * Generated: ${new Date().toISOString()}
  * Band: n${form.band} | BW: ${form.nrBandwidth} MHz | SCS: ${form.subcarrierSpacing} kHz
@@ -233,16 +224,15 @@ ${cellListBlock}
 ${isTdd ? tddBlock() : ''}
     ssb_period: ${form.ssbPeriod}, /* in ms */
     n_id_cell: ${form.cellId},
-${plmnBlock}
-    si_window_length: 40,
 
     plmn_list: [{
       tac: ${form.tac},
-      // enb.cfg: nr_cell_default.plmn_list[].plmn — MCC (3-digit) + MNC (2- or 3-digit, zero-padded)
-      plmn: "${formatPlmn(form.plmn.mcc, form.plmn.mnc)}",
+      plmn: "${formatPlmn(form.plmn.mcc, form.plmn.mnc)}", /* MCC (3) + MNC (2/3), zero-padded */
       reserved: false,
       nssai: [{ sst: 1 }],
     }],
+
+    si_window_length: 40,
 
     dmrs_type_a_pos: ${form.dmrsTypeAPos},
 

@@ -45,7 +45,16 @@ function q(s: string | undefined | null): string {
   return `'${String(s).replace(/'/g, "'\\''")}'`;
 }
 
-/** Build the install.sh CLI from user selections + detected components. */
+/** Build the install.sh CLI from user selections + detected components.
+ *
+ * Key constraint: install.sh validates every --[no-]<comp> flag against its
+ * runtime COMP_LIST (which only contains components available for the target
+ * arch). Passing --no-ue on a linux-only package that has no lteue-linux
+ * causes install.sh to print usage() and exit 1.
+ *
+ * Solution: use --no-all to disable everything, then only add --<comp> for
+ * each component the user explicitly enabled. Never emit --no-<comp>.
+ */
 function buildInstallCmd(opts: {
   installScript: string;      // absolute remote path to install.sh
   components: Record<string, boolean>;  // id → install?
@@ -57,27 +66,33 @@ function buildInstallCmd(opts: {
   autostart?: boolean;
   licenseUpdate?: boolean;
 }): string {
-  const flags: string[] = ['--default'];  // pick defaults for anything we don't explicitly set
+  const flags: string[] = [
+    '--default',  // use built-in defaults for anything we don't set explicitly
+    '--no-all',   // disable all components first; we'll re-enable the ones the user picked
+  ];
 
-  // Component flags: --<id> or --no-<id>
+  // Only emit --<comp> for things the user enabled.
+  // Never emit --no-<comp>: components absent from the target-arch COMP_LIST
+  // cause install.sh to print usage() and exit 1.
   for (const [id, on] of Object.entries(opts.components)) {
-    flags.push(on ? `--${id}` : `--no-${id}`);
+    if (on) flags.push(`--${id}`);
   }
 
-  // TRX driver
+  // TRX driver (only if the user picked one — install.sh validates against TRX_FE)
   if (opts.trx) flags.push('--trx', q(opts.trx));
 
-  // Target architecture (linux | aarch64 | e310)
-  if (opts.targetArch) flags.push('--target', q(opts.targetArch));
+  // NOTE: --target is intentionally omitted. install.sh auto-detects arch via
+  // `uname -m` in ExpandArgs. Passing --target causes "Invalid argument" in
+  // ParseArgs on some package versions because it isn't registered there.
 
-  // Feature flags
+  // Feature flags — these are always valid regardless of COMP_LIST
   if (opts.mimo !== undefined) flags.push(opts.mimo ? '--mimo' : '--no-mimo');
-  if (opts.nat !== undefined)  flags.push(opts.nat  ? '--nat'  : '--no-nat');
+  if (opts.nat  !== undefined) flags.push(opts.nat  ? '--nat'  : '--no-nat');
   if (opts.ipv6 !== undefined) flags.push(opts.ipv6 ? '--ipv6' : '--no-ipv6');
   if (opts.autostart !== undefined) flags.push(opts.autostart ? '--srv' : '--no-srv');
   if (opts.licenseUpdate === false) flags.push('--no-license-update');
 
-  // Don't ever prompt for removal of old versions — safer default
+  // Don't prompt for removal of old versions
   flags.push('--no-clean');
 
   return `bash ${q(opts.installScript)} ${flags.join(' ')}`;

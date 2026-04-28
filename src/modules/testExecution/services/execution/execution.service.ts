@@ -1,124 +1,114 @@
 // services/execution/execution.service.ts
+// Deploys config files to the target system via SSH and restarts Amarisoft services.
+// Calls /api/systems/config-deploy (server-side SSH) — no more direct agent calls.
 import { ExecutionStep } from '../../types/execution.types';
 
+/** SSH credentials passed in at execution time from the system store */
+export interface SshCredentials {
+  host: string;
+  port?: number;
+  username: string;
+  password?: string;
+  privateKey?: string;
+  passphrase?: string;
+}
+
 class ExecutionService {
-  async executeScenario(scenarioId: string): Promise<ExecutionStep[]> {
+  /**
+   * Execute a scenario: deploy each module config via SSH then restart services.
+   *
+   * @param scenarioId  ID of the scenario to run
+   * @param sshCreds    SSH credentials for the target system
+   */
+  async executeScenario(scenarioId: string, sshCreds: SshCredentials): Promise<ExecutionStep[]> {
     console.log(`[ExecuteScenario] Starting execution for scenario: ${scenarioId}`);
-    
-    try {
-      // 1. Fetch scenario details with proper URL encoding
-      const response = await fetch(`/api/scenarios/execute?id=${encodeURIComponent(scenarioId)}`);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('[ExecuteScenario] Failed to fetch scenario:', errorData);
-        throw new Error(errorData.error || 'Failed to fetch scenario details');
-      }
-      
-      const scenario = await response.json();
-      console.log('[ExecuteScenario] Retrieved scenario details:', scenario);
 
-      // 2. Execute modules in sequence
-      const steps: ExecutionStep[] = [];
-      const modules = this.getExecutionOrder(scenario.topology);
-
-      console.log(`[ExecuteScenario] Executing modules in order: ${modules.join(', ')}`);
-
-      for (const module of modules) {
-        const moduleConfig = scenario.moduleConfigs.find((c: any) => c.module === module);
-        if (moduleConfig) {
-          console.log(`[ExecuteScenario] Starting module execution: ${module}`);
-          const step = await this.executeModule(moduleConfig, scenario.system.host);
-          steps.push(step);
-
-          if (step.status === 'failure') {
-            console.error(`[ExecuteScenario] Module ${module} failed, stopping execution`);
-            break;
-          }
-        } else {
-          console.warn(`[ExecuteScenario] No config found for module: ${module}`);
-        }
-      }
-
-      return steps;
-    } catch (error) {
-      console.error('[ExecuteScenario] Execution failed:', error);
-      throw new Error(error instanceof Error ? error.message : 'Unknown error');
+    // 1. Fetch scenario details
+    const response = await fetch(`/api/scenarios/execute?id=${encodeURIComponent(scenarioId)}`);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(err.error || 'Failed to fetch scenario details');
     }
+    const scenario = await response.json();
+    console.log('[ExecuteScenario] Retrieved scenario:', scenario);
+
+    // 2. Execute modules in order
+    const steps: ExecutionStep[] = [];
+    const modules = this.getExecutionOrder(scenario.topology);
+
+    for (const module of modules) {
+      const moduleConfig = scenario.moduleConfigs?.find((c: any) => c.module === module);
+      if (!moduleConfig) {
+        console.warn(`[ExecuteScenario] No config found for module: ${module}`);
+        continue;
+      }
+
+      const step = await this.deployModule(module, moduleConfig.configContent, sshCreds);
+      steps.push(step);
+
+      if (step.status === 'failure') {
+        console.error(`[ExecuteScenario] Module ${module} failed — stopping`);
+        break;
+      }
+    }
+
+    return steps;
   }
 
-  private async executeModule(moduleConfig: any, systemHost: string): Promise<ExecutionStep> {
-    console.log(`[ExecuteModule] Starting execution for module: ${moduleConfig.module}`);
-    
+  /**
+   * Deploy a single module: SCP config to remote then restart the service.
+   * Uses /api/systems/config-deploy (Next.js server-side SSH, not the agent).
+   */
+  async deployModule(
+    module: string,
+    configContent: string,
+    sshCreds: SshCredentials
+  ): Promise<ExecutionStep> {
     const step: ExecutionStep = {
-      id: `${moduleConfig.module}-${Date.now()}`,
-      name: `Execute ${moduleConfig.module}`,
+      id: `${module}-${Date.now()}`,
+      name: `Deploy ${module}`,
       status: 'running',
-      startTime: new Date()
+      startTime: new Date(),
     };
 
     try {
-      // 1. Get configuration content
-      console.log(`[ExecuteModule] Fetching config for ${moduleConfig.module}/${moduleConfig.configId}`);
-      const configResponse = await fetch(`/api/configs/${moduleConfig.module}/${moduleConfig.configId}`);
-      
-      if (!configResponse.ok) {
-        throw new Error(`Failed to fetch configuration: ${configResponse.statusText}`);
-      }
-      
-      const config = await configResponse.json();
-      console.log(`[ExecuteModule] Config fetched successfully for ${moduleConfig.module}`);
-
-      // 2. Execute on node server
-      console.log(`[ExecuteModule] Sending execution request to ${systemHost}:3001`);
-      const executeResponse = await fetch(`http://${systemHost}:3001/api/configs/${moduleConfig.module}/execute`, {
+      const res = await fetch('/api/systems/config-deploy', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content: config.content,
-          name: moduleConfig.configId
+          ...sshCreds,
+          module,
+          configContent,
         }),
       });
 
-      if (!executeResponse.ok) {
-        throw new Error(`Execution failed: ${executeResponse.statusText}`);
-      }
-
-      const result = await executeResponse.json();
-      console.log(`[ExecuteModule] Execution result for ${moduleConfig.module}:`, result);
-
+      const result = await res.json();
       step.endTime = new Date();
-      step.duration = (step.endTime.getTime() - step.startTime.getTime()) / 1000;
+      step.duration = (step.endTime.getTime() - step.startTime!.getTime()) / 1000;
 
-      if (result.copySuccess && (result.restartSuccess || moduleConfig.module === 'ue_db')) {
-        step.status = 'success';
+      if (result.copySuccess && result.restartSuccess) {
+        step.status = result.portStatus ? 'success' : 'failure';
+        if (!result.portStatus) step.error = `Service started but port not listening`;
       } else {
         step.status = 'failure';
-        step.error = result.restartError || 'Failed to execute configuration';
+        step.error = result.restartError || result.copyMessage || 'Deploy failed';
       }
-
-      return step;
     } catch (error) {
-      console.error(`[ExecuteModule] Error executing ${moduleConfig.module}:`, error);
       step.status = 'failure';
       step.error = error instanceof Error ? error.message : 'Unknown error';
       step.endTime = new Date();
-      step.duration = (step.endTime.getTime() - step.startTime.getTime()) / 1000;
-      return step;
+      step.duration = (step.endTime.getTime() - step.startTime!.getTime()) / 1000;
     }
+
+    return step;
   }
 
   private getExecutionOrder(topology: string): string[] {
-    const order = {
-      'callbox': ['mme', 'ims', 'ue_db', 'enb'],
-      'core': ['mme', 'ims', 'ue_db'],
-      'ue-core': ['core', 'enb', 'ue']
-    }[topology] || [];
-    
-    console.log(`[GetExecutionOrder] Order for topology ${topology}:`, order);
-    return order;
+    return ({
+      callbox:  ['mme', 'ue_db', 'enb'],
+      core:     ['mme', 'ue_db'],
+      'ue-sim': ['enb', 'ue'],
+    } as Record<string, string[]>)[topology] ?? [];
   }
 }
 

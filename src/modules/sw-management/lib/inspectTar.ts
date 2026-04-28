@@ -39,7 +39,11 @@ export function parseTarListing(entries: string[], systemArch: TargetArch = 'unk
       }
     }
 
-    const available = arches.length > 0;
+    // A component is "available" only if the package has a tar for the
+    // detected system arch. If arch is unknown we accept anything.
+    const available = systemArch !== 'unknown'
+      ? arches.includes(systemArch)
+      : arches.length > 0;
     return {
       id: meta.id,
       label: meta.label,
@@ -51,7 +55,7 @@ export function parseTarListing(entries: string[], systemArch: TargetArch = 'unk
     };
   });
 
-  // ── Detect TRX drivers ────────────────────────────────────────────────────
+  // ── Detect TRX drivers — only include ones usable on the target arch ──────
   const trxDrivers: DetectedTrx[] = KNOWN_TRX
     .map(meta => {
       const arches: TargetArch[] = [];
@@ -65,12 +69,18 @@ export function parseTarListing(entries: string[], systemArch: TargetArch = 'unk
         } else if (basename.includes('-linux-')) {
           if (!arches.includes('linux')) arches.push('linux');
         } else {
+          // No arch suffix → works on both
           if (!arches.includes('linux')) arches.push('linux');
+          if (!arches.includes('aarch64')) arches.push('aarch64');
         }
       }
       return { id: meta.id, label: meta.label, arches };
     })
-    .filter(t => t.arches.length > 0);
+    // Filter: must have a tar present AND that tar must support the target arch
+    .filter(t =>
+      t.arches.length > 0 &&
+      (systemArch === 'unknown' || t.arches.includes(systemArch))
+    );
 
   // ── Count licenses ────────────────────────────────────────────────────────
   const licenses = files.filter(f => {

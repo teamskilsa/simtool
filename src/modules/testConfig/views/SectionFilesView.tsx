@@ -1,29 +1,35 @@
 // Section Files — template manager for reusable config sections
 // Users can browse/view/delete built-in and user-saved PDN, UE DB, General templates
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { FolderTree, Globe, Smartphone, Shield, Trash2, Search, Package, Lock } from 'lucide-react';
+import {
+  FolderTree, Globe, Smartphone, Shield, Trash2, Search, Package, Lock,
+  Radio, Wifi, FileText, Upload, Download,
+} from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { sectionFilesService, type SectionFile, type SectionType } from '../services/sectionFiles.service';
 
 const TYPE_META: Record<SectionType, { label: string; icon: any; color: string }> = {
-  pdn:     { label: 'PDN / APN',   icon: Globe,      color: 'text-blue-600 bg-blue-50 border-blue-200' },
-  uedb:    { label: 'UE Database', icon: Smartphone, color: 'text-purple-600 bg-purple-50 border-purple-200' },
-  general: { label: 'General',     icon: Shield,     color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-  cell:    { label: 'Cell',        icon: Package,    color: 'text-amber-600 bg-amber-50 border-amber-200' },
-  band:    { label: 'Band',        icon: Package,    color: 'text-rose-600 bg-rose-50 border-rose-200' },
-  rf:      { label: 'RF',          icon: Package,    color: 'text-cyan-600 bg-cyan-50 border-cyan-200' },
-  log:     { label: 'Log',         icon: Package,    color: 'text-slate-600 bg-slate-50 border-slate-200' },
+  pdn:     { label: 'PDN / APN',   icon: Globe,       color: 'text-blue-600 bg-blue-50 border-blue-200' },
+  uedb:    { label: 'UE Database', icon: Smartphone,  color: 'text-purple-600 bg-purple-50 border-purple-200' },
+  general: { label: 'General',     icon: Shield,      color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+  cell:    { label: 'Cell',        icon: Radio,       color: 'text-amber-600 bg-amber-50 border-amber-200' },
+  band:    { label: 'Band',        icon: Package,     color: 'text-rose-600 bg-rose-50 border-rose-200' },
+  rf:      { label: 'RF',          icon: Wifi,        color: 'text-cyan-600 bg-cyan-50 border-cyan-200' },
+  log:     { label: 'Log',         icon: FileText,    color: 'text-slate-600 bg-slate-50 border-slate-200' },
 };
+
+const ALL_TYPES: (SectionType | 'all')[] = ['all', 'pdn', 'uedb', 'general', 'cell', 'band', 'rf', 'log'];
 
 export const SectionFilesView: React.FC = () => {
   const [files, setFiles] = useState<SectionFile[]>([]);
   const [typeFilter, setTypeFilter] = useState<SectionType | 'all'>('all');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<SectionFile | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const refresh = () => setFiles(sectionFilesService.list());
   useEffect(refresh, []);
@@ -49,6 +55,31 @@ export const SectionFilesView: React.FC = () => {
     }
   };
 
+  const handleExport = (sf: SectionFile) => {
+    sectionFilesService.downloadAsFile(sf);
+    toast({ title: 'Exported', description: `${sf.name} downloaded as JSON.` });
+  };
+
+  const handleImportClick = () => importRef.current?.click();
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const imported = sectionFilesService.importFromJson(ev.target?.result as string);
+        refresh();
+        setSelected(imported);
+        toast({ title: 'Imported', description: `"${imported.name}" added to your section files.` });
+      } catch (err: any) {
+        toast({ title: 'Import failed', description: err?.message || 'Invalid file format.', variant: 'destructive' });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // allow re-importing same file
+  };
+
   const typeCounts = useMemo(() => {
     const counts: Record<string, number> = { all: files.length };
     for (const f of files) counts[f.type] = (counts[f.type] || 0) + 1;
@@ -57,6 +88,9 @@ export const SectionFilesView: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      {/* Hidden import input */}
+      <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
+
       {/* Hero header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
@@ -70,28 +104,37 @@ export const SectionFilesView: React.FC = () => {
             </p>
           </div>
         </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleImportClick}
+          className="flex items-center gap-2 h-9"
+        >
+          <Upload className="w-3.5 h-3.5" />
+          Import JSON
+        </Button>
       </div>
 
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg border bg-slate-50">
+      <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg border bg-muted/30">
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search templates..."
-            className="h-8 pl-8 w-56 text-sm bg-white"
+            className="h-8 pl-8 w-52 text-sm"
           />
         </div>
-        <div className="flex gap-1 ml-2">
-          {(['all', 'pdn', 'uedb', 'general'] as const).map(type => (
+        <div className="flex flex-wrap gap-1 ml-2">
+          {ALL_TYPES.map(type => (
             <button
               key={type}
-              onClick={() => setTypeFilter(type as any)}
+              onClick={() => setTypeFilter(type)}
               className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
                 typeFilter === type
                   ? 'bg-indigo-600 text-white'
-                  : 'bg-white text-gray-600 border hover:bg-gray-100'
+                  : 'bg-background text-muted-foreground border hover:bg-muted'
               }`}
             >
               {type === 'all' ? 'All' : TYPE_META[type as SectionType]?.label}
@@ -171,22 +214,35 @@ export const SectionFilesView: React.FC = () => {
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="font-semibold">{selected.name}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold truncate">{selected.name}</div>
                       {selected.description && (
                         <div className="text-xs text-muted-foreground mt-0.5">{selected.description}</div>
                       )}
                     </div>
-                    {!selected.builtIn && (
+                    <div className="flex items-center gap-1 shrink-0">
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleDelete(selected)}
-                        className="h-7 text-red-500 hover:text-red-700 hover:border-red-300"
+                        onClick={() => handleExport(selected)}
+                        className="h-7 px-2 text-xs gap-1"
+                        title="Export as JSON"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <Download className="w-3 h-3" />
+                        Export
                       </Button>
-                    )}
+                      {!selected.builtIn && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDelete(selected)}
+                          className="h-7 px-2 text-red-500 hover:text-red-700 hover:border-red-300"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary">{TYPE_META[selected.type]?.label}</Badge>
