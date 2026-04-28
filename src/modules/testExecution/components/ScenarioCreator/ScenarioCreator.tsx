@@ -46,9 +46,21 @@ export function ScenarioCreator({
   const selectedTopology = TOPOLOGY_OPTIONS.find(t => t.id === formState.topology);
   const modules = selectedTopology?.modules || [];
 
-  // Map saved systems (Test Systems section) into the shape the scenario uses
+  // Map saved systems (Test Systems section) into the shape the scenario uses.
+  //
+  // Note `port` here is the SSH port we'll use at execution time to deploy
+  // configs over SSH. The previous code stored '9050' (the on-box agent
+  // port), which silently broke deploy because the deploy API speaks SSH.
+  // Username/password are NOT carried into the scenario — they're looked
+  // up fresh from the systems store at run time so credentials updated in
+  // Test Systems take effect without re-saving every scenario.
   const availableSystems = useMemo(() =>
-    globalSystems.map(s => ({ id: String(s.id), name: s.name, host: s.ip, port: '9050' })),
+    globalSystems.map(s => ({
+      id: String(s.id),
+      name: s.name,
+      host: s.ip,
+      port: String(s.sshPort ?? 22),
+    })),
   [globalSystems]);
 
   const handleSystemChange = (systemId: string) => {

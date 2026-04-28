@@ -2,6 +2,7 @@
 // Deploys config files to the target system via SSH and restarts Amarisoft services.
 // Calls /api/systems/config-deploy (server-side SSH) — no more direct agent calls.
 import { ExecutionStep } from '../../types/execution.types';
+import { configService } from '../config/config.service';
 
 /** SSH credentials passed in at execution time from the system store */
 export interface SshCredentials {
@@ -15,7 +16,17 @@ export interface SshCredentials {
 
 class ExecutionService {
   /**
-   * Execute a scenario: deploy each module config via SSH then restart services.
+   * Execute a scenario: for each module in the topology, look up the config
+   * the user picked, fetch its file content, then SCP+restart on the target.
+   *
+   * Two non-obvious bits this fixes vs. earlier code:
+   *   1. Scenarios store module rows under `moduleId` (not `module`); the
+   *      old lookup used `c.module === module` and never matched, so deploy
+   *      silently skipped every module.
+   *   2. Module rows store `configId` only — a *reference*. The old code
+   *      tried to read `moduleConfig.configContent`, which doesn't exist;
+   *      we now resolve the id against the configs API to get the actual
+   *      file content to ship.
    *
    * @param scenarioId  ID of the scenario to run
    * @param sshCreds    SSH credentials for the target system
@@ -23,27 +34,60 @@ class ExecutionService {
   async executeScenario(scenarioId: string, sshCreds: SshCredentials): Promise<ExecutionStep[]> {
     console.log(`[ExecuteScenario] Starting execution for scenario: ${scenarioId}`);
 
-    // 1. Fetch scenario details
+    // 1. Fetch scenario.
     const response = await fetch(`/api/scenarios/execute?id=${encodeURIComponent(scenarioId)}`);
     if (!response.ok) {
       const err = await response.json().catch(() => ({ error: 'Unknown error' }));
       throw new Error(err.error || 'Failed to fetch scenario details');
     }
     const scenario = await response.json();
-    console.log('[ExecuteScenario] Retrieved scenario:', scenario);
 
-    // 2. Execute modules in order
+    // 2. Pull all configs once so we can resolve configId → content per
+    //    module without a round-trip per step.
+    const allConfigs = await configService.getAllConfigs().catch(() => null);
+    if (!allConfigs) {
+      throw new Error('Could not load configs from the configs API');
+    }
+
+    // 3. Execute modules in topology order.
     const steps: ExecutionStep[] = [];
     const modules = this.getExecutionOrder(scenario.topology);
 
     for (const module of modules) {
-      const moduleConfig = scenario.moduleConfigs?.find((c: any) => c.module === module);
-      if (!moduleConfig) {
-        console.warn(`[ExecuteScenario] No config found for module: ${module}`);
-        continue;
+      const row = (scenario.moduleConfigs ?? []).find(
+        (c: any) => (c.moduleId ?? c.module) === module && c.enabled !== false,
+      );
+      if (!row || !row.configId) continue;
+
+      const moduleConfigs = (allConfigs as any)[module] ?? [];
+      const stored = moduleConfigs.find((c: any) => c.id === row.configId);
+      if (!stored) {
+        steps.push({
+          id: `${module}-${Date.now()}`,
+          name: `Deploy ${module}`,
+          status: 'failure',
+          startTime: new Date(),
+          endTime: new Date(),
+          duration: 0,
+          error: `Config ${row.configId} for module "${module}" was not found — was it deleted?`,
+        });
+        break;
+      }
+      if (typeof stored.content !== 'string' || stored.content.length === 0) {
+        steps.push({
+          id: `${module}-${Date.now()}`,
+          name: `Deploy ${module}`,
+          status: 'failure',
+          startTime: new Date(),
+          endTime: new Date(),
+          duration: 0,
+          error: `Config "${stored.name}" has empty content`,
+        });
+        break;
       }
 
-      const step = await this.deployModule(module, moduleConfig.configContent, sshCreds);
+      const step = await this.deployModule(module, stored.content, sshCreds);
+      step.name = `Deploy ${module} (${stored.name})`;
       steps.push(step);
 
       if (step.status === 'failure') {

@@ -10,6 +10,7 @@ import { ScenarioActions } from './ScenarioActions';
 import { ExecutionLogs } from './ExecutionLogs';
 import { useToast } from "@/components/ui/use-toast";
 import { useConfigs } from '../../context/ConfigContext/ConfigContext';
+import { useSystems } from '@/modules/systems/hooks/use-systems';
 
 interface ScenarioCardProps {
   scenario: {
@@ -43,6 +44,7 @@ interface ScenarioCardProps {
 export function ScenarioCard({ scenario, index, onRefresh }: ScenarioCardProps) {
   const { toast } = useToast();
   const { configs } = useConfigs();
+  const { systems } = useSystems();
   const [isRunning, setIsRunning] = useState(false);
   const [steps, setSteps] = useState<ExecutionStep[]>([]);
   const [showLogs, setShowLogs] = useState(false);
@@ -72,11 +74,43 @@ export function ScenarioCard({ scenario, index, onRefresh }: ScenarioCardProps) 
 
   const handleRun = async () => {
     if (!scenario.id) {
-      console.error('[ScenarioCard] No scenario ID provided');
+      toast({ title: 'Error', description: 'Invalid scenario configuration', variant: 'destructive' });
+      return;
+    }
+
+    // ── 1. Pre-flight: scenario must reference a system that still exists,
+    //       and must have at least one enabled module + config picked.
+    if (!scenario.system?.id) {
       toast({
-        title: "Error",
-        description: "Invalid scenario configuration",
-        variant: "destructive"
+        title: 'No target system',
+        description: 'This scenario has no system selected. Edit the scenario and pick one in Test Systems.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const sys = systems.find(s => String(s.id) === String(scenario.system!.id));
+    if (!sys) {
+      toast({
+        title: 'System not found',
+        description: `The scenario points at system "${scenario.system.name}" but it's no longer in your systems list. Edit the scenario or restore the system.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!sys.username || (!sys.password && !sys.privateKey)) {
+      toast({
+        title: 'Missing SSH credentials',
+        description: `System "${sys.name}" has no SSH username/password set. Edit it in Test Systems before running.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    const enabled = (scenario.moduleConfigs ?? []).filter(c => c.enabled && c.configId);
+    if (enabled.length === 0) {
+      toast({
+        title: 'Nothing to deploy',
+        description: 'This scenario has no enabled modules with a config selected. Edit it and pick at least one.',
+        variant: 'destructive',
       });
       return;
     }
@@ -85,38 +119,46 @@ export function ScenarioCard({ scenario, index, onRefresh }: ScenarioCardProps) 
       setIsRunning(true);
       setSteps([]);
 
-      console.log(`[ScenarioCard] Starting execution for scenario:`, {
-        id: scenario.id,
-        name: scenario.name,
-        topology: scenario.topology,
-        modules: scenario.moduleConfigs
+      const executionSteps = await executionService.executeScenario(scenario.id, {
+        host: sys.ip,
+        port: sys.sshPort ?? 22,
+        username: sys.username,
+        ...(sys.authMode === 'privateKey' && sys.privateKey
+          ? { privateKey: sys.privateKey }
+          : { password: sys.password ?? '' }),
       });
-
-      const executionSteps = await executionService.executeScenario(scenario.id);
       setSteps(executionSteps);
 
-      const hasFailed = executionSteps.some(step => step.status === 'failure');
-      
-      if (hasFailed) {
-        const failedSteps = executionSteps.filter(step => step.status === 'failure');
-        const errors = failedSteps.map(step => `${step.name}: ${step.error}`).join('\n');
+      // ── 2. After-the-fact: an empty steps array means the executor found
+      //       nothing to do. We pre-flighted enabled configs above, so this
+      //       is treated as an executor-level bug, not a happy success.
+      if (executionSteps.length === 0) {
         toast({
-          title: "Execution Failed",
-          description: errors,
-          variant: "destructive"
+          title: 'Execution did nothing',
+          description: 'No deploy steps ran. The scenario may be misconfigured (module names mismatched).',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const failed = executionSteps.filter(s => s.status === 'failure');
+      if (failed.length > 0) {
+        toast({
+          title: 'Execution Failed',
+          description: failed.map(s => `${s.name}: ${s.error ?? 'unknown error'}`).join('\n'),
+          variant: 'destructive',
         });
       } else {
         toast({
-          title: "Execution Complete",
-          description: "All steps completed successfully"
+          title: 'Execution Complete',
+          description: `${executionSteps.length} step${executionSteps.length === 1 ? '' : 's'} completed successfully`,
         });
       }
     } catch (error) {
-      console.error('[ScenarioCard] Execution error:', error);
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Unknown error occurred",
-        variant: "destructive"
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Unknown error occurred',
+        variant: 'destructive',
       });
     } finally {
       setIsRunning(false);
