@@ -1,6 +1,12 @@
-// MME / S1 connection info for LTE eNB configs
+// MME / S1 connection info for LTE eNB configs.
+//
+// Scope: CONFIG-WIDE (top-level keys in enb.cfg, not per-cell).
+//   mme_list[], gtp_addr, enb_id all live at root. PLMN sits inside
+//   cell_list[].plmn_list — for typical single-PLMN deployments we set one
+//   PLMN that the generator broadcasts on every cell.
 import { Field } from './Field';
 import { BoxedSection } from '../BoxedSection';
+import { Info } from 'lucide-react';
 import type { LTEFormState } from '../lteConstants';
 
 interface Props { form: LTEFormState; onChange: (key: string, value: any) => void; }
@@ -8,6 +14,15 @@ interface Props { form: LTEFormState; onChange: (key: string, value: any) => voi
 export function MmeInfoSectionLte({ form, onChange }: Props) {
   return (
     <div className="space-y-4">
+      <div className="flex items-start gap-2 p-3 rounded-md border border-blue-200 bg-blue-50/40 text-xs text-blue-900">
+        <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-blue-600" />
+        <div>
+          <span className="font-medium">Config-wide settings.</span> All cells in this
+          eNB connect to the same MME via S1; the eNB ID is shared. PLMN below is applied
+          to every cell — for per-cell PLMN overrides edit cell_list[].plmn_list directly.
+        </div>
+      </div>
+
       <BoxedSection
         title="MME / S1 Connection"
         subtitle="enb.cfg: mme_list[].mme_addr + gtp_addr — where this eNB connects to the EPC"

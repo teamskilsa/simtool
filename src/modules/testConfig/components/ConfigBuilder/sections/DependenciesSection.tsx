@@ -92,6 +92,12 @@ export function DependenciesSection({ refs, available = [] }: Props) {
         Tip: when importing from a callbox via SSH, dependencies are auto-fetched. For uploaded
         files, drag & drop them in the same import to bundle them with the main config.
       </p>
+      <p className="text-[11px] text-muted-foreground mt-2 italic">
+        Scope: drb_config and SIB filenames are <strong>per-cell</strong> in Amarisoft
+        (each cell_list[i] can reference different files). The builder currently emits
+        the same drb.cfg / SIB set for every cell — for per-cell overrides edit cell_list[].drb_config
+        and sib_sched_list[] directly.
+      </p>
     </BoxedSection>
   );
 }

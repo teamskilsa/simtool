@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import {
   RadioTower, FileText, Layers, Server, Database,
-  Zap, Gauge, Antenna, Lock,
+  Zap, Gauge, Antenna, Lock, Info,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Field } from './sections/Field';
@@ -19,6 +19,7 @@ import { LogSection } from './sections/LogSection';
 import { MmeInfoSectionLte } from './sections/MmeInfoSectionLte';
 import { DependenciesSection } from './sections/DependenciesSection';
 import { AntennaSectionLte } from './sections/AntennaSectionLte';
+import { Split72Fields } from './sections/Split72Fields';
 import {
   FrequentlyUsedLte, MacLte, PowerLte, SecurityLte,
 } from './sections/lte-layers';
@@ -27,7 +28,7 @@ import { BoxedSection } from './BoxedSection';
 import { Button } from '@/components/ui/button';
 import { RotateCcw } from 'lucide-react';
 import type { ReferencedFile } from './cfgParser';
-import { defaultRfArgs, rfArgsHint, type RfMode } from './rfDefaults';
+import { defaultRfArgs, rfArgsHint, parseRfArgs, setRfArg, type RfMode } from './rfDefaults';
 
 // ── Cell Section — only the per-cell IDENTITY fields. Everything else
 //   (PHICH, Cell Access, SIB1, Scheduler, HARQ) lives under the Layers tab;
@@ -132,14 +133,42 @@ function RFSection({ form, onChange }: { form: LTEFormState; onChange: (k: strin
           />
         )}
       </div>
-      <div className="mt-3">
-        <Field
-          label="rf_driver.args"
-          value={form.rfArgs}
-          onChange={v => onChange('rfArgs', v)}
-          placeholder={defaultRfArgs(form.rfMode as RfMode, form.nAntennaDl)}
-        />
-        <p className="text-[11px] text-muted-foreground mt-1.5">{rfArgsHint(form.rfMode as RfMode)}</p>
+
+      {/* Mode-specific body — same pattern as NR RFSection */}
+      <div className="mt-4">
+        {form.rfMode === 'sdr' && (
+          <>
+            <Field
+              label="Device Path (rf_driver.args)"
+              value={form.rfArgs}
+              onChange={v => onChange('rfArgs', v)}
+              placeholder={defaultRfArgs('sdr', form.nAntennaDl)}
+            />
+            <p className="text-[11px] text-muted-foreground mt-1.5">{rfArgsHint('sdr')}</p>
+          </>
+        )}
+        {form.rfMode === 'split' && (
+          <Split72Fields rfArgs={form.rfArgs} onChange={v => onChange('rfArgs', v)} />
+        )}
+        {form.rfMode === 'ip' && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field
+                label="TX Address"
+                value={parseRfArgs(form.rfArgs).tx_addr || ''}
+                onChange={v => onChange('rfArgs', setRfArg(form.rfArgs, 'tx_addr', v))}
+                placeholder="tcp://127.0.0.1:2000"
+              />
+              <Field
+                label="RX Address"
+                value={parseRfArgs(form.rfArgs).rx_addr || ''}
+                onChange={v => onChange('rfArgs', setRfArg(form.rfArgs, 'rx_addr', v))}
+                placeholder="tcp://127.0.0.1:2001"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1.5">{rfArgsHint('ip')}</p>
+          </>
+        )}
       </div>
     </BoxedSection>
   );
@@ -244,6 +273,17 @@ export function LTEConfigBuilder({
       case 'layers':
         return (
           <div className="space-y-4">
+            <div className="flex items-start gap-2 p-3 rounded-md border border-blue-200 bg-blue-50/40 text-xs text-blue-900">
+              <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-blue-600" />
+              <div>
+                <span className="font-medium">Shared via cell_default.</span> Layer
+                fields (HARQ, scheduler, SIBs, security algos, ...) are emitted under
+                <code className="font-mono">cell_default</code> so every cell in this
+                eNB inherits them. Amarisoft also allows per-cell overrides inside
+                <code className="font-mono">cell_list[i]</code> — that's a future
+                enhancement; today these are config-wide.
+              </div>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               {LAYER_SUB_TABS.map(tab => {
                 const Icon = tab.icon;

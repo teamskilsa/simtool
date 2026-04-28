@@ -57,3 +57,41 @@ export function rfArgsHint(mode: RfMode): string {
       return '';
   }
 }
+
+// ─── rf_driver.args parsing ──────────────────────────────────────────────────
+// Amarisoft's rf_driver.args is a comma-delimited "key=value" string. To let
+// users edit individual fields (e.g. VLAN ID for Split 7.2) without managing
+// the raw string, we parse to a map and re-serialise on every change.
+
+/** Parse "k1=v1,k2=v2" into { k1: 'v1', k2: 'v2' }. Whitespace tolerant. */
+export function parseRfArgs(s: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!s) return out;
+  for (const part of s.split(',')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    const key = part.slice(0, eq).trim();
+    const val = part.slice(eq + 1).trim();
+    if (key) out[key] = val;
+  }
+  return out;
+}
+
+/** Serialise a map back to the args string. Empty values are dropped. */
+export function serializeRfArgs(o: Record<string, string>): string {
+  return Object.entries(o)
+    .filter(([k, v]) => k && v !== '' && v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(',');
+}
+
+/** Update a single key inside the rfArgs string and return the new string. */
+export function setRfArg(rfArgs: string, key: string, value: string): string {
+  const map = parseRfArgs(rfArgs);
+  if (value === '' || value === undefined || value === null) {
+    delete map[key];
+  } else {
+    map[key] = String(value);
+  }
+  return serializeRfArgs(map);
+}

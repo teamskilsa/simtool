@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import {
   RadioTower, Layers, Server, FileText,
-  Zap, Gauge, Network, MessageSquare, Radio, Signal, Database,
+  Zap, Gauge, Network, MessageSquare, Radio, Signal, Database, Info,
 } from 'lucide-react';
 import {
   CellSection, BandSection, RFSection, ChannelSimSection, LogSection,
@@ -75,6 +75,18 @@ export function ConfigBuilder({ form, onChange, dependencies = [], availableFile
       case 'layers':
         return (
           <div className="space-y-4">
+            <div className="flex items-start gap-2 p-3 rounded-md border border-blue-200 bg-blue-50/40 text-xs text-blue-900">
+              <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-blue-600" />
+              <div>
+                <span className="font-medium">Shared via nr_cell_default.</span> Layer
+                fields (HARQ, scheduler, SIBs, RLC/PDCP timers, security algos, ...) are
+                emitted under <code className="font-mono">nr_cell_default</code> so every
+                cell in the gNB inherits them. Amarisoft also allows per-cell overrides
+                inside <code className="font-mono">nr_cell_list[i]</code> — that's a future
+                enhancement; today these are config-wide.
+              </div>
+            </div>
+
             {/* Sub-navigation */}
             <div className="flex flex-wrap items-center gap-2">
               {LAYER_SUB_TABS.map(tab => {
