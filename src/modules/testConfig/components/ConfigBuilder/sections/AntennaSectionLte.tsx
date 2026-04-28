@@ -1,37 +1,32 @@
-// Antenna configuration — count + TX/RX gain. Gain auto-bumps when the
-// antenna count changes IF the user hasn't customised it (i.e. it still
-// matches the default for the current count). RF driver mode and args
-// live in the dedicated RF section.
+// LTE antenna configuration — count + TX/RX gain. Same UX as the NR
+// AntennaSection: gain auto-bumps with antenna count when at the prior
+// default; SDR args auto-update for 4-antenna setups.
 import { Field } from './Field';
 import { Button } from '@/components/ui/button';
 import { RotateCcw } from 'lucide-react';
 import { BoxedSection } from '../BoxedSection';
-import type { NRFormState } from '../constants';
+import type { LTEFormState } from '../lteConstants';
 import { defaultGains, defaultRfArgs } from '../rfDefaults';
 
-interface Props { form: NRFormState; onChange: (key: string, value: any) => void; }
+interface Props { form: LTEFormState; onChange: (key: string, value: any) => void; }
 
-export function AntennaSection({ form, onChange }: Props) {
-  // Auto-bump gain on antenna change when current values match the previous
-  // count's defaults — i.e. the user never customised them.
+export function AntennaSectionLte({ form, onChange }: Props) {
   const handleAntennaCountChange = (key: 'nAntennaDl' | 'nAntennaUl', value: number) => {
-    const prev = defaultGains('nr', form.nAntennaDl);
+    const prev = defaultGains('lte', form.nAntennaDl);
     const userTouched = form.txGain !== prev.txGain || form.rxGain !== prev.rxGain;
     onChange(key, value);
     if (key === 'nAntennaDl' && !userTouched) {
-      const next = defaultGains('nr', value);
+      const next = defaultGains('lte', value);
       onChange('txGain', next.txGain);
       onChange('rxGain', next.rxGain);
     }
-    // SDR args also depends on antenna count (1 or 2 SDRs); update if SDR mode
-    // and user is still on the default args string.
     if (key === 'nAntennaDl' && form.rfMode === 'sdr' && form.rfArgs === defaultRfArgs('sdr', form.nAntennaDl)) {
       onChange('rfArgs', defaultRfArgs('sdr', value));
     }
   };
 
   const resetGains = () => {
-    const d = defaultGains('nr', form.nAntennaDl);
+    const d = defaultGains('lte', form.nAntennaDl);
     onChange('txGain', d.txGain);
     onChange('rxGain', d.rxGain);
   };
@@ -53,14 +48,14 @@ export function AntennaSection({ form, onChange }: Props) {
           value={form.nAntennaDl}
           onChange={v => handleAntennaCountChange('nAntennaDl', v)}
           type="select"
-          options={[{ value: 1, label: '1 (SISO)' }, { value: 2, label: '2 (2x2 MIMO)' }, { value: 4, label: '4 (4x4 MIMO)' }, { value: 8, label: '8 (8x8 MIMO)' }]}
+          options={[{ value: 1, label: '1 (SISO)' }, { value: 2, label: '2 (2x2 MIMO)' }, { value: 4, label: '4 (4x4 MIMO)' }]}
         />
         <Field
           label="Uplink Antennas"
           value={form.nAntennaUl}
           onChange={v => handleAntennaCountChange('nAntennaUl', v)}
           type="select"
-          options={[{ value: 1, label: '1' }, { value: 2, label: '2' }, { value: 4, label: '4' }]}
+          options={[{ value: 1, label: '1' }, { value: 2, label: '2' }]}
         />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">

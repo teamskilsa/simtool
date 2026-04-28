@@ -200,7 +200,10 @@ function astToNRForm(ast: Record<string, any>, warnings: string[]): NRFormState 
     tddPattern:       cells[0].tddPattern,
     nAntennaDl:       num(cellDefault.n_antenna_dl, DEFAULT_NR_FORM.nAntennaDl),
     nAntennaUl:       num(cellDefault.n_antenna_ul, DEFAULT_NR_FORM.nAntennaUl),
-    rfMode:           (str(ast.rf_driver?.name, 'sdr') === 'ip' ? 'ip' : 'sdr') as 'sdr' | 'split' | 'ip',
+    rfMode:           ((['sdr', 'split', 'ip'] as const).includes(str(ast.rf_driver?.name, 'sdr') as any)
+                        ? str(ast.rf_driver?.name, 'sdr')
+                        : 'sdr') as 'sdr' | 'split' | 'ip',
+    rfArgs:           str(ast.rf_driver?.args, DEFAULT_NR_FORM.rfArgs),
     txGain:           num(ast.tx_gain, DEFAULT_NR_FORM.txGain),
     rxGain:           num(ast.rx_gain, DEFAULT_NR_FORM.rxGain),
     rxAntenna:        str(ast.rf_driver?.rx_antenna, DEFAULT_NR_FORM.rxAntenna),
@@ -333,7 +336,10 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormStat
     tddSpecialSubframe:   tddSpVal,
     nAntennaDl:           num(cv(cell0, 'n_antenna_dl'), DEFAULT_LTE_FORM.nAntennaDl),
     nAntennaUl:           num(cv(cell0, 'n_antenna_ul'), DEFAULT_LTE_FORM.nAntennaUl),
-    rfMode:               (str(ast.rf_driver?.name, 'sdr') === 'ip' ? 'ip' : 'sdr') as 'sdr' | 'split' | 'ip',
+    rfMode:               ((['sdr', 'split', 'ip'] as const).includes(str(ast.rf_driver?.name, 'sdr') as any)
+                            ? str(ast.rf_driver?.name, 'sdr')
+                            : 'sdr') as 'sdr' | 'split' | 'ip',
+    rfArgs:               str(ast.rf_driver?.args, DEFAULT_LTE_FORM.rfArgs),
     txGain:               num(ast.tx_gain, DEFAULT_LTE_FORM.txGain),
     rxGain:               num(ast.rx_gain, DEFAULT_LTE_FORM.rxGain),
     rxAntenna:            str(ast.rf_driver?.rx_antenna, DEFAULT_LTE_FORM.rxAntenna),

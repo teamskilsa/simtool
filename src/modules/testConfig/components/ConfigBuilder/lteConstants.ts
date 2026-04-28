@@ -148,6 +148,11 @@ export interface LTEFormState {
   // ── RF driver ────────────────────────────────────────────────────────────────
   // enb.cfg: rf_driver.name
   rfMode: 'sdr' | 'split' | 'ip';
+  // enb.cfg: rf_driver.args — mode-specific content:
+  //   sdr   : device path  (dev0=/dev/sdr0[,dev1=/dev/sdr1])
+  //   split : O-RAN 7.2 fronthaul opts (vlan_id, if_name, bfp_iq_width, ...)
+  //   ip    : ZMQ socket addrs (tx_addr=tcp://..., rx_addr=tcp://...)
+  rfArgs: string;
   // enb.cfg: tx_gain
   txGain: number;
   // enb.cfg: rx_gain
@@ -271,6 +276,7 @@ export const DEFAULT_LTE_FORM: LTEFormState = {
 
   // RF
   rfMode: 'sdr',
+  rfArgs: 'dev0=/dev/sdr0',
   txGain: 80,
   rxGain: 40,
   rxAntenna: 'rx',

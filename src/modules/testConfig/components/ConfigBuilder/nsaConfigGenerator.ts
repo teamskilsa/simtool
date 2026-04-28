@@ -85,8 +85,8 @@ export function generateNSAConfig(form: NSAFormState): string {
   com_addr: "[::]:9001",
 
   rf_driver: {
-    name: "${f.rfMode === 'sdr' ? 'sdr' : f.rfMode === 'split' ? 'sdr' : 'ip'}",
-    args: "${f.nAntennaDl >= 4 ? 'dev0=/dev/sdr0,dev1=/dev/sdr1' : 'dev0=/dev/sdr0'}",
+    name: "${f.rfMode}",
+    args: "${f.rfArgs}",
     rx_antenna: "${f.rxAntenna}",
   },
   tx_gain: ${f.txGain},

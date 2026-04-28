@@ -133,10 +133,11 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
   com_addr: "[::]:9001",
 
   rf_driver: {
-    // enb.cfg: rf_driver.name
-    name: "${form.rfMode === 'sdr' ? 'sdr' : form.rfMode === 'split' ? 'sdr' : 'ip'}",
-    // enb.cfg: rf_driver.args — derived from antenna count; multi-dev for 4-ant configs
-    args: "${form.nAntennaDl >= 4 ? 'dev0=/dev/sdr0,dev1=/dev/sdr1' : 'dev0=/dev/sdr0'}",
+    // enb.cfg: rf_driver.name — sdr / split / ip
+    name: "${form.rfMode}",
+    // enb.cfg: rf_driver.args — content is mode-specific (device path for sdr,
+    // O-RAN fronthaul opts for split, ZMQ socket pair for ip). User-editable.
+    args: "${form.rfArgs}",
     // enb.cfg: rf_driver.rx_antenna
     rx_antenna: "${form.rxAntenna}",
   },

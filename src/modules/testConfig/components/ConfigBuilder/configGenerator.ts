@@ -193,8 +193,11 @@ export function generateNRConfig(form: NRFormState): string {
   com_addr: "[::]:9001",
 
   rf_driver: {
-    name: "${form.rfMode === 'sdr' ? 'sdr' : form.rfMode === 'split' ? 'sdr' : 'ip'}",
-    args: "${form.nAntennaDl >= 4 ? 'dev0=/dev/sdr0,dev1=/dev/sdr1' : 'dev0=/dev/sdr0'}",
+    /* sdr / split (O-RAN 7.2) / ip (ZMQ) */
+    name: "${form.rfMode}",
+    /* Mode-specific content. SDR: dev path. Split: vlan_id/if_name/bfp_iq_width.
+       IP: tx_addr/rx_addr ZMQ socket pair. Editable in builder's RF section. */
+    args: "${form.rfArgs}",
     rx_antenna: "${form.rxAntenna}",
   },
   tx_gain: ${form.txGain}, /* TX gain (in dB) */

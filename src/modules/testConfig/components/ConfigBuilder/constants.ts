@@ -70,6 +70,10 @@ export interface NRFormState {
   nAntennaUl: number;
   // RF
   rfMode: 'sdr' | 'split' | 'ip';
+  /** Raw `rf_driver.args` string — content is mode-specific. SDR: device path
+   *  (`dev0=/dev/sdr0[,dev1=/dev/sdr1]`); Split 7.2: O-RAN fronthaul opts
+   *  (vlan_id, if_name, bfp_iq_width, ...); IP: ZMQ socket addresses. */
+  rfArgs: string;
   txGain: number;
   rxGain: number;
   rxAntenna: string;
@@ -247,6 +251,7 @@ export const DEFAULT_NR_FORM: NRFormState = {
   nAntennaDl: 1,
   nAntennaUl: 1,
   rfMode: 'sdr',
+  rfArgs: 'dev0=/dev/sdr0',
   txGain: 90,
   rxGain: 60,
   rxAntenna: 'rx',
