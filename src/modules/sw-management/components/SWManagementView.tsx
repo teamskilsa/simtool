@@ -136,7 +136,7 @@ export function SWManagementView() {
                     Select a system, detect the package, then install to see progress here.
                   </p>
                 )}
-                <InstallProgress result={result} isInstalling={isInstalling} />
+                <InstallProgress result={result} isInstalling={isInstalling} systemName={selectedSystem?.name} />
               </CardContent>
             </Card>
           </div>
