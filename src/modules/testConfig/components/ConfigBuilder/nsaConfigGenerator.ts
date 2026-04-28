@@ -8,6 +8,7 @@
 import type { NSAFormState } from './nsaConstants';
 import { generateLTEConfig } from './lteConfigGenerator';
 import { generateNRConfig } from './configGenerator';
+import { formatGain } from './rfDefaults';
 
 /**
  * Pull a labelled block out of generated text. Returns the inside of
@@ -89,8 +90,8 @@ export function generateNSAConfig(form: NSAFormState): string {
     args: "${f.rfArgs}",
     rx_antenna: "${f.rxAntenna}",
   },
-  tx_gain: ${f.txGain},
-  rx_gain: ${f.rxGain},
+  tx_gain: ${formatGain(f.txGain)},
+  rx_gain: ${formatGain(f.rxGain)},
 
   mme_list: [
     { mme_addr: "${f.mmeAddr}" },

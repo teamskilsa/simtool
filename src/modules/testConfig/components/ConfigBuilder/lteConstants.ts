@@ -153,10 +153,10 @@ export interface LTEFormState {
   //   split : O-RAN 7.2 fronthaul opts (vlan_id, if_name, bfp_iq_width, ...)
   //   ip    : ZMQ socket addrs (tx_addr=tcp://..., rx_addr=tcp://...)
   rfArgs: string;
-  // enb.cfg: tx_gain
-  txGain: number;
-  // enb.cfg: rx_gain
-  rxGain: number;
+  // enb.cfg: tx_gain — scalar applied to every antenna OR array (one per path)
+  txGain: number | number[];
+  // enb.cfg: rx_gain — same shape as tx_gain
+  rxGain: number | number[];
   // enb.cfg: rf_driver.rx_antenna
   rxAntenna: string;
 
@@ -277,8 +277,8 @@ export const DEFAULT_LTE_FORM: LTEFormState = {
   // RF
   rfMode: 'sdr',
   rfArgs: 'dev0=/dev/sdr0',
-  txGain: 80,
-  rxGain: 40,
+  txGain: 90,
+  rxGain: 60,
   rxAntenna: 'rx',
 
   // Network

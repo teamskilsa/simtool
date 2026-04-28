@@ -30,18 +30,34 @@ export function defaultRfArgs(mode: RfMode, nAntennaDl: number): string {
 }
 
 /**
- * Default TX/RX gain for a given RAT + antenna count.
- *
- * Higher antenna counts get a small gain bump (more elements split the EIRP)
- * and NR generally sits 5–10 dB higher than LTE on the same setup. These
- * are sane starting points; users tune for their specific RU/SDR.
+ * Default TX/RX gain. Unified 90/60 across NR and LTE per user spec; higher
+ * antenna counts get a small bump since the per-element budget shrinks.
  */
-export function defaultGains(rat: 'nr' | 'lte', nAntennaDl: number): { txGain: number; rxGain: number } {
-  const baseTx = rat === 'nr' ? 90 : 80;
-  const baseRx = rat === 'nr' ? 60 : 40;
+export function defaultGains(_rat: 'nr' | 'lte', nAntennaDl: number): { txGain: number; rxGain: number } {
   // +0 dB at 1 ant, +5 dB at 2, +10 dB at 4+
   const bump = nAntennaDl >= 4 ? 10 : nAntennaDl >= 2 ? 5 : 0;
-  return { txGain: baseTx + bump, rxGain: baseRx + bump };
+  return { txGain: 90 + bump, rxGain: 60 + bump };
+}
+
+/** Build a per-antenna gain array of length n with all entries = scalar. */
+export function gainArrayFromScalar(scalar: number, n: number): number[] {
+  return Array.from({ length: n }, () => scalar);
+}
+
+/** Reduce a gain (scalar | array) to a single representative scalar. */
+export function gainAsScalar(g: number | number[]): number {
+  return Array.isArray(g) ? (g[0] ?? 0) : g;
+}
+
+/**
+ * Format a gain value for emission into Amarisoft cfg.
+ *   number     →  "90"
+ *   number[]   →  "[90, 90, 90, 90]"
+ * Either form is accepted by the lteenb / lteue / ltemme parsers.
+ */
+export function formatGain(g: number | number[]): string {
+  if (Array.isArray(g)) return `[${g.map(v => String(v)).join(', ')}]`;
+  return String(g);
 }
 
 /** UI hint shown below the args input — explains what the field expects. */

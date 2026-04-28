@@ -111,6 +111,17 @@ function num(v: any, fallback: number): number {
   return fallback;
 }
 
+/** Read tx_gain / rx_gain — Amarisoft accepts either a scalar or array form. */
+function gainValue(v: any, fallback: number | number[]): number | number[] {
+  if (Array.isArray(v)) {
+    const arr = v.map(x => num(x, NaN)).filter(n => !isNaN(n));
+    return arr.length > 0 ? arr : fallback;
+  }
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') { const n = Number(v); return isNaN(n) ? fallback : n; }
+  return fallback;
+}
+
 function bool(v: any, fallback: boolean): boolean {
   if (typeof v === 'boolean') return v;
   if (v === 'true') return true;
@@ -204,8 +215,8 @@ function astToNRForm(ast: Record<string, any>, warnings: string[]): NRFormState 
                         ? str(ast.rf_driver?.name, 'sdr')
                         : 'sdr') as 'sdr' | 'split' | 'ip',
     rfArgs:           str(ast.rf_driver?.args, DEFAULT_NR_FORM.rfArgs),
-    txGain:           num(ast.tx_gain, DEFAULT_NR_FORM.txGain),
-    rxGain:           num(ast.rx_gain, DEFAULT_NR_FORM.rxGain),
+    txGain:           gainValue(ast.tx_gain, DEFAULT_NR_FORM.txGain),
+    rxGain:           gainValue(ast.rx_gain, DEFAULT_NR_FORM.rxGain),
     rxAntenna:        str(ast.rf_driver?.rx_antenna, DEFAULT_NR_FORM.rxAntenna),
     amfAddr:          str(ast.amf_list?.[0]?.amf_addr, DEFAULT_NR_FORM.amfAddr),
     gtpAddr:          str(ast.gtp_addr, DEFAULT_NR_FORM.gtpAddr),
@@ -340,8 +351,8 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormStat
                             ? str(ast.rf_driver?.name, 'sdr')
                             : 'sdr') as 'sdr' | 'split' | 'ip',
     rfArgs:               str(ast.rf_driver?.args, DEFAULT_LTE_FORM.rfArgs),
-    txGain:               num(ast.tx_gain, DEFAULT_LTE_FORM.txGain),
-    rxGain:               num(ast.rx_gain, DEFAULT_LTE_FORM.rxGain),
+    txGain:               gainValue(ast.tx_gain, DEFAULT_LTE_FORM.txGain),
+    rxGain:               gainValue(ast.rx_gain, DEFAULT_LTE_FORM.rxGain),
     rxAntenna:            str(ast.rf_driver?.rx_antenna, DEFAULT_LTE_FORM.rxAntenna),
     mmeAddr:              str(ast.mme_list?.[0]?.mme_addr, DEFAULT_LTE_FORM.mmeAddr),
     gtpAddr:              str(ast.gtp_addr, DEFAULT_LTE_FORM.gtpAddr),

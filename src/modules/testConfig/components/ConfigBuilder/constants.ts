@@ -74,8 +74,10 @@ export interface NRFormState {
    *  (`dev0=/dev/sdr0[,dev1=/dev/sdr1]`); Split 7.2: O-RAN fronthaul opts
    *  (vlan_id, if_name, bfp_iq_width, ...); IP: ZMQ socket addresses. */
   rfArgs: string;
-  txGain: number;
-  rxGain: number;
+  /** Amarisoft accepts either a scalar (applied to every antenna path) or
+   *  an array with one value per path. Arrays must match nAntennaDl/Ul. */
+  txGain: number | number[];
+  rxGain: number | number[];
   rxAntenna: string;
   // Network
   amfAddr: string;

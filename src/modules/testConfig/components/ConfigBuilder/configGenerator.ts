@@ -2,6 +2,7 @@
 // Validated against the reference config shipped with Amarisoft 2026-04-22
 // (lteenb-linux-2026-04-22/config/gnb-sa.cfg).
 import type { NRFormState } from './constants';
+import { formatGain } from './rfDefaults';
 
 /**
  * Format PLMN string as MCC (3-digit) + MNC (2- or 3-digit, zero-padded).
@@ -200,8 +201,9 @@ export function generateNRConfig(form: NRFormState): string {
     args: "${form.rfArgs}",
     rx_antenna: "${form.rxAntenna}",
   },
-  tx_gain: ${form.txGain}, /* TX gain (in dB) */
-  rx_gain: ${form.rxGain}, /* RX gain (in dB) */
+  /* tx_gain / rx_gain — scalar (all paths) or array (one per antenna) */
+  tx_gain: ${formatGain(form.txGain)},
+  rx_gain: ${formatGain(form.rxGain)},
 
   amf_list: [
     {

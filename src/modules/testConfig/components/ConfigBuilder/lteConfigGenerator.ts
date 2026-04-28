@@ -1,6 +1,7 @@
 // Generates Amarisoft enb.cfg for LTE / NB-IoT / CAT-M1
 import type { LTEFormState, LTECellEntry } from './lteConstants';
 import { LTE_TDD_BANDS, makeDefaultLteCell } from './lteConstants';
+import { formatGain } from './rfDefaults';
 
 /**
  * Format PLMN string: MCC (3-digit) + MNC (2- or 3-digit, zero-padded).
@@ -142,10 +143,10 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
     rx_antenna: "${form.rxAntenna}",
   },
 
-  // enb.cfg: tx_gain
-  tx_gain: ${form.txGain},
-  // enb.cfg: rx_gain
-  rx_gain: ${form.rxGain},
+  // enb.cfg: tx_gain — scalar (all paths) or array (one per antenna)
+  tx_gain: ${formatGain(form.txGain)},
+  // enb.cfg: rx_gain — same shape as tx_gain
+  rx_gain: ${formatGain(form.rxGain)},
 
   mme_list: [
     {
