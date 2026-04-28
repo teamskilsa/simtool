@@ -12,9 +12,11 @@ import {
 import { Copy, Trash2, MoreVertical, FolderPlus, Pencil } from 'lucide-react';
 import { ConfigItem } from '../../types';
 import { cn } from '@/lib/utils';
+import { RAT_BADGE, AUX_BADGE, type ConfigClassification } from './classifyConfig';
 
 interface ConfigListItemProps {
   config: ConfigItem;
+  classification?: ConfigClassification;
   isSelected: boolean;
   isActiveConfig: boolean;
   onSelect: (checked: boolean) => void;
@@ -27,6 +29,7 @@ interface ConfigListItemProps {
 
 export const ConfigListItem: React.FC<ConfigListItemProps> = ({
   config,
+  classification,
   isSelected,
   isActiveConfig,
   onSelect,
@@ -36,6 +39,17 @@ export const ConfigListItem: React.FC<ConfigListItemProps> = ({
   onRename,
   onAddToGroup
 }) => {
+  // Pick the type badge — RAT for main configs, AUX kind for dependencies
+  const typeBadge = (() => {
+    if (!classification) return null;
+    if (classification.kind === 'main' && classification.rat) {
+      return RAT_BADGE[classification.rat];
+    }
+    if (classification.kind === 'auxiliary' && classification.auxKind) {
+      return AUX_BADGE[classification.auxKind];
+    }
+    return null;
+  })();
   return (
     <div
       className={cn(
@@ -94,13 +108,20 @@ export const ConfigListItem: React.FC<ConfigListItemProps> = ({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <div className="mt-1 flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <span className="text-xs text-muted-foreground truncate">
             Modified: {new Date(config.modifiedAt).toLocaleString()}
           </span>
-          <Badge variant="outline" className="text-xs">
-            {config.module}
-          </Badge>
+          <div className="flex items-center gap-1 shrink-0">
+            {typeBadge && (
+              <span className={cn('text-[10px] px-1.5 py-0.5 rounded border font-medium', typeBadge.color)}>
+                {typeBadge.label}
+              </span>
+            )}
+            <Badge variant="outline" className="text-xs">
+              {config.module}
+            </Badge>
+          </div>
         </div>
       </div>
     </div>
