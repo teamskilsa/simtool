@@ -113,18 +113,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     } else {
       // ── List files in the config directory ────────────────────────────────
-      // Use find + stat for reliable, parseable output regardless of locale/ls format
-      const ext = mapping.pattern.replace('*', '');
-      const findCmd = `find ${q(mapping.dir)} -maxdepth 1 -type f -name ${q('*' + ext)} -printf '%f\t%s\t%T@\n' 2>/dev/null | sort`;
+      // 1. Probe the directory first so we can tell "doesn't exist", "permission
+      //    denied" and "empty" apart in the error message. Try sudo on failure
+      //    in case /root/* needs elevation.
+      let dirCheck = await ssh.execCommand(`test -d ${q(mapping.dir)} && echo exists || echo missing`);
+      if (dirCheck.stdout.trim() !== 'exists') {
+        dirCheck = await ssh.execCommand(
+          `${sudoPrefix}test -d ${q(mapping.dir)} && echo exists || echo missing`
+        );
+      }
+      if (dirCheck.stdout.trim() !== 'exists') {
+        return res.status(404).json({
+          error: `Directory not found on target: ${mapping.dir}`,
+          detail: `For module "${module}". Check that Amarisoft is installed and the cfg directory exists at this path.`,
+        });
+      }
 
+      // 2. List files matching the pattern. Pattern is a literal glob, passed as-is
+      //    so that "ims*.cfg" or "*.db" work correctly (don't strip the '*').
+      const findCmd = `find ${q(mapping.dir)} -maxdepth 1 -type f -name ${q(mapping.pattern)} -printf '%f\t%s\t%T@\n' 2>/dev/null | sort`;
       let findRes = await ssh.execCommand(findCmd);
       if (findRes.code !== 0 || !findRes.stdout.trim()) {
-        // Retry with sudo (directory may require root)
-        findRes = await ssh.execCommand(`${sudoPrefix}bash -c ${q(`find ${mapping.dir} -maxdepth 1 -type f -name '*${ext}' -printf '%f\\t%s\\t%T@\\n' 2>/dev/null | sort`)}`);
+        // Retry with sudo (directory may require root). Wrap in bash -c so the
+        // shell expands the glob inside sudo's privileged context.
+        findRes = await ssh.execCommand(
+          `${sudoPrefix}bash -c ${q(`find ${mapping.dir} -maxdepth 1 -type f -name '${mapping.pattern}' -printf '%f\\t%s\\t%T@\\n' 2>/dev/null | sort`)}`
+        );
       }
 
       if (!findRes.stdout.trim()) {
-        // Directory doesn't exist or no matching files — not an error
+        // Directory exists (we just checked) but no matching files. Empty list.
         return res.status(200).json([]);
       }
 

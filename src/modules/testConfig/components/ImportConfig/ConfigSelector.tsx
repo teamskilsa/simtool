@@ -29,6 +29,7 @@ export const ConfigSelector: React.FC<ConfigSelectorProps> = ({
 }) => {
     const [configs, setConfigs] = useState<Omit<ConfigItem, 'content'>[]>([]);
     const [loading, setLoading] = useState(false);
+    const [fetchError, setFetchError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const { toast } = useToast();
     const fetchInProgress = useRef(false);
@@ -44,6 +45,7 @@ export const ConfigSelector: React.FC<ConfigSelectorProps> = ({
         try {
             fetchInProgress.current = true;
             setLoading(true);
+            setFetchError(null);
             console.log('Fetching config list with:', { module, host: system.host });
             const list = await testConfigService.fetchConfigList(
                 module,
@@ -53,10 +55,12 @@ export const ConfigSelector: React.FC<ConfigSelectorProps> = ({
             setConfigs(list);
         } catch (error) {
             console.error('Failed to fetch config list:', error);
+            const msg = error instanceof Error ? error.message : 'Failed to fetch configurations';
+            setFetchError(msg);
             toast({
-                title: "Error",
-                description: "Failed to fetch configurations",
-                variant: "destructive"
+                title: `Could not list ${module} configs`,
+                description: msg,
+                variant: 'destructive',
             });
             setConfigs([]);
         } finally {
@@ -193,9 +197,26 @@ export const ConfigSelector: React.FC<ConfigSelectorProps> = ({
                     )}
 
                     {filteredConfigs.length === 0 ? (
-                        <div className="text-center text-sm text-muted-foreground py-4">
-                            No configurations found
-                        </div>
+                        fetchError ? (
+                            <div className="text-center py-6 px-4">
+                                <p className="text-sm font-medium text-destructive mb-1">
+                                    Couldn't list <span className="font-mono">{module}</span> configs
+                                </p>
+                                <p className="text-xs text-muted-foreground">{fetchError}</p>
+                                <p className="text-[11px] text-muted-foreground mt-3">
+                                    Common causes: SSH credentials wrong on the system entry, the directory
+                                    doesn't exist on the target, or the user can't read it (try sudo / verify
+                                    the dir for this module).
+                                </p>
+                            </div>
+                        ) : loading ? null : (
+                            <div className="text-center text-sm text-muted-foreground py-6">
+                                <p>No <span className="font-mono">{module}</span> configurations found.</p>
+                                <p className="text-[11px] mt-2">
+                                    Directory exists but contains no matching files. Different module?
+                                </p>
+                            </div>
+                        )
                     ) : (
                         <div className="space-y-2">
                             {filteredConfigs.map((config) => (
