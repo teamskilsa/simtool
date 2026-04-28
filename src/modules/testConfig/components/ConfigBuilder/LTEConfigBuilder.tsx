@@ -1,6 +1,12 @@
-// LTE / NB-IoT / CAT-M1 config builder
+// LTE / NB-IoT / CAT-M1 config builder — restructured to mirror the NR builder:
+//   Main tabs:   Cell  |  Layers  |  MME Info  |  Log Setting
+//   Inside Cell: Cell Info / Band / RF / (IoT — when nbiot/catm)
+//   Inside Layers: Frequently Used / MAC / Power / Security
 import { useState } from 'react';
-import { RadioTower, Settings2, Wifi, FileText, Signal } from 'lucide-react';
+import {
+  RadioTower, Settings2, Wifi, FileText, Signal, Layers, Server,
+  Zap, Gauge, Antenna, Lock,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Field } from './sections/Field';
 import {
@@ -9,6 +15,10 @@ import {
   type LTEFormState,
 } from './lteConstants';
 import { LogSection } from './sections/LogSection';
+import { MmeInfoSectionLte } from './sections/MmeInfoSectionLte';
+import {
+  FrequentlyUsedLte, MacLte, PowerLte, SecurityLte,
+} from './sections/lte-layers';
 import { LTECellTabs } from './LTECellTabs';
 
 // ── Cell Section ────────────────────────────────────────────────────────────
@@ -313,49 +323,153 @@ interface LTEConfigBuilderProps {
   ratMode: 'lte' | 'nbiot' | 'catm';
 }
 
+// Top-level tabs (mirror NR ConfigBuilder)
+const MAIN_TABS = [
+  { id: 'cell',   label: 'Cell',        icon: RadioTower },
+  { id: 'layers', label: 'Layers',      icon: Layers },
+  { id: 'mme',    label: 'MME Info',    icon: Server },
+  { id: 'log',    label: 'Log Setting', icon: FileText },
+] as const;
+
+// Sub-tabs inside "Layers"
+const LAYER_SUB_TABS = [
+  { id: 'freq',     label: 'Frequently Used', icon: Zap },
+  { id: 'mac',      label: 'MAC',             icon: Gauge },
+  { id: 'power',    label: 'Power & Antenna', icon: Antenna },
+  { id: 'security', label: 'Security',        icon: Lock },
+] as const;
+
 export function LTEConfigBuilder({ form, onChange, ratMode }: LTEConfigBuilderProps) {
   const hasIoT = ratMode === 'nbiot' || ratMode === 'catm';
 
-  const TABS = [
-    { id: 'cell', label: 'Cell', icon: RadioTower },
-    { id: 'band', label: 'Band', icon: Settings2 },
-    { id: 'rf', label: 'RF', icon: Wifi },
-    ...(hasIoT ? [{ id: 'iot', label: ratMode === 'nbiot' ? 'NB-IoT' : 'CAT-M', icon: Signal }] : []),
-    { id: 'log', label: 'Log', icon: FileText },
+  // Cell sub-tabs (depend on RAT mode — NB-IoT/CAT-M get an extra IoT tab)
+  const CELL_SUB_TABS = [
+    { id: 'cellinfo', label: 'Cell Info', icon: RadioTower },
+    { id: 'band',     label: 'Band',      icon: Settings2 },
+    { id: 'rf',       label: 'RF',        icon: Wifi },
+    ...(hasIoT ? [{ id: 'iot' as const, label: ratMode === 'nbiot' ? 'NB-IoT' : 'CAT-M', icon: Signal }] : []),
   ];
 
-  const [activeTab, setActiveTab] = useState('cell');
+  const [mainTab, setMainTab] = useState<string>('cell');
+  const [cellSubTab, setCellSubTab] = useState<string>('cellinfo');
+  const [layerSubTab, setLayerSubTab] = useState<string>('freq');
+
+  const renderCellContent = () => {
+    switch (cellSubTab) {
+      case 'cellinfo': return <CellSection form={form} onChange={onChange} />;
+      case 'band':     return <BandSection form={form} onChange={onChange} ratMode={ratMode} />;
+      case 'rf':       return <RFSection form={form} onChange={onChange} />;
+      case 'iot':      return <IoTSection form={form} onChange={onChange} ratMode={ratMode} />;
+      default:         return null;
+    }
+  };
+
+  const renderMainContent = () => {
+    switch (mainTab) {
+      case 'cell':
+        return (
+          <div className="space-y-4">
+            {/* Multi-cell strip — only for plain LTE (CA), only on per-cell sub-tabs */}
+            {ratMode === 'lte' && (cellSubTab === 'cellinfo' || cellSubTab === 'band') && (
+              <LTECellTabs form={form} onChange={onChange} />
+            )}
+
+            {/* Sub-navigation */}
+            <div className="flex flex-wrap items-center gap-2">
+              {CELL_SUB_TABS.map(tab => {
+                const Icon = tab.icon;
+                const isActive = cellSubTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setCellSubTab(tab.id)}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div>{renderCellContent()}</div>
+          </div>
+        );
+
+      case 'layers':
+        return (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {LAYER_SUB_TABS.map(tab => {
+                const Icon = tab.icon;
+                const isActive = layerSubTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setLayerSubTab(tab.id)}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div>
+              {layerSubTab === 'freq'     && <FrequentlyUsedLte form={form} onChange={onChange} />}
+              {layerSubTab === 'mac'      && <MacLte form={form} onChange={onChange} />}
+              {layerSubTab === 'power'    && <PowerLte form={form} onChange={onChange} />}
+              {layerSubTab === 'security' && <SecurityLte form={form} onChange={onChange} />}
+            </div>
+          </div>
+        );
+
+      case 'mme':
+        return <MmeInfoSectionLte form={form} onChange={onChange} />;
+
+      case 'log':
+        return <LogSection form={form as any} onChange={onChange} />;
+
+      default:
+        return null;
+    }
+  };
 
   return (
-    <div className="space-y-3">
-      {/* Multi-cell tab strip — only meaningful for plain LTE (CA), not NB-IoT/CAT-M */}
-      {ratMode === 'lte' && <LTECellTabs form={form} onChange={onChange} />}
-
-      <div className="flex gap-0.5 bg-gray-100 p-1 rounded-lg overflow-x-auto">
-        {TABS.map(tab => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all flex-1 justify-center whitespace-nowrap ${
-                activeTab === tab.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 hover:bg-white hover:shadow-sm'
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {tab.label}
-            </button>
-          );
-        })}
+    <div className="space-y-4">
+      {/* Main tab bar — TestMatrix-style underline (matches NR builder) */}
+      <div className="border-b border-gray-200">
+        <nav className="flex flex-wrap -mb-px gap-1">
+          {MAIN_TABS.map(tab => {
+            const Icon = tab.icon;
+            const isActive = mainTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setMainTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                  isActive
+                    ? 'border-indigo-600 text-indigo-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
       </div>
 
-      <div className="rounded-lg border bg-white p-4">
-        {activeTab === 'cell' && <CellSection form={form} onChange={onChange} />}
-        {activeTab === 'band' && <BandSection form={form} onChange={onChange} ratMode={ratMode} />}
-        {activeTab === 'rf' && <RFSection form={form} onChange={onChange} />}
-        {activeTab === 'iot' && <IoTSection form={form} onChange={onChange} ratMode={ratMode} />}
-        {activeTab === 'log' && <LogSection form={form as any} onChange={onChange} />}
-      </div>
+      <div>{renderMainContent()}</div>
     </div>
   );
 }
