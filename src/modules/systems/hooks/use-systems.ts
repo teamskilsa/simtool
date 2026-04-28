@@ -13,19 +13,38 @@ interface ConnectionStatus {
 const STORAGE_KEY = 'stored_systems';
 
 export function useSystems() {
-  // Initialize systems from localStorage
+  // Initialize systems from localStorage. SSR-safe: server returns []; the
+  // useEffect below re-hydrates from localStorage on the client.
   const [systems, setSystems] = useState<System[]>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
   });
-  
+
   const [connections, setConnections] = useState<Map<number, ConnectionStatus>>(new Map());
   const [monitoring, setMonitoring] = useState({ isActive: false });
   const [loading, setLoading] = useState(true);
 
+  // Hydrate from localStorage on the client (covers the SSR-empty case)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (stored) setSystems(JSON.parse(stored));
+    } catch {
+      // ignore malformed data
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Save systems to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(systems));
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(systems));
   }, [systems]);
 
   // Sync React state when localStorage is updated from another tab/window

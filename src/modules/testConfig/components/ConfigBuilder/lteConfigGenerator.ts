@@ -1,6 +1,6 @@
 // Generates Amarisoft enb.cfg for LTE / NB-IoT / CAT-M1
-import type { LTEFormState } from './lteConstants';
-import { LTE_TDD_BANDS } from './lteConstants';
+import type { LTEFormState, LTECellEntry } from './lteConstants';
+import { LTE_TDD_BANDS, makeDefaultLteCell } from './lteConstants';
 
 /**
  * Format PLMN string: MCC (3-digit) + MNC (2- or 3-digit, zero-padded).
@@ -29,51 +29,95 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
   }
   const logOptions = logParts.join(',');
 
-  // ── TDD block ────────────────────────────────────────────────────────────────
-  const tddBlock = () => {
-    if (!isTdd) return '';
-    return `
-      // enb.cfg: cell_list[].tdd_ul_dl_config
-      tdd_ul_dl_config: ${form.tddConfig},
-      // enb.cfg: cell_list[].tdd_special_subframe_pattern
-      tdd_special_subframe_pattern: ${form.tddSpecialSubframe},`;
-  };
-
-  // ── NB-IoT block (LTE FDD/TDD scope: NB-IoT left mostly as-is — see PR notes) ──
-  const nbIotBlock = () => {
-    if (ratMode !== 'nbiot') return '';
-    if (form.nbIotMode === 'standalone') {
-      return `
-      // enb.cfg: cell_list[].nb_iot
-      nb_iot: true,
-      // enb.cfg: cell_list[].nb_iot_mode
-      nb_iot_mode: "standalone",`;
-    }
-    return `
-      // enb.cfg: cell_list[].nb_iot
-      nb_iot: true,
-      // enb.cfg: cell_list[].nb_iot_mode
-      nb_iot_mode: "${form.nbIotMode}",
-      // enb.cfg: cell_list[].nb_iot_prb_index
-      nb_iot_prb_index: ${form.nbIotPrbIndex},`;
-  };
-
-  // ── CAT-M block ──────────────────────────────────────────────────────────────
-  const catMBlock = () => {
-    if (ratMode !== 'catm') return '';
-    return `
-      /* CAT-M1 / eMTC */
-      // enb.cfg: cell_list[].ce_mode
-      ce_mode: "${form.catMCeMode}",
-      // enb.cfg: cell_list[].max_repetitions
-      max_repetitions: ${form.catMRepetitions},`;
-  };
-
   // ── cipher / integ algo arrays ───────────────────────────────────────────────
   const cipherArr = (form.cipherAlgoPref ?? ['eea0', 'eea2', 'eea3'])
     .map((a: string) => `"${a}"`).join(', ');
   const integArr = (form.integAlgoPref ?? ['eia2', 'eia3'])
     .map((a: string) => `"${a}"`).join(', ');
+
+  // ── Build cell_list — emit every cell in form.cells[] ───────────────────────
+  // The flat form fields (cellId, pci, ...) mirror cells[activeCellIdx]; the
+  // currently-active cell uses the freshest flat values, others use their slot.
+  const cellEntries: LTECellEntry[] = form.cells && form.cells.length > 0
+    ? form.cells.map((c, i) =>
+        i === (form.activeCellIdx ?? 0)
+          ? {
+              ...c,
+              cellId: form.cellId,
+              pci: form.pci,
+              tac: form.tac,
+              rfPort: form.rfPort,
+              band: form.band,
+              bandwidth: form.bandwidth,
+              dlEarfcn: form.dlEarfcn,
+              tddConfig: form.tddConfig,
+              tddSpecialSubframe: form.tddSpecialSubframe,
+            }
+          : c
+      )
+    : [makeDefaultLteCell('Cell 1', {
+        cellId: form.cellId, pci: form.pci, tac: form.tac, rfPort: form.rfPort,
+        band: form.band, bandwidth: form.bandwidth, dlEarfcn: form.dlEarfcn,
+        tddConfig: form.tddConfig, tddSpecialSubframe: form.tddSpecialSubframe,
+      })];
+
+  const cellListBlock = cellEntries.map((c, i) => {
+    const cellTdd = LTE_TDD_BANDS.includes(c.band);
+    const tddPart = cellTdd ? `
+      tdd_ul_dl_config: ${c.tddConfig},
+      tdd_special_subframe_pattern: ${c.tddSpecialSubframe},` : '';
+    // NB-IoT / CAT-M per-cell extras
+    const nbiotPart = ratMode === 'nbiot'
+      ? (form.nbIotMode === 'standalone'
+          ? `\n      nb_iot: true,\n      nb_iot_mode: "standalone",`
+          : `\n      nb_iot: true,\n      nb_iot_mode: "${form.nbIotMode}",\n      nb_iot_prb_index: ${form.nbIotPrbIndex},`)
+      : '';
+    const catmPart = ratMode === 'catm'
+      ? `\n      ce_mode: "${form.catMCeMode}",\n      max_repetitions: ${form.catMRepetitions},`
+      : '';
+    // Optional scell_list for carrier aggregation: each cell aggregates the others
+    const otherCellIds = cellEntries.filter((_, j) => j !== i).map(o => o.cellId);
+    const scellPart = otherCellIds.length > 0 ? `
+      scell_list: [${otherCellIds.map(id => `
+        { cell_id: ${id}, cross_carrier_scheduling: false }`).join(',')}
+      ],` : '';
+    return `    {
+      /* ${c.name} */
+      rf_port: ${c.rfPort},
+      cell_id: ${c.cellId},
+      n_id_cell: ${c.pci},
+      tac: ${c.tac},
+      dl_earfcn: ${c.dlEarfcn},
+      bandwidth: ${c.bandwidth},
+      n_antenna_dl: ${form.nAntennaDl},
+      n_antenna_ul: ${form.nAntennaUl},
+      cyclic_prefix: "${form.cpMode}",
+      phich_duration: "${form.phichDuration}",
+      phich_resource: "${form.phichResource}",
+      root_sequence_index: ${c.rootSequenceIndex},${c.cellBarred ? `
+      cell_barred: true,` : ''}${tddPart}${nbiotPart}${catmPart}${scellPart}
+      plmn_list: [{
+        plmn: "${formatPlmn(form.plmn.mcc, form.plmn.mnc)}",
+        attach_without_pdn: ${form.attachWithoutPdn},
+        reserved: ${form.plmnReserved},
+      }],
+      si_coderate: ${form.siCoderate},
+      si_window_length: ${form.siWindowLength},
+      intra_freq_reselection: ${form.intraFreqReselection},
+      q_rx_lev_min: ${form.qRxLevMin},
+      p_max: ${form.pMax},
+      sr_period: ${form.srPeriod},
+      cqi_period: ${form.cqiPeriod},
+      mac_config: { ul_max_harq_tx: ${form.ulMaxHarqTx}, dl_max_harq_tx: ${form.dlMaxHarqTx} },
+      dpc: ${form.dpc},
+      dpc_pusch_snr_target: ${form.dpcPuschSnrTarget},
+      dpc_pucch_snr_target: ${form.dpcPucchSnrTarget},
+      inactivity_timer: ${form.inactivityTimer},
+      drb_config: "${form.drbConfig}",
+      cipher_algo_pref: [${cipherArr}],
+      integ_algo_pref: [${integArr}],
+    }`;
+  }).join(',\n');
 
   return `/* ${ratLabel} eNB Configuration
  * Generated: ${new Date().toISOString()}
@@ -115,85 +159,7 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
   enb_id: ${form.enbId},
 
   cell_list: [
-    {
-      // enb.cfg: cell_list[].rf_port
-      rf_port: ${form.rfPort},
-      // enb.cfg: cell_list[].cell_id
-      cell_id: ${form.cellId},
-      // enb.cfg: cell_list[].n_id_cell  (PCI 0–503)
-      n_id_cell: ${form.pci},
-      // enb.cfg: cell_list[].dl_earfcn
-      dl_earfcn: ${form.dlEarfcn},
-      // enb.cfg: cell_list[].bandwidth  (MHz)
-      bandwidth: ${form.bandwidth},
-      // enb.cfg: cell_list[].n_antenna_dl
-      n_antenna_dl: ${form.nAntennaDl},
-      // enb.cfg: cell_list[].n_antenna_ul
-      n_antenna_ul: ${form.nAntennaUl},
-
-      // enb.cfg: cell_list[].cyclic_prefix
-      cyclic_prefix: "${form.cpMode}",
-      // enb.cfg: cell_list[].phich_duration
-      phich_duration: "${form.phichDuration}",
-      // enb.cfg: cell_list[].phich_resource
-      phich_resource: "${form.phichResource}",
-${tddBlock()}${nbIotBlock()}${catMBlock()}
-      plmn_list: [{
-        // enb.cfg: cell_list[].plmn_list[].plmn  (MCC 3-digit + MNC 2/3-digit, zero-padded)
-        plmn: "${formatPlmn(form.plmn.mcc, form.plmn.mnc)}",
-        // enb.cfg: cell_list[].plmn_list[].attach_without_pdn
-        attach_without_pdn: ${form.attachWithoutPdn},
-        // enb.cfg: cell_list[].plmn_list[].reserved
-        reserved: ${form.plmnReserved},
-      }],
-
-      // enb.cfg: cell_list[].tac
-      tac: ${form.tac},
-
-      // enb.cfg: cell_list[].si_coderate  (0.0–1.0, default 0.20)
-      si_coderate: ${form.siCoderate},
-      // TODO(amarisoft-doc-verify): enb.cfg: cell_list[].si_window_length (ms)
-      si_window_length: ${form.siWindowLength},
-
-      // enb.cfg: cell_list[].cell_barred
-      cell_barred: ${form.cellBarred},
-      // enb.cfg: cell_list[].intra_freq_reselection
-      intra_freq_reselection: ${form.intraFreqReselection},
-      // enb.cfg: cell_list[].q_rx_lev_min  (dBm)
-      q_rx_lev_min: ${form.qRxLevMin},
-      // enb.cfg: cell_list[].p_max  (dBm)
-      p_max: ${form.pMax},
-
-      // enb.cfg: cell_list[].sr_period  (ms)
-      sr_period: ${form.srPeriod},
-      // enb.cfg: cell_list[].cqi_period  (ms)
-      cqi_period: ${form.cqiPeriod},
-
-      mac_config: {
-        // enb.cfg: cell_list[].mac_config.ul_max_harq_tx
-        ul_max_harq_tx: ${form.ulMaxHarqTx},
-        // enb.cfg: cell_list[].mac_config.dl_max_harq_tx
-        dl_max_harq_tx: ${form.dlMaxHarqTx},
-      },
-
-      // enb.cfg: cell_list[].dpc  (downlink power control enable)
-      dpc: ${form.dpc},
-      // enb.cfg: cell_list[].dpc_pusch_snr_target  (dB)
-      dpc_pusch_snr_target: ${form.dpcPuschSnrTarget},
-      // enb.cfg: cell_list[].dpc_pucch_snr_target  (dB)
-      dpc_pucch_snr_target: ${form.dpcPucchSnrTarget},
-
-      // enb.cfg: cell_list[].inactivity_timer  (ms)
-      inactivity_timer: ${form.inactivityTimer},
-
-      // enb.cfg: cell_list[].drb_config  (path to DRB config file)
-      drb_config: "${form.drbConfig}",
-
-      // enb.cfg: cell_list[].cipher_algo_pref
-      cipher_algo_pref: [${cipherArr}],
-      // enb.cfg: cell_list[].integ_algo_pref
-      integ_algo_pref: [${integArr}],
-    },
+${cellListBlock}
   ],
 
   nr_cell_list: [],

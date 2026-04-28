@@ -9,7 +9,10 @@ import {
   type NRFormState, type LayersConfig, type NRCellEntry,
   type PdnEntry, type UeDbEntry,
 } from './constants';
-import { DEFAULT_LTE_FORM, DEFAULT_LTE_EARFCN, type LTEFormState } from './lteConstants';
+import {
+  DEFAULT_LTE_FORM, DEFAULT_LTE_EARFCN, makeDefaultLteCell,
+  type LTEFormState, type LTECellEntry,
+} from './lteConstants';
 import { tryParseAmarisoftConfig, parseLogOptions } from './cfgParser';
 
 export type BuilderConfigType = 'nr' | 'lte' | 'nbiot' | 'catm' | 'core';
@@ -212,15 +215,11 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormStat
   const cellList: any[] = Array.isArray(ast.cell_list) ? ast.cell_list : [];
   const cell0 = cellList[0] || {};
 
-  // Multi-cell (carrier aggregation) — surface as a warning since the LTE
-  // builder currently edits a single cell. Cell 0 is loaded; cells[1..] kept
-  // in the source file and round-tripped untouched on save.
+  // Multi-cell (carrier aggregation) — info-only when 2+ cells imported.
   if (cellList.length > 1) {
     warnings.push(
-      `Detected ${cellList.length}-cell carrier aggregation. Only Cell 1 is loaded into the builder; ` +
-      `the additional cell${cellList.length > 2 ? 's' : ''} (cell_id=` +
-      `${cellList.slice(1).map((c: any) => c.cell_id ?? '?').join(', ')}) ` +
-      `will be lost if you re-save from the builder.`
+      `Imported ${cellList.length}-cell carrier aggregation: ` +
+      cellList.map((c: any, i: number) => `Cell ${i + 1} (cell_id=${c.cell_id ?? '?'})`).join(', ')
     );
   }
 
@@ -259,6 +258,38 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormStat
 
   // Helper: cell value, falling back to cell_default if absent on the cell
   const cv = (cell: any, key: string) => cell?.[key] !== undefined ? cell[key] : cellDefault[key];
+
+  // Closest-band reverse lookup helper, reused per cell
+  const bandFromEarfcn = (e: number): number => {
+    let bestBand = DEFAULT_LTE_FORM.band;
+    let bestDist = Infinity;
+    for (const [b, ref] of Object.entries(DEFAULT_LTE_EARFCN)) {
+      const d = Math.abs(e - (ref as number));
+      if (d < bestDist) { bestDist = d; bestBand = Number(b); }
+    }
+    return bestDist < 5000 ? bestBand : DEFAULT_LTE_FORM.band;
+  };
+
+  // Build the cells[] array from cell_list, falling back to cell_default for shared fields
+  const cellsArr: LTECellEntry[] = (cellList.length > 0 ? cellList : [{}]).map((c: any, i: number) => {
+    const cellEarfcn = num(cv(c, 'dl_earfcn'), earfcn);
+    const cellNRb = num(cv(c, 'n_rb_dl'), num(cv(c, 'bandwidth'), 0));
+    const cellBw = ({ 6: 1.4, 15: 3, 25: 5, 50: 10, 75: 15, 100: 20 } as Record<number, number>)[cellNRb]
+      ?? num(cv(c, 'bandwidth'), DEFAULT_LTE_FORM.bandwidth);
+    return makeDefaultLteCell(`Cell ${i + 1}`, {
+      cellId: num(c.cell_id, i + 1),
+      pci: num(c.n_id_cell, i),
+      tac: num(c.tac, DEFAULT_LTE_FORM.tac),
+      rfPort: num(c.rf_port, i),
+      band: bandFromEarfcn(cellEarfcn),
+      bandwidth: cellBw,
+      dlEarfcn: cellEarfcn,
+      rootSequenceIndex: num(c.root_sequence_index, 204),
+      cellBarred: bool(c.cell_barred, false),
+      tddConfig: num(cv(c, 'tdd_ul_dl_config') ?? cv(c, 'uldl_config'), DEFAULT_LTE_FORM.tddConfig),
+      tddSpecialSubframe: num(cv(c, 'tdd_special_subframe_pattern') ?? cv(c, 'sp_config'), DEFAULT_LTE_FORM.tddSpecialSubframe),
+    });
+  });
 
   // Bandwidth in Amarisoft is `n_rb_dl` (number of resource blocks: 6/15/25/50/75/100).
   // Map back to MHz for the form.
@@ -321,6 +352,8 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormStat
     logFilename:          str(ast.log_filename, DEFAULT_LTE_FORM.logFilename),
     logLevel:             logOpts.level,
     logLayers:            logOpts.layers,
+    cells:                cellsArr,
+    activeCellIdx:        0,
   };
 }
 

@@ -9,6 +9,7 @@ import {
   type LTEFormState,
 } from './lteConstants';
 import { LogSection } from './sections/LogSection';
+import { LTECellTabs } from './LTECellTabs';
 
 // ── Cell Section ────────────────────────────────────────────────────────────
 function CellSection({ form, onChange }: { form: LTEFormState; onChange: (k: string, v: any) => void }) {
@@ -327,6 +328,9 @@ export function LTEConfigBuilder({ form, onChange, ratMode }: LTEConfigBuilderPr
 
   return (
     <div className="space-y-3">
+      {/* Multi-cell tab strip — only meaningful for plain LTE (CA), not NB-IoT/CAT-M */}
+      {ratMode === 'lte' && <LTECellTabs form={form} onChange={onChange} />}
+
       <div className="flex gap-0.5 bg-gray-100 p-1 rounded-lg overflow-x-auto">
         {TABS.map(tab => {
           const Icon = tab.icon;

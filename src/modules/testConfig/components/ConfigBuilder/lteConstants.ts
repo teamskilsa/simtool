@@ -67,6 +67,42 @@ export const DEFAULT_LTE_EARFCN: Record<number, number> = {
 // TDD bands (FDD is everything else)
 export const LTE_TDD_BANDS = [33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48];
 
+// Per-cell LTE entry — fields that vary across cells in carrier aggregation.
+// Everything else stays at the form-level (and goes into cell_default).
+export interface LTECellEntry {
+  name: string;             // UI label, not written to cfg
+  cellId: number;           // cell_id (low 8 bits of SIB1.cellIdentifier)
+  pci: number;              // n_id_cell (PCI 0-503)
+  tac: number;              // tac
+  rfPort: number;           // rf_port (different physical RF port per cell)
+  band: number;             // derived from EARFCN; can override per cell
+  bandwidth: number;        // MHz
+  dlEarfcn: number;         // dl_earfcn
+  rootSequenceIndex: number; // PRACH root sequence index
+  cellBarred: boolean;      // SIB1 cell_barred per-cell override
+  // TDD-specific
+  tddConfig: number;
+  tddSpecialSubframe: number;
+}
+
+export function makeDefaultLteCell(name: string, overrides: Partial<LTECellEntry> = {}): LTECellEntry {
+  return {
+    name,
+    cellId: 1,
+    pci: 0,
+    tac: 1,
+    rfPort: 0,
+    band: 7,
+    bandwidth: 20,
+    dlEarfcn: 3100,
+    rootSequenceIndex: 204,
+    cellBarred: false,
+    tddConfig: 2,
+    tddSpecialSubframe: 7,
+    ...overrides,
+  };
+}
+
 export interface LTEFormState {
   // ── Cell identity ────────────────────────────────────────────────────────────
   // enb.cfg: cell_list[].cell_id
@@ -199,6 +235,12 @@ export interface LTEFormState {
   logLevel: string;
   // enb.cfg: log_options — per-layer overrides (e.g. { nas: "debug", s1ap: "debug" })
   logLayers: Record<string, string>;
+
+  // ── Multi-cell (carrier aggregation) ─────────────────────────────────────────
+  // All cells in the cell_list. The flat fields above (cellId, pci, band, ...)
+  // mirror cells[activeCellIdx] for the section editor.
+  cells: LTECellEntry[];
+  activeCellIdx: number;
 }
 
 export const DEFAULT_LTE_FORM: LTEFormState = {
@@ -285,4 +327,8 @@ export const DEFAULT_LTE_FORM: LTEFormState = {
   logFilename: '/tmp/enb0.log',
   logLevel: 'error',
   logLayers: {},
+
+  // Multi-cell — start with one default cell mirrored to flat fields above
+  cells: [makeDefaultLteCell('Cell 1')],
+  activeCellIdx: 0,
 };
