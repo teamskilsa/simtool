@@ -32,8 +32,16 @@ export function ModuleConfigurator({
   onComplete
 }: ModuleConfiguratorProps) {
   const { toast } = useToast();
-  const { configs, loading } = useConfigs();
+  const { configs, loading, refreshConfigs } = useConfigs();
   const [scenarioName, setScenarioName] = React.useState('');
+
+  // The execution ConfigProvider wraps the whole dashboard layout and loads
+  // configs once at mount. Without this refresh, configs created/duplicated
+  // mid-session don't appear in the module pickers.
+  React.useEffect(() => {
+    refreshConfigs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectedTopology = TOPOLOGY_OPTIONS.find(t => t.id === config.topology);
   const requiredModules = selectedTopology?.modules || [];

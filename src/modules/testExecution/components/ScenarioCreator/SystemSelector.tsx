@@ -1,5 +1,5 @@
 // components/ScenarioCreator/SystemSelector.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,8 +13,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ScenarioConfig } from './types';
-import { ChevronLeft, ChevronRight, Server, Plus } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useSystems } from '@/modules/systems/hooks/use-systems';
+import { useToast } from '@/components/ui/use-toast';
 
 interface SystemSelectorProps {
   config: Partial<ScenarioConfig>;
@@ -23,37 +25,24 @@ interface SystemSelectorProps {
   onBack: () => void;
 }
 
-// Mock systems data - this will be replaced with actual systems from storage
-const MOCK_SYSTEMS = [
-  { id: 'system1', name: 'System 1', host: '192.168.1.100', port: '9050' },
-  { id: 'system2', name: 'System 2', host: '192.168.1.200', port: '9050' }
-];
-
-// Mock configurations - this will be replaced with actual configs from storage
-const MOCK_CONFIGS = {
-  enb: [
-    'demo-mme.cfg',
-    'demo-mme-11152024-23:18.cfg',
-    'demo-mme-11162024-00:13.cfg'
-  ],
-  gnb: [
-    'gnb-2cc-nsa.cfg',
-    'gnb-2cc-nsa-11152024-23:16.cfg'
-  ],
-  mme: ['mme-config.cfg'],
-  ims: ['ims-config.cfg']
-};
-
 export function SystemSelector({ config, onChange, onNext, onBack }: SystemSelectorProps) {
+  const { systems: globalSystems, addSystem } = useSystems();
+  const { toast } = useToast();
   const [showNewSystem, setShowNewSystem] = useState(false);
-  const [newSystemData, setNewSystemData] = useState({
-    name: '',
-    host: '',
-    port: '9050'
-  });
+  const [newSystemData, setNewSystemData] = useState({ name: '', host: '', port: '9050' });
+
+  // Map the user's saved systems into the shape the scenario expects
+  const systems = useMemo(() =>
+    globalSystems.map(s => ({
+      id: String(s.id),
+      name: s.name,
+      host: s.ip,
+      port: '9050',
+    })),
+  [globalSystems]);
 
   const handleSystemSelect = (systemId: string) => {
-    const system = MOCK_SYSTEMS.find(s => s.id === systemId);
+    const system = systems.find(s => s.id === systemId);
     if (system) {
       onChange({
         system: { ...system },
@@ -72,10 +61,26 @@ export function SystemSelector({ config, onChange, onNext, onBack }: SystemSelec
     });
   };
 
-  const handleAddNewSystem = () => {
-    // Here you would typically save to your storage
+  const handleAddNewSystem = async () => {
+    if (!newSystemData.name.trim() || !newSystemData.host.trim()) {
+      toast({
+        title: 'Required',
+        description: 'Name and host are both required.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    const created = await addSystem({
+      name: newSystemData.name.trim(),
+      ip: newSystemData.host.trim(),
+      type: 'Callbox',
+      username: '',
+      password: '',
+    });
     setShowNewSystem(false);
-    // Refresh systems list
+    setNewSystemData({ name: '', host: '', port: '9050' });
+    handleSystemSelect(String(created.id));
+    toast({ title: 'System added', description: `${created.name} (${created.ip})` });
   };
 
   return (
@@ -91,23 +96,29 @@ export function SystemSelector({ config, onChange, onNext, onBack }: SystemSelec
             </Button>
           </div>
 
-          <Select value={config.system?.id} onValueChange={handleSystemSelect}>
-            <SelectTrigger>
-              <SelectValue placeholder="Choose a system" />
-            </SelectTrigger>
-            <SelectContent>
-              {MOCK_SYSTEMS.map(system => (
-                <SelectItem key={system.id} value={system.id}>
-                  <div className="flex items-center justify-between w-full">
-                    <span>{system.name}</span>
-                    <Badge variant="outline" className="ml-2">
-                      {system.host}
-                    </Badge>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {systems.length === 0 ? (
+            <p className="text-sm text-muted-foreground rounded-md border border-dashed px-3 py-4 text-center">
+              No systems configured. Add one here or in the <span className="font-medium">Test Systems</span> section.
+            </p>
+          ) : (
+            <Select value={config.system?.id} onValueChange={handleSystemSelect}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a system" />
+              </SelectTrigger>
+              <SelectContent>
+                {systems.map(system => (
+                  <SelectItem key={system.id} value={system.id}>
+                    <div className="flex items-center justify-between w-full">
+                      <span>{system.name}</span>
+                      <Badge variant="outline" className="ml-2">
+                        {system.host}
+                      </Badge>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </Card>
 

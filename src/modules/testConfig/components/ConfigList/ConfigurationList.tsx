@@ -127,8 +127,14 @@ export const ConfigurationList: React.FC<ConfigListProps> = ({
         selectedCount={selectedConfigs.size}
         isAllSelected={selectedConfigs.size === visibleConfigs.length && visibleConfigs.length > 0}
         onSelectAll={handleBulkSelect}
-        onBulkDuplicate={() => {
-          // Implement bulk duplicate
+        onBulkDuplicate={async () => {
+          const n = await configActions.handleBulkDuplicate(
+            selectedConfigs, configs, user?.id || 'admin', loadConfigs, setSelectedConfigs,
+          );
+          toast({
+            title: n > 0 ? 'Duplicated' : 'Nothing to duplicate',
+            description: n > 0 ? `${n} configuration${n === 1 ? '' : 's'} copied.` : undefined,
+          });
         }}
         onBulkDelete={() => configActions.handleBulkDelete(selectedConfigs, onDelete, setSelectedConfigs)}
         filterDropdown={
@@ -218,7 +224,14 @@ export const ConfigurationList: React.FC<ConfigListProps> = ({
               onSelect={(checked) => handleSingleSelect(config.id, checked)}
               onConfigSelect={() => onConfigSelect(config)}
               onDuplicate={async () => {
-                // Implement single duplicate
+                const created = await configActions.handleDuplicate(
+                  config.id, configs, user?.id || 'admin', loadConfigs,
+                );
+                toast({
+                  title: created ? 'Duplicated' : 'Duplicate failed',
+                  description: created ? `Created "${created.name}"` : 'Source content unavailable.',
+                  variant: created ? 'default' : 'destructive',
+                });
               }}
               onDelete={() => configActions.handleDelete(config.id, onDelete, setSelectedConfigs)}
               onRename={() => {

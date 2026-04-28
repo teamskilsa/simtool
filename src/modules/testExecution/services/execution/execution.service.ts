@@ -104,10 +104,14 @@ class ExecutionService {
   }
 
   private getExecutionOrder(topology: string): string[] {
+    // IDs must match TOPOLOGY_OPTIONS in
+    //   src/modules/testExecution/components/ScenarioCreator/constants.ts
+    // Order matters: core (MME/IMS/UE_DB) starts BEFORE the radio side (eNB/gNB)
+    // so the eNB has somewhere to register. UE comes LAST.
     return ({
-      callbox:  ['mme', 'ue_db', 'enb'],
-      core:     ['mme', 'ue_db'],
-      'ue-sim': ['enb', 'ue'],
+      callbox:  ['mme', 'ims', 'ue_db', 'enb'],
+      core:     ['mme', 'ims', 'ue_db'],
+      'ue-core':['mme', 'ue_db', 'enb', 'ue'],
     } as Record<string, string[]>)[topology] ?? [];
   }
 }
