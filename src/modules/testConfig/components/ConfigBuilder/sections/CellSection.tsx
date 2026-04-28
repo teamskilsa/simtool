@@ -1,3 +1,6 @@
+// NR Cell — identity + (conditional) TDD pattern. SSB Configuration moved
+// to Layers/SSB; Band, Antenna, RF, Channel Sim render alongside in the
+// merged Cell tab.
 import { Field } from './Field';
 import { SectionToolbar } from './SectionToolbar';
 import { BoxedSection } from '../BoxedSection';
@@ -19,21 +22,13 @@ export function CellSection({ form, onChange }: Props) {
     <div className="space-y-4">
       <SectionToolbar type="cell" currentData={currentCell} onLoad={handleLoad} />
 
-      <BoxedSection title="Basic Configuration">
+      <BoxedSection title="Identity" subtitle="Cell ID + duplex mode + frequency range">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Cell ID" value={form.cellId} onChange={v => onChange('cellId', v)} type="number" min={0} max={1007} />
-          <Field label="NR Mode" value={form.nrTdd} onChange={v => onChange('nrTdd', v)} type="select"
+          <Field label="Mode" value={form.nrTdd} onChange={v => onChange('nrTdd', v)} type="select"
             options={[{ value: 0, label: 'FDD' }, { value: 1, label: 'TDD' }]} />
           <Field label="Frequency Range" value={form.fr2} onChange={v => onChange('fr2', v)} type="select"
             options={[{ value: 0, label: 'FR1 (sub-6)' }, { value: 1, label: 'FR2 (mmWave)' }]} />
-        </div>
-      </BoxedSection>
-
-      <BoxedSection title="SSB Configuration">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="SSB Period (ms)" value={form.ssbPeriod} onChange={v => onChange('ssbPeriod', v)} type="number" min={5} max={160} />
-          <Field label="DMRS Position" value={form.dmrsTypeAPos} onChange={v => onChange('dmrsTypeAPos', v)} type="select"
-            options={[{ value: 2, label: 'Pos 2' }, { value: 3, label: 'Pos 3' }]} />
         </div>
       </BoxedSection>
 

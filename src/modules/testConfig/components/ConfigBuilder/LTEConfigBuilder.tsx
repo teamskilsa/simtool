@@ -1,10 +1,11 @@
-// LTE / NB-IoT / CAT-M1 config builder — restructured to mirror the NR builder:
-//   Main tabs:   Cell  |  Layers  |  MME Info  |  Log Setting
-//   Inside Cell: Cell Info / Band / RF / (IoT — when nbiot/catm)
-//   Inside Layers: Frequently Used / MAC / Power / Security
+// LTE / NB-IoT / CAT-M1 config builder — mirror of NR builder:
+//   Main tabs:   Cell  |  Layers  |  MME Info  |  Log Setting  |  Dependencies
+//   Cell tab is a single merged page (Identity, Band, RF, optional IoT) with
+//   BoxedSections grouped vertically — no sub-tabs.
+//   Layers tab: Frequently Used / MAC / Power / Security
 import { useState } from 'react';
 import {
-  RadioTower, Settings2, Wifi, FileText, Signal, Layers, Server,
+  RadioTower, FileText, Layers, Server, Database,
   Zap, Gauge, Antenna, Lock,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -16,36 +17,33 @@ import {
 } from './lteConstants';
 import { LogSection } from './sections/LogSection';
 import { MmeInfoSectionLte } from './sections/MmeInfoSectionLte';
+import { DependenciesSection } from './sections/DependenciesSection';
 import {
   FrequentlyUsedLte, MacLte, PowerLte, SecurityLte,
 } from './sections/lte-layers';
 import { LTECellTabs } from './LTECellTabs';
 import { BoxedSection } from './BoxedSection';
+import type { ReferencedFile } from './cfgParser';
 
 // ── Cell Section — only the per-cell IDENTITY fields. Everything else
 //   (PHICH, Cell Access, SIB1, Scheduler, HARQ) lives under the Layers tab;
 //   PLMN / MME / eNB ID lives under the MME Info tab. Mirrors NR CellSection.
 function CellSection({ form, onChange }: { form: LTEFormState; onChange: (k: string, v: any) => void }) {
   return (
-    <div className="space-y-4">
-      <BoxedSection title="Cell Identity" subtitle="enb.cfg: cell_list[].{cell_id, n_id_cell, tac, rf_port}">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Field label="Cell ID" value={form.cellId} onChange={v => onChange('cellId', v)} type="number" min={0} max={255} />
-          <Field label="PCI" value={form.pci} onChange={v => onChange('pci', v)} type="number" min={0} max={503} />
-          <Field label="TAC" value={form.tac} onChange={v => onChange('tac', v)} type="number" min={0} max={65535} />
-          <Field label="RF Port" value={form.rfPort} onChange={v => onChange('rfPort', v)} type="number" min={0} max={7} />
-        </div>
-      </BoxedSection>
-
-      <p className="text-[11px] text-muted-foreground px-1">
-        PLMN / MME address / eNB ID → <span className="font-medium">MME Info</span> tab •
-        Cell access / SIB / Scheduler / HARQ / Power / Security → <span className="font-medium">Layers</span> tab
-      </p>
-    </div>
+    <BoxedSection title="Cell Identity" subtitle="enb.cfg: cell_list[].{cell_id, n_id_cell, tac, rf_port}">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Field label="Cell ID" value={form.cellId} onChange={v => onChange('cellId', v)} type="number" min={0} max={255} />
+        <Field label="PCI" value={form.pci} onChange={v => onChange('pci', v)} type="number" min={0} max={503} />
+        <Field label="TAC" value={form.tac} onChange={v => onChange('tac', v)} type="number" min={0} max={65535} />
+        <Field label="RF Port" value={form.rfPort} onChange={v => onChange('rfPort', v)} type="number" min={0} max={7} />
+      </div>
+    </BoxedSection>
   );
 }
 
 // ── Band Section ────────────────────────────────────────────────────────────
+// LTE band selection determines the duplex mode (FDD vs TDD) implicitly via
+// LTE_TDD_BANDS. TDD-specific fields appear only when a TDD band is picked.
 function BandSection({ form, onChange, ratMode }: { form: LTEFormState; onChange: (k: string, v: any) => void; ratMode: string }) {
   const isTdd = LTE_TDD_BANDS.includes(form.band);
   const bwOptions = ratMode === 'nbiot' ? NBIOT_BW_OPTIONS : ratMode === 'catm' ? CATM_BW_OPTIONS : LTE_BW_OPTIONS;
@@ -57,31 +55,32 @@ function BandSection({ form, onChange, ratMode }: { form: LTEFormState; onChange
 
   return (
     <div className="space-y-4">
-      <h4 className="text-xs font-semibold uppercase text-muted-foreground">Band</h4>
-      <div className="grid grid-cols-3 gap-3">
-        <Field label="Band" value={form.band} onChange={handleBandChange} type="select" options={LTE_BAND_OPTIONS} />
-        {/* enb.cfg: cell_list[].bandwidth */}
-        <Field label="Bandwidth" value={form.bandwidth} onChange={v => onChange('bandwidth', v)} type="select" options={bwOptions} />
-        {/* enb.cfg: cell_list[].dl_earfcn */}
-        <Field label="DL EARFCN" value={form.dlEarfcn} onChange={v => onChange('dlEarfcn', v)} type="number" min={0} max={65535} />
-      </div>
+      <BoxedSection
+        title="Band & Frequency"
+        subtitle="Band selection auto-determines FDD/TDD duplex mode"
+        action={
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline">{isTdd ? 'TDD' : 'FDD'}</Badge>
+            {ratMode === 'nbiot' && <Badge className="bg-orange-100 text-orange-700 border-orange-300">NB-IoT</Badge>}
+            {ratMode === 'catm' && <Badge className="bg-cyan-100 text-cyan-700 border-cyan-300">CAT-M1</Badge>}
+          </div>
+        }
+      >
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Field label="Band" value={form.band} onChange={handleBandChange} type="select" options={LTE_BAND_OPTIONS} />
+          <Field label="Bandwidth (MHz)" value={form.bandwidth} onChange={v => onChange('bandwidth', v)} type="select" options={bwOptions} />
+          <Field label="DL EARFCN" value={form.dlEarfcn} onChange={v => onChange('dlEarfcn', v)} type="number" min={0} max={65535} />
+        </div>
+      </BoxedSection>
+
       {isTdd && (
-        <>
-          <h4 className="text-xs font-semibold uppercase text-muted-foreground">TDD</h4>
-          <div className="grid grid-cols-2 gap-3">
-            {/* enb.cfg: cell_list[].tdd_ul_dl_config */}
+        <BoxedSection title="TDD Pattern" subtitle="enb.cfg: cell_list[].{tdd_ul_dl_config, tdd_special_subframe_pattern}">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="TDD Config" value={form.tddConfig} onChange={v => onChange('tddConfig', v)} type="select" options={LTE_TDD_CONFIGS} />
-            {/* enb.cfg: cell_list[].tdd_special_subframe_pattern */}
             <Field label="Special Subframe" value={form.tddSpecialSubframe} onChange={v => onChange('tddSpecialSubframe', v)} type="number" min={0} max={9} />
           </div>
-        </>
+        </BoxedSection>
       )}
-      <div className="flex items-center gap-2">
-        {isTdd && <Badge variant="outline">TDD</Badge>}
-        {!isTdd && <Badge variant="outline">FDD</Badge>}
-        {ratMode === 'nbiot' && <Badge className="bg-orange-100 text-orange-700 border-orange-300">NB-IoT</Badge>}
-        {ratMode === 'catm' && <Badge className="bg-cyan-100 text-cyan-700 border-cyan-300">CAT-M1</Badge>}
-      </div>
     </div>
   );
 }
@@ -90,24 +89,18 @@ function BandSection({ form, onChange, ratMode }: { form: LTEFormState; onChange
 //   network/MME, HARQ, Power, Security all moved to Layers / MME Info tabs.
 function RFSection({ form, onChange }: { form: LTEFormState; onChange: (k: string, v: any) => void }) {
   return (
-    <div className="space-y-4">
-      <BoxedSection title="RF Driver" subtitle="enb.cfg: rf_driver.{name, rx_antenna} + tx_gain / rx_gain">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="RF Mode" value={form.rfMode} onChange={v => onChange('rfMode', v)} type="select"
-            options={[{ value: 'sdr', label: 'SDR' }, { value: 'split', label: 'Split 7.2' }, { value: 'ip', label: 'IP' }]} />
-          <Field label="RX Antenna" value={form.rxAntenna} onChange={v => onChange('rxAntenna', v)} type="select"
-            options={[{ value: 'rx', label: 'RX' }, { value: 'tx_rx', label: 'TX/RX' }]} />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-          <Field label="TX Gain (dB)" value={form.txGain} onChange={v => onChange('txGain', v)} type="number" min={0} max={120} />
-          <Field label="RX Gain (dB)" value={form.rxGain} onChange={v => onChange('rxGain', v)} type="number" min={0} max={80} />
-        </div>
-      </BoxedSection>
-      <p className="text-[11px] text-muted-foreground px-1">
-        Antenna count → <span className="font-medium">Layers → Power &amp; Antenna</span> •
-        MME / S1 / eNB ID → <span className="font-medium">MME Info</span> tab
-      </p>
-    </div>
+    <BoxedSection title="RF Driver" subtitle="enb.cfg: rf_driver.{name, rx_antenna} + tx_gain / rx_gain">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Field label="RF Mode" value={form.rfMode} onChange={v => onChange('rfMode', v)} type="select"
+          options={[{ value: 'sdr', label: 'SDR' }, { value: 'split', label: 'Split 7.2' }, { value: 'ip', label: 'IP' }]} />
+        <Field label="RX Antenna" value={form.rxAntenna} onChange={v => onChange('rxAntenna', v)} type="select"
+          options={[{ value: 'rx', label: 'RX' }, { value: 'tx_rx', label: 'TX/RX' }]} />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+        <Field label="TX Gain (dB)" value={form.txGain} onChange={v => onChange('txGain', v)} type="number" min={0} max={120} />
+        <Field label="RX Gain (dB)" value={form.rxGain} onChange={v => onChange('rxGain', v)} type="number" min={0} max={80} />
+      </div>
+    </BoxedSection>
   );
 }
 
@@ -115,10 +108,11 @@ function RFSection({ form, onChange }: { form: LTEFormState; onChange: (k: strin
 function IoTSection({ form, onChange, ratMode }: { form: LTEFormState; onChange: (k: string, v: any) => void; ratMode: string }) {
   if (ratMode === 'nbiot') {
     return (
-      <div className="space-y-4">
-        <h4 className="text-xs font-semibold uppercase text-muted-foreground">NB-IoT</h4>
-        <div className="grid grid-cols-2 gap-3">
-          {/* enb.cfg: cell_list[].nb_iot_mode */}
+      <BoxedSection
+        title="NB-IoT"
+        subtitle="enb.cfg: cell_list[].{nb_iot_mode, nb_iot_prb_index}"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Deployment Mode" value={form.nbIotMode} onChange={v => onChange('nbIotMode', v)} type="select"
             options={[
               { value: 'standalone', label: 'Standalone' },
@@ -126,29 +120,27 @@ function IoTSection({ form, onChange, ratMode }: { form: LTEFormState; onChange:
               { value: 'guardband', label: 'Guard Band' },
             ]} />
           {form.nbIotMode !== 'standalone' && (
-            // enb.cfg: cell_list[].nb_iot_prb_index
             <Field label="PRB Index" value={form.nbIotPrbIndex} onChange={v => onChange('nbIotPrbIndex', v)} type="number" min={0} max={49} />
           )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Note: NB-IoT schema shape varies between Amarisoft release trains
-          (<code>nb_cell_list</code> vs flags in <code>cell_list</code>). Full NB-IoT coverage is in a follow-up PR.
+        <p className="text-[11px] text-muted-foreground mt-3">
+          NB-IoT schema varies between Amarisoft release trains (<code>nb_cell_list</code> vs flags in <code>cell_list</code>).
         </p>
-      </div>
+      </BoxedSection>
     );
   }
   if (ratMode === 'catm') {
     return (
-      <div className="space-y-4">
-        <h4 className="text-xs font-semibold uppercase text-muted-foreground">CAT-M1 / eMTC</h4>
-        <div className="grid grid-cols-2 gap-3">
-          {/* enb.cfg: cell_list[].ce_mode */}
+      <BoxedSection
+        title="CAT-M1 / eMTC"
+        subtitle="enb.cfg: cell_list[].{ce_mode, max_repetitions}"
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="CE Mode" value={form.catMCeMode} onChange={v => onChange('catMCeMode', v)} type="select"
             options={[{ value: 'A', label: 'CE Mode A' }, { value: 'B', label: 'CE Mode B' }]} />
-          {/* enb.cfg: cell_list[].max_repetitions */}
           <Field label="Max Repetitions" value={form.catMRepetitions} onChange={v => onChange('catMRepetitions', v)} type="number" min={1} max={2048} />
         </div>
-      </div>
+      </BoxedSection>
     );
   }
   return null;
@@ -159,14 +151,19 @@ interface LTEConfigBuilderProps {
   form: LTEFormState;
   onChange: (key: string, value: any) => void;
   ratMode: 'lte' | 'nbiot' | 'catm';
+  /** External files referenced by the current config (drb.cfg, sib*.asn, includes) */
+  dependencies?: ReferencedFile[];
+  /** Filenames already in storage — used to mark deps as available vs missing */
+  availableFiles?: string[];
 }
 
-// Top-level tabs (mirror NR ConfigBuilder)
+// Top-level tabs — mirror NR ConfigBuilder
 const MAIN_TABS = [
-  { id: 'cell',   label: 'Cell',        icon: RadioTower },
-  { id: 'layers', label: 'Layers',      icon: Layers },
-  { id: 'mme',    label: 'MME Info',    icon: Server },
-  { id: 'log',    label: 'Log Setting', icon: FileText },
+  { id: 'cell',   label: 'Cell',         icon: RadioTower },
+  { id: 'layers', label: 'Layers',       icon: Layers },
+  { id: 'mme',    label: 'MME Info',     icon: Server },
+  { id: 'log',    label: 'Log Setting',  icon: FileText },
+  { id: 'deps',   label: 'Dependencies', icon: Database },
 ] as const;
 
 // Sub-tabs inside "Layers"
@@ -177,64 +174,28 @@ const LAYER_SUB_TABS = [
   { id: 'security', label: 'Security',        icon: Lock },
 ] as const;
 
-export function LTEConfigBuilder({ form, onChange, ratMode }: LTEConfigBuilderProps) {
-  const hasIoT = ratMode === 'nbiot' || ratMode === 'catm';
-
-  // Cell sub-tabs (depend on RAT mode — NB-IoT/CAT-M get an extra IoT tab)
-  const CELL_SUB_TABS = [
-    { id: 'cellinfo', label: 'Cell Info', icon: RadioTower },
-    { id: 'band',     label: 'Band',      icon: Settings2 },
-    { id: 'rf',       label: 'RF',        icon: Wifi },
-    ...(hasIoT ? [{ id: 'iot' as const, label: ratMode === 'nbiot' ? 'NB-IoT' : 'CAT-M', icon: Signal }] : []),
-  ];
-
+export function LTEConfigBuilder({
+  form, onChange, ratMode,
+  dependencies = [], availableFiles = [],
+}: LTEConfigBuilderProps) {
   const [mainTab, setMainTab] = useState<string>('cell');
-  const [cellSubTab, setCellSubTab] = useState<string>('cellinfo');
   const [layerSubTab, setLayerSubTab] = useState<string>('freq');
-
-  const renderCellContent = () => {
-    switch (cellSubTab) {
-      case 'cellinfo': return <CellSection form={form} onChange={onChange} />;
-      case 'band':     return <BandSection form={form} onChange={onChange} ratMode={ratMode} />;
-      case 'rf':       return <RFSection form={form} onChange={onChange} />;
-      case 'iot':      return <IoTSection form={form} onChange={onChange} ratMode={ratMode} />;
-      default:         return null;
-    }
-  };
 
   const renderMainContent = () => {
     switch (mainTab) {
       case 'cell':
+        // Single merged Cell tab — Identity, Band & Frequency, RF, optional
+        // IoT specifics (NB-IoT / CAT-M). Multi-cell strip only meaningful
+        // for plain LTE (carrier aggregation), hidden for NB-IoT / CAT-M.
         return (
           <div className="space-y-4">
-            {/* Multi-cell strip — only for plain LTE (CA), only on per-cell sub-tabs */}
-            {ratMode === 'lte' && (cellSubTab === 'cellinfo' || cellSubTab === 'band') && (
-              <LTECellTabs form={form} onChange={onChange} />
+            {ratMode === 'lte' && <LTECellTabs form={form} onChange={onChange} />}
+            <CellSection form={form} onChange={onChange} />
+            <BandSection form={form} onChange={onChange} ratMode={ratMode} />
+            <RFSection form={form} onChange={onChange} />
+            {(ratMode === 'nbiot' || ratMode === 'catm') && (
+              <IoTSection form={form} onChange={onChange} ratMode={ratMode} />
             )}
-
-            {/* Sub-navigation */}
-            <div className="flex flex-wrap items-center gap-2">
-              {CELL_SUB_TABS.map(tab => {
-                const Icon = tab.icon;
-                const isActive = cellSubTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setCellSubTab(tab.id)}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div>{renderCellContent()}</div>
           </div>
         );
 
@@ -275,6 +236,9 @@ export function LTEConfigBuilder({ form, onChange, ratMode }: LTEConfigBuilderPr
 
       case 'log':
         return <LogSection form={form as any} onChange={onChange} />;
+
+      case 'deps':
+        return <DependenciesSection refs={dependencies} available={availableFiles} />;
 
       default:
         return null;

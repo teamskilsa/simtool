@@ -1,44 +1,43 @@
 // Visual gNB/eNB config builder — TestMatrix-style layout:
-//   Main tabs:  Cell  |  Layers  |  MME Info  |  Log Setting
-//   Inside "Cell" tab, sub-nav: Cell Info / Band / Antenna / RF / Channel Sim
-// Multi-cell support lives in the Cell tab via CellTabs strip.
+//   Main tabs:  Cell  |  Layers  |  MME Info  |  Log Setting  |  Dependencies
+//
+// "Cell" is now a single merged tab with all per-cell config grouped in
+// BoxedSections (no sub-tabs). Conditional sections (TDD pattern, FR-specific
+// band options) appear when relevant. Multi-cell strip lives at the top.
+//
+// SSB Configuration moved to Layers/SSB so the Cell tab stays focused.
 import { useState } from 'react';
 import {
-  RadioTower, Layers, Server, FileText, Cpu, Wifi, Settings2, Antenna,
-  Zap, Gauge, Network, MessageSquare, Radio, Signal,
+  RadioTower, Layers, Server, FileText,
+  Zap, Gauge, Network, MessageSquare, Radio, Signal, Database,
 } from 'lucide-react';
 import {
   CellSection, BandSection, RFSection, ChannelSimSection, LogSection,
 } from './sections';
 import { AntennaSection } from './sections/AntennaSection';
 import { MmeInfoSection } from './sections/MmeInfoSection';
+import { DependenciesSection } from './sections/DependenciesSection';
 import {
-  FrequentlyUsedLayer, PhyLayer, MacLayer, RlcPdcpLayer, RrcNasLayer, SibsLayer,
+  FrequentlyUsedLayer, PhyLayer, MacLayer, RlcPdcpLayer, RrcNasLayer, SibsLayer, SSBLayer,
 } from './sections/layers';
 import { CellTabs } from './CellTabs';
 import { DEFAULT_NR_FORM, type NRFormState } from './constants';
+import type { ReferencedFile } from './cfgParser';
 
 // Main tabs — top level
 const MAIN_TABS = [
-  { id: 'cell',   label: 'Cell',        icon: RadioTower },
-  { id: 'layers', label: 'Layers',      icon: Layers },
-  { id: 'mme',    label: 'MME Info',    icon: Server },
-  { id: 'log',    label: 'Log Setting', icon: FileText },
+  { id: 'cell',   label: 'Cell',         icon: RadioTower },
+  { id: 'layers', label: 'Layers',       icon: Layers },
+  { id: 'mme',    label: 'MME Info',     icon: Server },
+  { id: 'log',    label: 'Log Setting',  icon: FileText },
+  { id: 'deps',   label: 'Dependencies', icon: Database },
 ] as const;
 
-// Sub-tabs inside "Cell"
-const CELL_SUB_TABS = [
-  { id: 'cellinfo', label: 'Cell Info',   icon: RadioTower },
-  { id: 'band',     label: 'Band',        icon: Settings2 },
-  { id: 'antenna',  label: 'Antenna',     icon: Antenna },
-  { id: 'rf',       label: 'RF',          icon: Wifi },
-  { id: 'chsim',    label: 'Channel Sim', icon: Cpu },
-] as const;
-
-// Sub-tabs inside "Layers"
+// Sub-tabs inside "Layers" (added SSB)
 const LAYER_SUB_TABS = [
   { id: 'freq',    label: 'Frequently Used', icon: Zap },
-  { id: 'rrcnas', label: 'RRC & NAS',       icon: MessageSquare },
+  { id: 'ssb',     label: 'SSB',             icon: Radio },
+  { id: 'rrcnas',  label: 'RRC & NAS',       icon: MessageSquare },
   { id: 'rlcpdcp', label: 'RLC & PDCP',      icon: Network },
   { id: 'mac',     label: 'MAC',             icon: Gauge },
   { id: 'phy',     label: 'PHY',             icon: Radio },
@@ -48,58 +47,28 @@ const LAYER_SUB_TABS = [
 interface ConfigBuilderProps {
   form: NRFormState;
   onChange: (key: string, value: any) => void;
+  /** External files referenced by the current config (drb.cfg, sib*.asn, includes) */
+  dependencies?: ReferencedFile[];
+  /** Filenames already in storage — used to mark deps as available vs missing */
+  availableFiles?: string[];
 }
 
-export function ConfigBuilder({ form, onChange }: ConfigBuilderProps) {
+export function ConfigBuilder({ form, onChange, dependencies = [], availableFiles = [] }: ConfigBuilderProps) {
   const [mainTab, setMainTab] = useState<string>('cell');
-  const [cellSubTab, setCellSubTab] = useState<string>('cellinfo');
   const [layerSubTab, setLayerSubTab] = useState<string>('freq');
-
-  const renderCellContent = () => {
-    switch (cellSubTab) {
-      case 'cellinfo': return <CellSection form={form} onChange={onChange} />;
-      case 'band':     return <BandSection form={form} onChange={onChange} />;
-      case 'antenna':  return <AntennaSection form={form} onChange={onChange} />;
-      case 'rf':       return <RFSection form={form} onChange={onChange} />;
-      case 'chsim':    return <ChannelSimSection form={form} onChange={onChange} />;
-      default:         return null;
-    }
-  };
 
   const renderMainContent = () => {
     switch (mainTab) {
       case 'cell':
+        // Single merged Cell tab — all per-cell config in one place.
         return (
           <div className="space-y-4">
-            {/* Multi-cell strip — only on Cell Info & Band (per-cell fields) */}
-            {(cellSubTab === 'cellinfo' || cellSubTab === 'band') && (
-              <CellTabs form={form} onChange={onChange} />
-            )}
-
-            {/* Sub-navigation */}
-            <div className="flex flex-wrap items-center gap-2">
-              {CELL_SUB_TABS.map(tab => {
-                const Icon = tab.icon;
-                const isActive = cellSubTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setCellSubTab(tab.id)}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Section content */}
-            <div>{renderCellContent()}</div>
+            <CellTabs form={form} onChange={onChange} />
+            <CellSection form={form} onChange={onChange} />
+            <BandSection form={form} onChange={onChange} />
+            <AntennaSection form={form} onChange={onChange} />
+            <RFSection form={form} onChange={onChange} />
+            <ChannelSimSection form={form} onChange={onChange} />
           </div>
         );
 
@@ -131,6 +100,7 @@ export function ConfigBuilder({ form, onChange }: ConfigBuilderProps) {
             {/* Layer content */}
             <div>
               {layerSubTab === 'freq'    && <FrequentlyUsedLayer form={form} onChange={onChange} />}
+              {layerSubTab === 'ssb'     && <SSBLayer form={form} onChange={onChange} />}
               {layerSubTab === 'rrcnas'  && <RrcNasLayer form={form} onChange={onChange} />}
               {layerSubTab === 'rlcpdcp' && <RlcPdcpLayer form={form} onChange={onChange} />}
               {layerSubTab === 'mac'     && <MacLayer form={form} onChange={onChange} />}
@@ -145,6 +115,9 @@ export function ConfigBuilder({ form, onChange }: ConfigBuilderProps) {
 
       case 'log':
         return <LogSection form={form} onChange={onChange} />;
+
+      case 'deps':
+        return <DependenciesSection refs={dependencies} available={availableFiles} />;
 
       default:
         return null;

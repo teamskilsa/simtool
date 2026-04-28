@@ -9,13 +9,21 @@ import { ConfigBuilder } from './ConfigBuilder';
 import type { NSAFormState } from './nsaConstants';
 import type { LTEFormState } from './lteConstants';
 import type { NRFormState } from './constants';
+import type { ReferencedFile } from './cfgParser';
 
 interface NSAConfigBuilderProps {
   form: NSAFormState;
   onChange: (key: 'lteForm' | 'nrForm', value: LTEFormState | NRFormState) => void;
+  /** External files referenced by the current config (drb.cfg, sib*.asn, includes) */
+  dependencies?: ReferencedFile[];
+  /** Filenames already in storage — used to mark deps as available vs missing */
+  availableFiles?: string[];
 }
 
-export function NSAConfigBuilder({ form, onChange }: NSAConfigBuilderProps) {
+export function NSAConfigBuilder({
+  form, onChange,
+  dependencies = [], availableFiles = [],
+}: NSAConfigBuilderProps) {
   const [side, setSide] = useState<'lte' | 'nr'>('lte');
 
   // Adapter: existing LTEConfigBuilder/ConfigBuilder expect (key, value) flat
@@ -75,11 +83,23 @@ export function NSAConfigBuilder({ form, onChange }: NSAConfigBuilderProps) {
         </button>
       </div>
 
-      {/* Active side's existing builder */}
+      {/* Active side's existing builder — deps are config-wide (combined output)
+          so we forward the same list to whichever side is on screen. */}
       {side === 'lte' ? (
-        <LTEConfigBuilder form={form.lteForm} onChange={handleLteFieldChange} ratMode="lte" />
+        <LTEConfigBuilder
+          form={form.lteForm}
+          onChange={handleLteFieldChange}
+          ratMode="lte"
+          dependencies={dependencies}
+          availableFiles={availableFiles}
+        />
       ) : (
-        <ConfigBuilder form={form.nrForm} onChange={handleNrFieldChange} />
+        <ConfigBuilder
+          form={form.nrForm}
+          onChange={handleNrFieldChange}
+          dependencies={dependencies}
+          availableFiles={availableFiles}
+        />
       )}
     </div>
   );

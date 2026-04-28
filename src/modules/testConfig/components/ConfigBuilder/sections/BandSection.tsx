@@ -18,18 +18,14 @@ export function BandSection({ form, onChange }: Props) {
 
   return (
     <div className="space-y-4">
-      <BoxedSection title="Band" subtitle={isFR2 ? 'FR2 mmWave bands' : 'FR1 sub-6 GHz bands'}>
+      <BoxedSection title="Band & Frequency" subtitle={isFR2 ? 'FR2 mmWave bands' : 'FR1 sub-6 GHz bands'}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Band" value={form.band} onChange={handleBandChange} type="select" options={bandOpts} />
           <Field label="Bandwidth (MHz)" value={form.nrBandwidth} onChange={v => onChange('nrBandwidth', v)} type="select" options={bwOpts} />
           <Field label="Subcarrier Spacing" value={form.subcarrierSpacing} onChange={v => onChange('subcarrierSpacing', v)} type="select" options={SCS_OPTIONS} />
         </div>
-      </BoxedSection>
-
-      <BoxedSection title="Frequency" subtitle="Downlink NR-ARFCN and SSB position">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 mt-3">
           <Field label="DL NR-ARFCN" value={form.dlNrArfcn} onChange={v => onChange('dlNrArfcn', v)} type="number" min={0} max={3279165} />
-          <Field label="SSB Position Bitmap" value={form.ssbPosBitmap} onChange={v => onChange('ssbPosBitmap', v)} placeholder="10000000" />
         </div>
       </BoxedSection>
     </div>

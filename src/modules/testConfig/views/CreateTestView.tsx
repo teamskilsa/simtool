@@ -15,7 +15,6 @@ import {
   embedBuilderMeta, extractBuilderMeta,
   importCfgToBuilder, extractReferencedFiles,
 } from '../components/ConfigBuilder';
-import { DependenciesSection } from '../components/ConfigBuilder/sections/DependenciesSection';
 import { configsService } from '../services/configs.service';
 import { useConfigContext } from '../context';
 import type { NRFormState, LTEFormState, NSAFormState } from '../components/ConfigBuilder';
@@ -309,11 +308,11 @@ export const CreateTestView: React.FC = () => {
           rightClassName="bg-gray-950 rounded-r-lg"
           left={
             <>
-              {configType === 'nr' && <ConfigBuilder form={nrForm} onChange={handleNrChange} />}
+              {configType === 'nr' && <ConfigBuilder form={nrForm} onChange={handleNrChange} dependencies={referencedFiles} availableFiles={availableFilenames} />}
               {(configType === 'lte' || configType === 'nbiot' || configType === 'catm') && (
-                <LTEConfigBuilder form={lteForm} onChange={handleLteChange} ratMode={configType} />
+                <LTEConfigBuilder form={lteForm} onChange={handleLteChange} ratMode={configType} dependencies={referencedFiles} availableFiles={availableFilenames} />
               )}
-              {configType === 'nsa' && <NSAConfigBuilder form={nsaForm} onChange={handleNsaChange} />}
+              {configType === 'nsa' && <NSAConfigBuilder form={nsaForm} onChange={handleNsaChange} dependencies={referencedFiles} availableFiles={availableFilenames} />}
               {configType === 'core' && <CoreConfigBuilder form={nrForm} onChange={handleNrChange} />}
             </>
           }
@@ -336,27 +335,29 @@ export const CreateTestView: React.FC = () => {
       ) : (
         <Card>
           <CardContent className="pt-4">
-            {configType === 'nr' && <ConfigBuilder form={nrForm} onChange={handleNrChange} />}
-            {(configType === 'lte' || configType === 'nbiot' || configType === 'catm') && (
-              <LTEConfigBuilder form={lteForm} onChange={handleLteChange} ratMode={configType} />
+            {configType === 'nr' && (
+              <ConfigBuilder
+                form={nrForm} onChange={handleNrChange}
+                dependencies={referencedFiles} availableFiles={availableFilenames}
+              />
             )}
-            {configType === 'nsa' && <NSAConfigBuilder form={nsaForm} onChange={handleNsaChange} />}
+            {(configType === 'lte' || configType === 'nbiot' || configType === 'catm') && (
+              <LTEConfigBuilder
+                form={lteForm} onChange={handleLteChange} ratMode={configType}
+                dependencies={referencedFiles} availableFiles={availableFilenames}
+              />
+            )}
+            {configType === 'nsa' && (
+              <NSAConfigBuilder
+                form={nsaForm} onChange={handleNsaChange}
+                dependencies={referencedFiles} availableFiles={availableFilenames}
+              />
+            )}
             {configType === 'core' && <CoreConfigBuilder form={nrForm} onChange={handleNrChange} />}
           </CardContent>
         </Card>
       )}
 
-      {/* External-file dependencies — drb.cfg, sib*.asn, includes. Always
-          rendered (even with no deps) so the user knows the config is
-          self-contained. Hidden for Core configs since mme.cfg has no
-          drb/sib references. */}
-      {configType !== 'core' && referencedFiles.length > 0 && (
-        <Card>
-          <CardContent className="pt-4">
-            <DependenciesSection refs={referencedFiles} available={availableFilenames} />
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };
