@@ -130,8 +130,29 @@ export function EnbMonitoringDashboard() {
     return Number.isFinite(n) && n > 0 && n < 65536 ? n : defaultPortFor(module);
   }, [portOverride, module]);
 
+  // Pre-select target from sessionStorage if Quick Run handed us one.
+  // This is how the "View live stats →" button on the Test Execution page
+  // pops the dashboard open already pointed at the system that was just
+  // deployed to. Read once on mount, clear immediately so a manual nav
+  // back here later doesn't reopen the previous selection.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.sessionStorage.getItem('simtool_monitor_target');
+      if (!raw) return;
+      window.sessionStorage.removeItem('simtool_monitor_target');
+      const parsed = JSON.parse(raw) as { systemId?: string; module?: ModuleKey };
+      if (parsed.systemId) setSelectedSystemId(String(parsed.systemId));
+      if (parsed.module && MODULES.some(m => m.key === parsed.module)) {
+        setModule(parsed.module as ModuleKey);
+      }
+    } catch { /* malformed handoff — fall through to default behavior */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auto-pick the first system once they finish loading (so the empty state
-  // doesn't flash if there's already exactly one saved system).
+  // doesn't flash if there's already exactly one saved system). Skip this
+  // if the sessionStorage handoff above already set one.
   useEffect(() => {
     if (!selectedSystemId && systems.length > 0) {
       setSelectedSystemId(String(systems[0].id));
