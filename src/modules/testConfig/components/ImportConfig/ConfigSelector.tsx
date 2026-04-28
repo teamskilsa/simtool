@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type { ImportSystem } from '../../context/SystemContext';
+import { extractReferencedFiles } from '../ConfigBuilder';
 
 interface ConfigSelectorProps {
     system: ImportSystem;
@@ -88,7 +89,33 @@ export const ConfigSelector: React.FC<ConfigSelectorProps> = ({
                     system,
                 );
                 console.log('Fetched config content:', fullConfig);
-                onConfigSelect([...selectedConfigs, fullConfig]);
+
+                // Auto-fetch dependencies (drb.cfg, sib*.asn, includes) so the
+                // user's selection is self-contained on import.
+                const refs = extractReferencedFiles(fullConfig.content || '');
+                const newlyFetched: ConfigItem[] = [];
+                for (const ref of refs) {
+                    const baseName = ref.filename.split('/').pop() || ref.filename;
+                    const already = selectedConfigs.some(c => c.name === baseName)
+                                  || newlyFetched.some(c => c.name === baseName)
+                                  || baseName === fullConfig.name;
+                    if (already) continue;
+                    try {
+                        const dep = await testConfigService.fetchConfigContent(module, baseName, system);
+                        newlyFetched.push(dep);
+                        console.log('Auto-fetched dependency:', baseName);
+                    } catch (e) {
+                        console.warn('Could not fetch dependency:', baseName, e);
+                    }
+                }
+
+                if (newlyFetched.length > 0) {
+                    toast({
+                        title: 'Dependencies auto-fetched',
+                        description: `Pulled ${newlyFetched.length} extra file${newlyFetched.length === 1 ? '' : 's'} (${newlyFetched.map(f => f.name).join(', ')})`,
+                    });
+                }
+                onConfigSelect([...selectedConfigs, fullConfig, ...newlyFetched]);
             }
         } catch (error) {
             console.error('Failed to fetch config content:', error);

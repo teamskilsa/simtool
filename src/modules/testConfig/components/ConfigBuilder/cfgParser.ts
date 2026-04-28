@@ -378,6 +378,60 @@ export function tryParseAmarisoftConfig(text: string): Record<string, any> | nul
   }
 }
 
+/** A file referenced by a main .cfg — drb config, SIB asn, RF driver include, etc. */
+export interface ReferencedFile {
+  /** Where this reference came from */
+  type: 'drb_config' | 'sib_filename' | 'include' | 'meas_config' | 'other';
+  /** Relative path / filename as it appears in the cfg */
+  filename: string;
+  /** Optional context (e.g. "cell_default.sib_sched_list[0]") */
+  source?: string;
+}
+
+/**
+ * Extract every external file the .cfg depends on. Looks at:
+ *   - `include "path"`            — preprocessor includes (raw text)
+ *   - `drb_config: "drb.cfg"`     — radio bearer config
+ *   - `filename: "sib2_3.asn"`    — SIB schedule filenames (inside sib_sched_list)
+ *   - `*meas_config*.asn`         — measurement configs
+ *
+ * Result is deduped on filename; returned in roughly the order they appear.
+ */
+export function extractReferencedFiles(text: string): ReferencedFile[] {
+  const seen = new Set<string>();
+  const out: ReferencedFile[] = [];
+
+  const add = (r: ReferencedFile) => {
+    if (!r.filename || seen.has(r.filename)) return;
+    seen.add(r.filename);
+    out.push(r);
+  };
+
+  // ── 1. `include "..."` directives — pre-preprocessor, raw text ──────────
+  for (const m of text.matchAll(/include\s+["']([^"']+)["']/g)) {
+    add({ type: 'include', filename: m[1] });
+  }
+
+  // ── 2. drb_config: "..." (LTE) or drb_nr.cfg (NR) ───────────────────────
+  for (const m of text.matchAll(/drb_config\s*:\s*["']([^"']+)["']/g)) {
+    add({ type: 'drb_config', filename: m[1] });
+  }
+
+  // ── 3. SIB schedule filenames — inside sib_sched_list[].filename ────────
+  // Match `filename: "sib2_3.asn"` (loose; SIB context implied by the ASN extension)
+  for (const m of text.matchAll(/filename\s*:\s*["']([^"']+\.asn[a-zA-Z0-9]*)["']/g)) {
+    add({ type: 'sib_filename', filename: m[1] });
+  }
+
+  // ── 4. Generic measurement / scheduling .asn references ────────────────
+  // Catches lines like `meas_config_filename: "meas_config_periodic.asn"`
+  for (const m of text.matchAll(/(?:meas_config|sib_filename|measurement_config)\s*\w*\s*:\s*["']([^"']+)["']/g)) {
+    add({ type: 'meas_config', filename: m[1] });
+  }
+
+  return out;
+}
+
 /** Parse `log_options` string back into level + per-layer overrides. */
 export function parseLogOptions(s: string): { level: string; layers: Record<string, string> } {
   const result = { level: 'error', layers: {} as Record<string, string> };

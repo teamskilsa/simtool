@@ -13,8 +13,9 @@ import {
   DEFAULT_NR_FORM, DEFAULT_LTE_FORM, DEFAULT_NSA_FORM,
   generateNRConfig, generateCoreConfig, generateLTEConfig, generateNSAConfig,
   embedBuilderMeta, extractBuilderMeta,
-  importCfgToBuilder,
+  importCfgToBuilder, extractReferencedFiles,
 } from '../components/ConfigBuilder';
+import { DependenciesSection } from '../components/ConfigBuilder/sections/DependenciesSection';
 import { configsService } from '../services/configs.service';
 import { useConfigContext } from '../context';
 import type { NRFormState, LTEFormState, NSAFormState } from '../components/ConfigBuilder';
@@ -40,6 +41,10 @@ export const CreateTestView: React.FC = () => {
   const [nsaForm, setNsaForm] = useState<NSAFormState>({ ...DEFAULT_NSA_FORM });
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  // The most recently loaded config's raw content. Used to extract external
+  // references (drb.cfg, sib*.asn, rf_driver includes) that the form-level
+  // generators don't track, so the Dependencies panel can show them.
+  const [loadedSourceContent, setLoadedSourceContent] = useState<string>('');
 
   const handleNrChange = (key: string, value: any) => setNrForm(prev => ({ ...prev, [key]: value }));
   const handleLteChange = (key: string, value: any) => setLteForm(prev => ({ ...prev, [key]: value }));
@@ -66,6 +71,25 @@ export const CreateTestView: React.FC = () => {
       case 'core': return generateCoreConfig(nrForm);
     }
   }, [configType, nrForm, lteForm, nsaForm]);
+
+  // External files referenced by this config (drb.cfg, sib*.asn, includes).
+  // Merge refs from the live builder output AND the original imported source —
+  // the generators only emit what's in form state (drb_config), but the
+  // imported source may also have `include` and SIB filenames that we want
+  // to surface so the user knows what auxiliary files need to ship together.
+  const referencedFiles = useMemo(() => {
+    const fromOutput = extractReferencedFiles(configOutput || '');
+    const fromSource = extractReferencedFiles(loadedSourceContent);
+    const seen = new Set<string>();
+    const merged = [];
+    for (const r of [...fromOutput, ...fromSource]) {
+      if (seen.has(r.filename)) continue;
+      seen.add(r.filename);
+      merged.push(r);
+    }
+    return merged;
+  }, [configOutput, loadedSourceContent]);
+  const availableFilenames = useMemo(() => configs.map((c: ConfigItem) => c.name), [configs]);
 
   const moduleType = (() => {
     switch (configType) {
@@ -157,6 +181,9 @@ export const CreateTestView: React.FC = () => {
 
     const meta = extractBuilderMeta(config.content);
     setConfigName(config.name.replace(/\.cfg$/, ''));
+    // Snapshot the source so the Dependencies panel can show includes / SIBs
+    // that won't survive the form-state round-trip on its own.
+    setLoadedSourceContent(config.content);
 
     const applyForm = (type: ConfigType, form: any) => {
       setConfigType(type);
@@ -315,6 +342,18 @@ export const CreateTestView: React.FC = () => {
             )}
             {configType === 'nsa' && <NSAConfigBuilder form={nsaForm} onChange={handleNsaChange} />}
             {configType === 'core' && <CoreConfigBuilder form={nrForm} onChange={handleNrChange} />}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* External-file dependencies — drb.cfg, sib*.asn, includes. Always
+          rendered (even with no deps) so the user knows the config is
+          self-contained. Hidden for Core configs since mme.cfg has no
+          drb/sib references. */}
+      {configType !== 'core' && referencedFiles.length > 0 && (
+        <Card>
+          <CardContent className="pt-4">
+            <DependenciesSection refs={referencedFiles} available={availableFilenames} />
           </CardContent>
         </Card>
       )}

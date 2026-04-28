@@ -9,7 +9,7 @@ import { ConfigurationEditor } from './ConfigurationEditor';
 import { ImportModal } from '../../components/ImportConfig';
 import { FileImportModal } from '../../components/FileImport/FileImportModal';
 import { configsService } from '../../services/configs.service';
-import { tryParseAmarisoftConfig, detectConfigType } from '../../components/ConfigBuilder';
+import { tryParseAmarisoftConfig, detectConfigType, extractReferencedFiles } from '../../components/ConfigBuilder';
 import { useToast } from '@/components/ui/use-toast';
 import { useTheme } from '@/components/theme/context/theme-context';
 import { themes } from '@/components/theme/themes';
@@ -104,43 +104,70 @@ export function ConfigurationView() {
 
     try {
       setLoading(true);
+      // Read all dropped files first so we can co-import deps in one pass.
+      const fileMap = new Map<string, { name: string; content: string; size: number }>();
       for (const file of files) {
         const content = await file.text();
-
-        // ── Normalise filename ────────────────────────────────────────────
-        // Browsers/users sometimes save Amarisoft .cfg files with a .json or
-        // .txt extension tacked on. The storage layer only lists *.cfg, so
-        // we strip those wrappers and force a .cfg suffix.
+        // Browsers/users sometimes wrap .cfg with .json/.txt — strip those.
         let cleanName = file.name.replace(/\.(json|txt)$/i, '');
-        if (!cleanName.toLowerCase().endsWith('.cfg')) cleanName += '.cfg';
+        // Bare names without .cfg/.asn keep their original extension
+        // (drb.cfg / sib2_3.asn are both valid). Only force .cfg if no known ext.
+        if (!/\.(cfg|asn|conf|db)$/i.test(cleanName)) cleanName += '.cfg';
+        fileMap.set(cleanName.toLowerCase(), { name: cleanName, content, size: file.size });
+      }
 
-        // ── Detect module from CONTENT first, fallback to filename prefix ──
-        const ast = tryParseAmarisoftConfig(content);
-        const detected = detectConfigType(ast, cleanName);
+      // Identify each file's role: main cfg (has detect type) vs auxiliary
+      // (drb*.cfg, sib*.asn, ...).
+      let mainCount = 0, depCount = 0, missingDeps: string[] = [];
+      for (const [, f] of fileMap) {
+        const ast = tryParseAmarisoftConfig(f.content);
+        const detected = detectConfigType(ast, f.name);
+        const isAuxiliary = detected === 'unknown' || /\.asn$/i.test(f.name) || /^drb/i.test(f.name);
+
         const module =
+          isAuxiliary ? 'enb' :
           detected === 'core' ? 'mme' :
           detected === 'nr'   ? 'gnb' :
-          (detected === 'lte' || detected === 'nbiot' || detected === 'catm') ? 'enb' :
-          // fallback: filename prefix
-          cleanName.startsWith('gnb-') ? 'gnb' :
-          cleanName.startsWith('mme-') ? 'mme' :
-          cleanName.startsWith('ims-') ? 'ims' :
-          'enb';
+          (detected === 'lte' || detected === 'nbiot' || detected === 'catm' || detected === 'nsa') ? 'enb' :
+          f.name.startsWith('gnb-') ? 'gnb' :
+          f.name.startsWith('mme-') ? 'mme' : 'enb';
 
         await configsService.importConfig({
-          name: cleanName,
+          name: f.name,
           module,
-          content,
-          size: file.size,
+          content: f.content,
+          size: f.size,
         }, user.id);
+
+        if (isAuxiliary) depCount++;
+        else {
+          mainCount++;
+          // Check the main cfg's references — warn for any not in the drop set
+          const refs = extractReferencedFiles(f.content);
+          for (const r of refs) {
+            const baseName = r.filename.split('/').pop() || r.filename;
+            if (!fileMap.has(baseName.toLowerCase()) && !fileMap.has(r.filename.toLowerCase())) {
+              missingDeps.push(`${baseName} (referenced as ${r.type})`);
+            }
+          }
+        }
       }
 
       await loadConfigs();
       setIsFileImportOpen(false);
-      toast({
-        title: "Success",
-        description: `Imported ${files.length} configuration file(s)`,
-      });
+
+      if (missingDeps.length > 0) {
+        toast({
+          title: "Imported with missing dependencies",
+          description: `${mainCount} main cfg + ${depCount} auxiliary file(s). Missing: ${missingDeps.slice(0, 3).join(', ')}${missingDeps.length > 3 ? `, +${missingDeps.length - 3} more` : ''}. Drop these alongside next time.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: `Imported ${mainCount} main config${mainCount === 1 ? '' : 's'}${depCount > 0 ? ` + ${depCount} dependency file${depCount === 1 ? '' : 's'}` : ''}.`,
+        });
+      }
     } catch (error) {
       console.error('File import failed:', error);
       toast({

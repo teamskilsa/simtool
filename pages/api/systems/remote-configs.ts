@@ -34,6 +34,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const mapping = MODULE_DIRS[String(module)];
   if (!mapping) return res.status(400).json({ error: `Unknown module: ${module}` });
 
+  /**
+   * Bulk mode: take a list of filenames, return them all in one round-trip.
+   * Used when importing a main cfg + its drb.cfg + sib*.asn dependencies.
+   */
+  const bulkFiles: string[] | undefined = Array.isArray(req.body?.bulkFiles) ? req.body.bulkFiles : undefined;
+
   const ssh = new NodeSSH();
   try {
     await ssh.connect({
@@ -47,6 +53,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Build sudo prefix — needed if the SSH user isn't root (e.g. sysadmin)
     const pwd = password ? String(password) : '';
     const sudoPrefix = pwd ? `echo '${pwd.replace(/'/g, "'\\''")}' | sudo -S -p '' ` : 'sudo ';
+
+    // ── Bulk mode: read N files in one round-trip ─────────────────────────
+    if (bulkFiles && bulkFiles.length > 0) {
+      const results: any[] = [];
+      for (const f of bulkFiles) {
+        const filePath = f.startsWith('/') ? f : `${mapping.dir}/${f}`;
+        let catRes = await ssh.execCommand(`cat ${q(filePath)} 2>/dev/null`);
+        if (catRes.code !== 0 || !catRes.stdout) {
+          catRes = await ssh.execCommand(`${sudoPrefix}cat ${q(filePath)} 2>&1`);
+        }
+        if (catRes.code !== 0) {
+          results.push({ name: f, path: filePath, error: catRes.stderr || catRes.stdout || 'not found' });
+          continue;
+        }
+        let statOut = (await ssh.execCommand(`${sudoPrefix}stat -c '%Y %s' ${q(filePath)} 2>/dev/null`)).stdout.trim();
+        const [mtimeStr, sizeStr] = (statOut || '0 0').split(' ');
+        const mtime = new Date(parseInt(mtimeStr, 10) * 1000);
+        results.push({
+          name: f.split('/').pop() || f,
+          path: filePath,
+          content: catRes.stdout,
+          modifiedAt: mtime.toISOString(),
+          size: parseInt(sizeStr, 10) || 0,
+        });
+      }
+      return res.status(200).json({ files: results });
+    }
 
     if (filename) {
       // ── Read a single file ─────────────────────────────────────────────────
