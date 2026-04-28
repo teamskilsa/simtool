@@ -141,7 +141,14 @@ export class FileConfigStorage implements IConfigStorage {
           const files = await fs.readdir(modulePath);
           
           for (const file of files) {
-            if (!file.endsWith('.cfg')) continue;
+            // Accept .cfg, .conf, .json, .txt — any plausible Amarisoft cfg
+            // wrapper. Excludes hidden files and obvious non-configs (.bak etc).
+            const lower = file.toLowerCase();
+            const isConfig = lower.endsWith('.cfg')
+                          || lower.endsWith('.conf')
+                          || lower.endsWith('.json')
+                          || lower.endsWith('.txt');
+            if (!isConfig || file.startsWith('.')) continue;
 
             const filePath = path.join(modulePath, file);
             try {

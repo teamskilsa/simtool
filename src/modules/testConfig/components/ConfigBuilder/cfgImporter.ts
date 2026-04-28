@@ -211,8 +211,25 @@ function astToNRForm(ast: Record<string, any>, warnings: string[]): NRFormState 
 function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormState {
   const cellList: any[] = Array.isArray(ast.cell_list) ? ast.cell_list : [];
   const cell0 = cellList[0] || {};
-  const plmnEntry = (cell0.plmn_list?.[0]) || {};
-  const { mcc, mnc } = splitPlmn(plmnEntry.plmn);
+
+  // Multi-cell (carrier aggregation) — surface as a warning since the LTE
+  // builder currently edits a single cell. Cell 0 is loaded; cells[1..] kept
+  // in the source file and round-tripped untouched on save.
+  if (cellList.length > 1) {
+    warnings.push(
+      `Detected ${cellList.length}-cell carrier aggregation. Only Cell 1 is loaded into the builder; ` +
+      `the additional cell${cellList.length > 2 ? 's' : ''} (cell_id=` +
+      `${cellList.slice(1).map((c: any) => c.cell_id ?? '?').join(', ')}) ` +
+      `will be lost if you re-save from the builder.`
+    );
+  }
+
+  // Cell-default block (LTE puts shared params in cell_default, not in cell_list[i])
+  const cellDefault = ast.cell_default || {};
+  // Plmn list can live on the cell or in cell_default; cell_default uses bare strings ("00101")
+  const plmnEntry = (cell0.plmn_list?.[0]) || (cellDefault.plmn_list?.[0]) || {};
+  const plmnRaw = typeof plmnEntry === 'string' ? plmnEntry : plmnEntry.plmn;
+  const { mcc, mnc } = splitPlmn(plmnRaw);
   const logOpts = parseLogOptions(str(ast.log_options, ''));
 
   // Try to derive band from EARFCN by closest-match reverse lookup.
@@ -229,8 +246,29 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormStat
     return bestDist < 5000 ? bestBand : DEFAULT_LTE_FORM.band;
   })();
 
-  const cipher = Array.isArray(cell0.cipher_algo_pref) ? cell0.cipher_algo_pref : DEFAULT_LTE_FORM.cipherAlgoPref;
-  const integ  = Array.isArray(cell0.integ_algo_pref)  ? cell0.integ_algo_pref  : DEFAULT_LTE_FORM.integAlgoPref;
+  // cipher_algo_pref / integ_algo_pref live in cell_default in real Amarisoft files.
+  // Numeric integrity values (e.g. [2, 1]) -> 'eia2', 'eia1' for the form.
+  const rawCipher = cell0.cipher_algo_pref ?? cellDefault.cipher_algo_pref;
+  const rawInteg  = cell0.integ_algo_pref  ?? cellDefault.integ_algo_pref;
+  const intToEea = (n: any) => typeof n === 'number' ? `eea${n}` : String(n);
+  const intToEia = (n: any) => typeof n === 'number' ? `eia${n}` : String(n);
+  const cipher = Array.isArray(rawCipher) && rawCipher.length > 0
+    ? rawCipher.map(intToEea) : DEFAULT_LTE_FORM.cipherAlgoPref;
+  const integ  = Array.isArray(rawInteg) && rawInteg.length > 0
+    ? rawInteg.map(intToEia)  : DEFAULT_LTE_FORM.integAlgoPref;
+
+  // Helper: cell value, falling back to cell_default if absent on the cell
+  const cv = (cell: any, key: string) => cell?.[key] !== undefined ? cell[key] : cellDefault[key];
+
+  // Bandwidth in Amarisoft is `n_rb_dl` (number of resource blocks: 6/15/25/50/75/100).
+  // Map back to MHz for the form.
+  const nRbDl = num(cv(cell0, 'n_rb_dl') ?? cv(cell0, 'bandwidth'), 0);
+  const rbToMhz: Record<number, number> = { 6: 1.4, 15: 3, 25: 5, 50: 10, 75: 15, 100: 20 };
+  const bandwidth = rbToMhz[nRbDl] ?? num(cv(cell0, 'bandwidth'), DEFAULT_LTE_FORM.bandwidth);
+
+  // TDD detection — Amarisoft uses `uldl_config` in cell_default (not tdd_ul_dl_config like NR)
+  const tddConfigVal = num(cv(cell0, 'tdd_ul_dl_config') ?? cv(cell0, 'uldl_config'), DEFAULT_LTE_FORM.tddConfig);
+  const tddSpVal = num(cv(cell0, 'tdd_special_subframe_pattern') ?? cv(cell0, 'sp_config'), DEFAULT_LTE_FORM.tddSpecialSubframe);
 
   return {
     cellId:               num(cell0.cell_id, DEFAULT_LTE_FORM.cellId),
@@ -241,15 +279,15 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormStat
     attachWithoutPdn:     bool(plmnEntry.attach_without_pdn, DEFAULT_LTE_FORM.attachWithoutPdn),
     plmnReserved:         bool(plmnEntry.reserved, DEFAULT_LTE_FORM.plmnReserved),
     band:                 derivedBand,
-    bandwidth:            num(cell0.bandwidth, DEFAULT_LTE_FORM.bandwidth),
+    bandwidth,
     dlEarfcn:             earfcn,
-    cpMode:               (str(cell0.cyclic_prefix, 'normal') as 'normal' | 'extended'),
-    phichDuration:        (str(cell0.phich_duration, 'normal') as 'normal' | 'extended'),
-    phichResource:        str(cell0.phich_resource, DEFAULT_LTE_FORM.phichResource),
-    tddConfig:            num(cell0.tdd_ul_dl_config, DEFAULT_LTE_FORM.tddConfig),
-    tddSpecialSubframe:   num(cell0.tdd_special_subframe_pattern, DEFAULT_LTE_FORM.tddSpecialSubframe),
-    nAntennaDl:           num(cell0.n_antenna_dl, DEFAULT_LTE_FORM.nAntennaDl),
-    nAntennaUl:           num(cell0.n_antenna_ul, DEFAULT_LTE_FORM.nAntennaUl),
+    cpMode:               (str(cv(cell0, 'cyclic_prefix'), 'normal') as 'normal' | 'extended'),
+    phichDuration:        (str(cv(cell0, 'phich_duration'), 'normal') as 'normal' | 'extended'),
+    phichResource:        str(cv(cell0, 'phich_resource'), DEFAULT_LTE_FORM.phichResource),
+    tddConfig:            tddConfigVal,
+    tddSpecialSubframe:   tddSpVal,
+    nAntennaDl:           num(cv(cell0, 'n_antenna_dl'), DEFAULT_LTE_FORM.nAntennaDl),
+    nAntennaUl:           num(cv(cell0, 'n_antenna_ul'), DEFAULT_LTE_FORM.nAntennaUl),
     rfMode:               (str(ast.rf_driver?.name, 'sdr') === 'ip' ? 'ip' : 'sdr') as 'sdr' | 'split' | 'ip',
     txGain:               num(ast.tx_gain, DEFAULT_LTE_FORM.txGain),
     rxGain:               num(ast.rx_gain, DEFAULT_LTE_FORM.rxGain),
@@ -257,29 +295,29 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormStat
     mmeAddr:              str(ast.mme_list?.[0]?.mme_addr, DEFAULT_LTE_FORM.mmeAddr),
     gtpAddr:              str(ast.gtp_addr, DEFAULT_LTE_FORM.gtpAddr),
     enbId:                toHexString(ast.enb_id, DEFAULT_LTE_FORM.enbId),
-    cellBarred:           bool(cell0.cell_barred, DEFAULT_LTE_FORM.cellBarred),
-    intraFreqReselection: bool(cell0.intra_freq_reselection, DEFAULT_LTE_FORM.intraFreqReselection),
-    qRxLevMin:            num(cell0.q_rx_lev_min, DEFAULT_LTE_FORM.qRxLevMin),
-    pMax:                 num(cell0.p_max, DEFAULT_LTE_FORM.pMax),
-    siCoderate:           num(cell0.si_coderate, DEFAULT_LTE_FORM.siCoderate),
-    siWindowLength:       num(cell0.si_window_length, DEFAULT_LTE_FORM.siWindowLength),
-    srPeriod:             num(cell0.sr_period, DEFAULT_LTE_FORM.srPeriod),
-    cqiPeriod:            num(cell0.cqi_period, DEFAULT_LTE_FORM.cqiPeriod),
-    ulMaxHarqTx:          num(cell0.mac_config?.ul_max_harq_tx, DEFAULT_LTE_FORM.ulMaxHarqTx),
-    dlMaxHarqTx:          num(cell0.mac_config?.dl_max_harq_tx, DEFAULT_LTE_FORM.dlMaxHarqTx),
-    dpc:                  bool(cell0.dpc, DEFAULT_LTE_FORM.dpc),
-    dpcPuschSnrTarget:    num(cell0.dpc_pusch_snr_target, DEFAULT_LTE_FORM.dpcPuschSnrTarget),
-    dpcPucchSnrTarget:    num(cell0.dpc_pucch_snr_target, DEFAULT_LTE_FORM.dpcPucchSnrTarget),
-    inactivityTimer:      num(cell0.inactivity_timer, DEFAULT_LTE_FORM.inactivityTimer),
-    drbConfig:            str(cell0.drb_config, DEFAULT_LTE_FORM.drbConfig),
+    cellBarred:           bool(cv(cell0, 'cell_barred'), DEFAULT_LTE_FORM.cellBarred),
+    intraFreqReselection: bool(cv(cell0, 'intra_freq_reselection'), DEFAULT_LTE_FORM.intraFreqReselection),
+    qRxLevMin:            num(cv(cell0, 'q_rx_lev_min'), DEFAULT_LTE_FORM.qRxLevMin),
+    pMax:                 num(cv(cell0, 'p_max'), DEFAULT_LTE_FORM.pMax),
+    siCoderate:           num(cv(cell0, 'si_coderate'), DEFAULT_LTE_FORM.siCoderate),
+    siWindowLength:       num(cv(cell0, 'si_window_length'), DEFAULT_LTE_FORM.siWindowLength),
+    srPeriod:             num(cv(cell0, 'sr_period'), DEFAULT_LTE_FORM.srPeriod),
+    cqiPeriod:            num(cv(cell0, 'cqi_period'), DEFAULT_LTE_FORM.cqiPeriod),
+    ulMaxHarqTx:          num(cv(cell0, 'mac_config')?.ul_max_harq_tx, DEFAULT_LTE_FORM.ulMaxHarqTx),
+    dlMaxHarqTx:          num(cv(cell0, 'mac_config')?.dl_max_harq_tx, DEFAULT_LTE_FORM.dlMaxHarqTx),
+    dpc:                  bool(cv(cell0, 'dpc'), DEFAULT_LTE_FORM.dpc),
+    dpcPuschSnrTarget:    num(cv(cell0, 'dpc_pusch_snr_target'), DEFAULT_LTE_FORM.dpcPuschSnrTarget),
+    dpcPucchSnrTarget:    num(cv(cell0, 'dpc_pucch_snr_target'), DEFAULT_LTE_FORM.dpcPucchSnrTarget),
+    inactivityTimer:      num(cv(cell0, 'inactivity_timer'), DEFAULT_LTE_FORM.inactivityTimer),
+    drbConfig:            str(cv(cell0, 'drb_config'), DEFAULT_LTE_FORM.drbConfig),
     cipherAlgoPref:       cipher,
     integAlgoPref:        integ,
-    nbIot:                bool(cell0.nb_iot, DEFAULT_LTE_FORM.nbIot),
-    nbIotMode:            (str(cell0.nb_iot_mode, DEFAULT_LTE_FORM.nbIotMode) as any),
-    nbIotPrbIndex:        num(cell0.nb_iot_prb_index, DEFAULT_LTE_FORM.nbIotPrbIndex),
-    catM:                 cell0.ce_mode !== undefined,
-    catMCeMode:           (str(cell0.ce_mode, 'A') as 'A' | 'B'),
-    catMRepetitions:      num(cell0.max_repetitions, DEFAULT_LTE_FORM.catMRepetitions),
+    nbIot:                bool(cv(cell0, 'nb_iot'), DEFAULT_LTE_FORM.nbIot),
+    nbIotMode:            (str(cv(cell0, 'nb_iot_mode'), DEFAULT_LTE_FORM.nbIotMode) as any),
+    nbIotPrbIndex:        num(cv(cell0, 'nb_iot_prb_index'), DEFAULT_LTE_FORM.nbIotPrbIndex),
+    catM:                 cv(cell0, 'ce_mode') !== undefined,
+    catMCeMode:           (str(cv(cell0, 'ce_mode'), 'A') as 'A' | 'B'),
+    catMRepetitions:      num(cv(cell0, 'max_repetitions'), DEFAULT_LTE_FORM.catMRepetitions),
     logFilename:          str(ast.log_filename, DEFAULT_LTE_FORM.logFilename),
     logLevel:             logOpts.level,
     logLayers:            logOpts.layers,

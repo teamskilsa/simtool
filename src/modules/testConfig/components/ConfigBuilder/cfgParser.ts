@@ -134,7 +134,57 @@ function preprocess(src: string): string {
     if (isActive()) out.push(rawLine);
   }
 
-  return out.join('\n');
+  // ── Macro substitution: replace defined identifiers with their values ──
+  // Walk character-by-character so we never substitute inside strings or
+  // comments. This is necessary for things like `n_rb_dl: N_RB_DL,`.
+  const text = out.join('\n');
+  if (Object.keys(defines).length === 0) return text;
+
+  // Sort keys longest-first so partial matches don't shadow longer ones
+  const keys = Object.keys(defines).sort((a, b) => b.length - a.length);
+  const result: string[] = [];
+  let i = 0;
+  const len = text.length;
+  while (i < len) {
+    const c = text[i];
+    // Skip strings
+    if (c === '"' || c === "'") {
+      const quote = c; result.push(c); i++;
+      while (i < len && text[i] !== quote) {
+        if (text[i] === '\\' && i + 1 < len) { result.push(text[i], text[i + 1]); i += 2; continue; }
+        result.push(text[i++]);
+      }
+      if (i < len) { result.push(text[i]); i++; }
+      continue;
+    }
+    // Skip line comments
+    if (c === '/' && text[i + 1] === '/') {
+      while (i < len && text[i] !== '\n') { result.push(text[i++]); }
+      continue;
+    }
+    // Skip block comments
+    if (c === '/' && text[i + 1] === '*') {
+      result.push(text[i], text[i + 1]); i += 2;
+      while (i < len && !(text[i] === '*' && text[i + 1] === '/')) { result.push(text[i++]); }
+      if (i < len) { result.push(text[i], text[i + 1]); i += 2; }
+      continue;
+    }
+    // Try macro at word boundary
+    if (/[A-Za-z_]/.test(c) && (i === 0 || !/[A-Za-z0-9_]/.test(text[i - 1]))) {
+      let matched = false;
+      for (const k of keys) {
+        if (text.startsWith(k, i) && (i + k.length >= len || !/[A-Za-z0-9_]/.test(text[i + k.length]))) {
+          result.push(defines[k]);
+          i += k.length;
+          matched = true;
+          break;
+        }
+      }
+      if (matched) continue;
+    }
+    result.push(c); i++;
+  }
+  return result.join('');
 }
 
 // ─── Lexer ──────────────────────────────────────────────────────────────────

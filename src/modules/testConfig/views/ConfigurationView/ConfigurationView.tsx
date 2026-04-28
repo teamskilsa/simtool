@@ -9,6 +9,7 @@ import { ConfigurationEditor } from './ConfigurationEditor';
 import { ImportModal } from '../../components/ImportConfig';
 import { FileImportModal } from '../../components/FileImport/FileImportModal';
 import { configsService } from '../../services/configs.service';
+import { tryParseAmarisoftConfig, detectConfigType } from '../../components/ConfigBuilder';
 import { useToast } from '@/components/ui/use-toast';
 import { useTheme } from '@/components/theme/context/theme-context';
 import { themes } from '@/components/theme/themes';
@@ -105,16 +106,32 @@ export function ConfigurationView() {
       setLoading(true);
       for (const file of files) {
         const content = await file.text();
-        const module = file.name.startsWith('enb-') ? 'enb' :
-                      file.name.startsWith('gnb-') ? 'gnb' :
-                      file.name.startsWith('mme-') ? 'mme' :
-                      file.name.startsWith('ims-') ? 'ims' : 'enb';
+
+        // ── Normalise filename ────────────────────────────────────────────
+        // Browsers/users sometimes save Amarisoft .cfg files with a .json or
+        // .txt extension tacked on. The storage layer only lists *.cfg, so
+        // we strip those wrappers and force a .cfg suffix.
+        let cleanName = file.name.replace(/\.(json|txt)$/i, '');
+        if (!cleanName.toLowerCase().endsWith('.cfg')) cleanName += '.cfg';
+
+        // ── Detect module from CONTENT first, fallback to filename prefix ──
+        const ast = tryParseAmarisoftConfig(content);
+        const detected = detectConfigType(ast, cleanName);
+        const module =
+          detected === 'core' ? 'mme' :
+          detected === 'nr'   ? 'gnb' :
+          (detected === 'lte' || detected === 'nbiot' || detected === 'catm') ? 'enb' :
+          // fallback: filename prefix
+          cleanName.startsWith('gnb-') ? 'gnb' :
+          cleanName.startsWith('mme-') ? 'mme' :
+          cleanName.startsWith('ims-') ? 'ims' :
+          'enb';
 
         await configsService.importConfig({
-          name: file.name,
+          name: cleanName,
           module,
           content,
-          size: file.size
+          size: file.size,
         }, user.id);
       }
 
