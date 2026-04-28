@@ -60,20 +60,16 @@ export const DashboardContent = ({
         );
 
       case 'test-execution':
-      // "Test Suites" under the Automation sidebar group is just an alias for
-      // the scenarios view — in this app a scenario IS a test suite (config
-      // + system + topology that runs as a unit). Wiring it here so the
-      // sidebar entry stops showing the empty "Content for test-suites
-      // section will be displayed here." placeholder.
-      case 'test-suites':
         return (
           <ConfigProvider>
             <TestExecutionView />
           </ConfigProvider>
         );
 
-      // "Monitoring" under Automation is the same dashboard /stats renders;
-      // surfacing it here saves the user a route switch.
+      // 'stats' is the canonical sidebar entry; 'monitoring' kept as an
+      // alias for in-flight handoffs (Quick Run still dispatches the
+      // legacy section name) and any saved deep links.
+      case 'stats':
       case 'monitoring':
         return <EnbMonitoringDashboard />;
 

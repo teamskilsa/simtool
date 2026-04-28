@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Save, Copy, Download, Eye, EyeOff, FolderOpen, Radio, Shield, Wifi, Signal, RotateCcw } from 'lucide-react';
 import { ResizablePanel } from '@/components/ui/resizable-panel';
 import { toast } from '@/components/ui/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 import {
   ConfigBuilder, CoreConfigBuilder, LTEConfigBuilder, NSAConfigBuilder,
   DEFAULT_NR_FORM, DEFAULT_LTE_FORM, DEFAULT_NSA_FORM,
@@ -137,7 +138,31 @@ export const CreateTestView: React.FC = () => {
         size: contentWithMeta.length,
       }, 'admin');
       await loadConfigs();
-      toast({ title: 'Saved', description: `${fileName} saved.` });
+      // Build → Run handoff. The user just saved a config; the obvious
+      // next step is to deploy it. The toast carries an action that
+      // hands a hint to QuickRunPanel via sessionStorage and switches
+      // sections, so they don't have to navigate manually + re-pick.
+      const goDeploy = () => {
+        if (typeof window === 'undefined') return;
+        try {
+          window.sessionStorage.setItem(
+            'simtool_quickrun_target',
+            JSON.stringify({ module: moduleType, configName: fileName }),
+          );
+        } catch { /* sessionStorage unavailable — user can pick manually */ }
+        window.dispatchEvent(
+          new CustomEvent('simtool:navigate', { detail: { section: 'test-execution' } }),
+        );
+      };
+      toast({
+        title: 'Saved',
+        description: `${fileName} saved. Ready to deploy?`,
+        action: (
+          <ToastAction altText="Deploy now" onClick={goDeploy}>
+            Deploy now →
+          </ToastAction>
+        ),
+      });
     } catch (err: any) {
       toast({ title: 'Save Failed', description: err?.message || 'Error', variant: 'destructive' });
     } finally {
