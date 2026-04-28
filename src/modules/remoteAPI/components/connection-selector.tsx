@@ -9,6 +9,9 @@ interface ConnectionDetails {
   type: ComponentType;
   port: string;
   name?: string;
+  /** Optional remote-API password — only needed when the callbox config
+   *  sets `com_password`. Empty string for unauthenticated deployments. */
+  password?: string;
 }
 
 interface ConnectionSelectorProps {
@@ -36,7 +39,8 @@ export function ConnectionSelector({ themeConfig, onConnectionChange }: Connecti
   const [formData, setFormData] = useState<ConnectionDetails>({
     ip: '',
     type: 'ENB',
-    port: '9001'
+    port: '9001',
+    password: '',
   });
   const [savedConnections, setSavedConnections] = useState<ConnectionDetails[]>(getSavedConnections);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -144,6 +148,25 @@ export function ConnectionSelector({ themeConfig, onConnectionChange }: Connecti
             value={formData.port}
             onChange={(e) => handleChange('port', e.target.value)}
             placeholder="Port"
+            className={`
+              w-full px-3 py-2 rounded-lg
+              ${themeConfig.surfaces.card.background}
+              border ${themeConfig.surfaces.card.border}
+              ${themeConfig.surfaces.card.foreground}
+              placeholder:text-white/40
+            `}
+          />
+        </div>
+
+        {/* Password (optional — only required when the callbox sets
+            com_password in its remote-API config) */}
+        <div className="w-44">
+          <input
+            type="password"
+            value={formData.password ?? ''}
+            onChange={(e) => handleChange('password', e.target.value)}
+            placeholder="Password (optional)"
+            autoComplete="off"
             className={`
               w-full px-3 py-2 rounded-lg
               ${themeConfig.surfaces.card.background}

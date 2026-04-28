@@ -56,10 +56,57 @@ const defaultPortFor = (m: ModuleKey) =>
 // ─── Time-series data point shape ───────────────────────────────────────────
 interface TimeSeriesDataPoint {
   timestamp: number;
-  dl_bitrate: number;
+  dl_bitrate: number;  // Mbps, summed across cells
   ul_bitrate: number;
-  dl_prb: number;
+  dl_prb: number;      // PRB utilization %, max across cells
   ul_prb: number;
+}
+
+/**
+ * Pull the headline KPIs out of an Amarisoft `stats` response.
+ *
+ * Field shape varies by release:
+ *   - Modern (current docs): per-cell under `cells["1"].dl_bitrate` (bps),
+ *     `cells["1"].ul_bitrate`, `cells["1"].dl_use_avg` (0..1 ratio),
+ *     `cells["1"].ul_use_avg`.
+ *   - Legacy / wrapper APIs sometimes emit top-level `throughput.dl`
+ *     and `prb_utilization.dl`.
+ *
+ * We prefer per-cell when present and fall back to top-level otherwise so
+ * the dashboard works against either shape without configuration.
+ */
+function aggregateKpis(parsed: any): TimeSeriesDataPoint {
+  const ts = parsed?.timestamp ?? Date.now();
+
+  const cells = parsed?.cells && typeof parsed.cells === 'object'
+    ? Object.values(parsed.cells as Record<string, any>)
+    : [];
+
+  if (cells.length > 0) {
+    let dlBps = 0, ulBps = 0, dlUseMax = 0, ulUseMax = 0;
+    for (const c of cells as any[]) {
+      dlBps += Number(c?.dl_bitrate ?? 0) || 0;
+      ulBps += Number(c?.ul_bitrate ?? 0) || 0;
+      dlUseMax = Math.max(dlUseMax, Number(c?.dl_use_avg ?? 0) || 0);
+      ulUseMax = Math.max(ulUseMax, Number(c?.ul_use_avg ?? 0) || 0);
+    }
+    return {
+      timestamp: ts,
+      dl_bitrate: dlBps / 1_000_000,
+      ul_bitrate: ulBps / 1_000_000,
+      dl_prb: dlUseMax * 100,
+      ul_prb: ulUseMax * 100,
+    };
+  }
+
+  // Legacy top-level fallback.
+  return {
+    timestamp: ts,
+    dl_bitrate: parsed?.throughput?.dl ? parsed.throughput.dl / 1_000_000 : 0,
+    ul_bitrate: parsed?.throughput?.ul ? parsed.throughput.ul / 1_000_000 : 0,
+    dl_prb: parsed?.prb_utilization?.dl ? parsed.prb_utilization.dl * 100 : 0,
+    ul_prb: parsed?.prb_utilization?.ul ? parsed.prb_utilization.ul * 100 : 0,
+  };
 }
 
 export function EnbMonitoringDashboard() {
@@ -117,13 +164,13 @@ export function EnbMonitoringDashboard() {
       } catch {
         return;
       }
-      const point: TimeSeriesDataPoint = {
-        timestamp: parsed?.timestamp ?? Date.now(),
-        dl_bitrate: parsed?.throughput?.dl ? parsed.throughput.dl / 1_000_000 : 0,
-        ul_bitrate: parsed?.throughput?.ul ? parsed.throughput.ul / 1_000_000 : 0,
-        dl_prb: parsed?.prb_utilization?.dl ? parsed.prb_utilization.dl * 100 : 0,
-        ul_prb: parsed?.prb_utilization?.ul ? parsed.prb_utilization.ul * 100 : 0,
-      };
+
+      // Modern Amarisoft (post-2023) returns per-cell aggregates under
+      // `cells.<id>` rather than top-level `throughput.*` / `prb_utilization.*`.
+      // Sum across cells for the dashboard's headline numbers, with a fallback
+      // to the legacy top-level fields so this also works against older
+      // builds that we test against.
+      const point = aggregateKpis(parsed);
       setTimeSeriesData(prev => [...prev, point].slice(-settings.maxDataPoints));
       setCurrentStats(parsed);
     },

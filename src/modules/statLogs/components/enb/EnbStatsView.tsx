@@ -13,6 +13,55 @@ interface EnbStatsViewProps {
   currentStats: any;
 }
 
+/**
+ * Fold per-cell stats into a single set of numbers for the headline cards.
+ * Modern Amarisoft puts the interesting fields under cells["1"], cells["2"]
+ * etc.; we sum throughput across cells and take the cell-1 values for
+ * single-cell metrics like Cell ID and DRB count.
+ */
+function rollUp(currentStats: any) {
+  const cells = currentStats?.cells && typeof currentStats.cells === 'object'
+    ? Object.entries(currentStats.cells as Record<string, any>)
+    : [];
+
+  let dlBpsSum = 0, ulBpsSum = 0, dlUseMax = 0, ulUseMax = 0;
+  let connectedUes = 0, activeUes = 0, drbCount = 0;
+  let firstCellId: string | number = 0;
+  for (const [id, c] of cells as [string, any][]) {
+    dlBpsSum   += Number(c?.dl_bitrate ?? 0) || 0;
+    ulBpsSum   += Number(c?.ul_bitrate ?? 0) || 0;
+    dlUseMax    = Math.max(dlUseMax, Number(c?.dl_use_avg ?? 0) || 0);
+    ulUseMax    = Math.max(ulUseMax, Number(c?.ul_use_avg ?? 0) || 0);
+    connectedUes += Number(c?.ue_count_avg ?? 0) || 0;
+    activeUes    += Number(c?.ue_active_count_avg ?? 0) || 0;
+    drbCount     += Number(c?.drb_count_avg ?? 0) || 0;
+    if (firstCellId === 0) firstCellId = id;
+  }
+
+  // Legacy top-level fallback if there were no cells in the response.
+  if (cells.length === 0 && currentStats) {
+    dlBpsSum     = Number(currentStats?.throughput?.dl ?? 0) || 0;
+    ulBpsSum     = Number(currentStats?.throughput?.ul ?? 0) || 0;
+    dlUseMax     = Number(currentStats?.prb_utilization?.dl ?? 0) || 0;
+    ulUseMax     = Number(currentStats?.prb_utilization?.ul ?? 0) || 0;
+    connectedUes = Number(currentStats?.connected_ue_count ?? 0) || 0;
+    activeUes    = Number(currentStats?.active_ue_count ?? 0) || 0;
+    firstCellId  = currentStats?.cell_id ?? 0;
+  }
+
+  return {
+    cellCount: cells.length,
+    firstCellId,
+    connectedUes,
+    activeUes,
+    drbCount,
+    dlMbps: dlBpsSum / 1_000_000,
+    ulMbps: ulBpsSum / 1_000_000,
+    dlPrbPct: dlUseMax * 100,
+    ulPrbPct: ulUseMax * 100,
+  };
+}
+
 export function EnbStatsView({
   isConnected,
   timeSeriesData,
@@ -29,6 +78,8 @@ export function EnbStatsView({
       </Card>
     );
   }
+
+  const k = rollUp(currentStats);
 
   return (
     <div className="space-y-4">
@@ -64,34 +115,46 @@ export function EnbStatsView({
           </CardContent>
         </Card>
 
-        {/* System Status */}
+        {/* System Status — totals across all cells */}
         <Card>
           <CardHeader>
             <CardTitle>System Status</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              <Row label="Connected UEs" value={currentStats?.connected_ue_count ?? 0} mono />
-              <Row label="Active UEs"    value={currentStats?.active_ue_count ?? 0} mono />
-              <Row label="Cell ID"       value={currentStats?.cell_id ?? 0} mono />
-              <Row label="DL Throughput" value={`${((currentStats?.throughput?.dl ?? 0) / 1_000_000).toFixed(2)} Mbps`} mono />
-              <Row label="UL Throughput" value={`${((currentStats?.throughput?.ul ?? 0) / 1_000_000).toFixed(2)} Mbps`} mono />
-              <Row label="DL PRB"        value={`${((currentStats?.prb_utilization?.dl ?? 0) * 100).toFixed(1)}%`} mono />
-              <Row label="UL PRB"        value={`${((currentStats?.prb_utilization?.ul ?? 0) * 100).toFixed(1)}%`} mono />
+              <Row label="Connected UEs" value={k.connectedUes.toFixed(1)} mono />
+              <Row label="Active UEs"    value={k.activeUes.toFixed(1)} mono />
+              <Row label="Cells"         value={k.cellCount || 0} mono />
+              <Row label="DL Throughput" value={`${k.dlMbps.toFixed(2)} Mbps`} mono />
+              <Row label="UL Throughput" value={`${k.ulMbps.toFixed(2)} Mbps`} mono />
+              <Row label="DL PRB (max)"  value={`${k.dlPrbPct.toFixed(1)}%`} mono />
+              <Row label="UL PRB (max)"  value={`${k.ulPrbPct.toFixed(1)}%`} mono />
             </div>
           </CardContent>
         </Card>
 
-        {/* Cell Information */}
+        {/* System / RF Info — pulled from top-level fields that Amarisoft
+            reports outside the per-cell map. */}
         <Card>
           <CardHeader>
-            <CardTitle>Cell Information</CardTitle>
+            <CardTitle>System Info</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              <Row label="Active UEs"    value={currentStats?.cells?.['1']?.ue_active_count_avg ?? 0} mono />
-              <Row label="Connected UEs" value={currentStats?.cells?.['1']?.ue_count_avg ?? 0} mono />
-              <Row label="DRB Count"     value={currentStats?.cells?.['1']?.drb_count_avg ?? 0} mono />
+              <Row label="First Cell ID" value={String(k.firstCellId)} mono />
+              <Row label="DRB Count"     value={k.drbCount.toFixed(1)} mono />
+              <Row label="CPU Usage"
+                value={typeof currentStats?.cpu?.global === 'number'
+                  ? `${Number(currentStats.cpu.global).toFixed(1)}%`
+                  : '—'} mono />
+              <Row label="Uptime"
+                value={typeof currentStats?.duration === 'number'
+                  ? `${Number(currentStats.duration).toFixed(0)} s`
+                  : '—'} mono />
+              <Row label="RF Samples"
+                value={typeof currentStats?.rf_samples === 'number'
+                  ? Number(currentStats.rf_samples).toLocaleString()
+                  : '—'} mono />
             </div>
           </CardContent>
         </Card>

@@ -30,6 +30,7 @@ interface ConnectionDetails {
   ip: string;
   type: ComponentType;
   port: string;
+  password?: string;
 }
 
 interface LogEntry {
@@ -57,6 +58,7 @@ export default function RemoteAPIInterface({ themeConfig }: RemoteAPIInterfacePr
     server: connection.ip,
     port: parseInt(connection.port),
     ssl: false,
+    password: connection.password || undefined,
   });
 
   const handleConnect = async () => {
@@ -73,7 +75,10 @@ export default function RemoteAPIInterface({ themeConfig }: RemoteAPIInterfacePr
 
   const handleConnectionChange = (details: ConnectionDetails) => {
     setConnection(details);
-    remoteAPIStorage.saveConnection(details);
+    // Persist host/port/type only — keep the password in memory so it
+    // doesn't survive a refresh in localStorage.
+    const { password, ...persistable } = details;
+    remoteAPIStorage.saveConnection(persistable);
     if (status === 'connected') { disconnect(); setStatus('idle'); }
   };
 
