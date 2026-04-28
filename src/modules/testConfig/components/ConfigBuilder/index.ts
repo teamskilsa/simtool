@@ -9,3 +9,6 @@ export { generateCoreConfig } from './coreConfigGenerator';
 export { generateLTEConfig } from './lteConfigGenerator';
 export { embedBuilderMeta, extractBuilderMeta } from './builderMeta';
 export type { BuilderMeta } from './builderMeta';
+export { parseAmarisoftConfig, tryParseAmarisoftConfig, parseLogOptions } from './cfgParser';
+export { importCfgToBuilder, detectConfigType } from './cfgImporter';
+export type { ImportedBuilderState, BuilderConfigType } from './cfgImporter';

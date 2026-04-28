@@ -1,5 +1,5 @@
 // src/modules/testConfig/views/ConfigurationView/ConfigurationEditor.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -13,7 +13,7 @@ import {
   FileJson,
   Pencil
 } from 'lucide-react';
-import { extractBuilderMeta } from '../../components/ConfigBuilder';
+import { extractBuilderMeta, tryParseAmarisoftConfig, detectConfigType } from '../../components/ConfigBuilder';
 import { ConfigItem } from '../../types';
 import { Editor } from '../../components/ConfigEditor/Editor';
 import { cn } from '@/lib/utils';
@@ -41,6 +41,17 @@ export const ConfigurationEditor: React.FC<ConfigurationEditorProps> = ({
   useEffect(() => {
     setEditedContent(config?.content || '');
   }, [config]);
+
+  // The "Edit in Builder" button is enabled if EITHER the config carries
+  // @builder metadata (perfect round-trip) or the .cfg parser can detect the
+  // config type (best-effort import for files created outside SimTool).
+  const builderMode = useMemo<{ available: boolean; viaParser: boolean }>(() => {
+    if (!config?.content) return { available: false, viaParser: false };
+    if (extractBuilderMeta(config.content)) return { available: true, viaParser: false };
+    const ast = tryParseAmarisoftConfig(config.content);
+    const t = detectConfigType(ast, config.name);
+    return { available: t !== 'unknown', viaParser: true };
+  }, [config?.content, config?.name]);
 
   const handleSave = async () => {
     if (!config) return;
@@ -124,16 +135,15 @@ export const ConfigurationEditor: React.FC<ConfigurationEditorProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Edit in Builder — only shown if the config has @builder metadata */}
-          {config && extractBuilderMeta(config.content || '') && (
+          {/* Edit in Builder — works for both natively-created (@builder meta)
+              and imported configs (via the .cfg parser fallback). */}
+          {config && builderMode.available && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    // Stash the config ID so CreateTestView auto-loads it, and
-                    // dispatch a nav event that the dashboard layout listens for.
                     sessionStorage.setItem('simtool_load_config_id', config.id);
                     window.dispatchEvent(new CustomEvent('simtool:navigate', {
                       detail: { section: 'create-test' },
@@ -143,10 +153,17 @@ export const ConfigurationEditor: React.FC<ConfigurationEditorProps> = ({
                 >
                   <Pencil className="w-3.5 h-3.5 mr-1.5" />
                   Edit in Builder
+                  {builderMode.viaParser && (
+                    <Badge variant="outline" className="ml-2 text-[9px] px-1 py-0 h-4 bg-white/20 border-white/40 text-white">
+                      parsed
+                    </Badge>
+                  )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                Open this config in the visual block-based builder
+                {builderMode.viaParser
+                  ? 'Best-effort parse from raw .cfg — review fields and re-save'
+                  : 'Open this config in the visual block-based builder'}
               </TooltipContent>
             </Tooltip>
           )}

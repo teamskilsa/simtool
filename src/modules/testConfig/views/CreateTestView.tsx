@@ -13,6 +13,7 @@ import {
   DEFAULT_NR_FORM, DEFAULT_LTE_FORM,
   generateNRConfig, generateCoreConfig, generateLTEConfig,
   embedBuilderMeta, extractBuilderMeta,
+  importCfgToBuilder,
 } from '../components/ConfigBuilder';
 import { configsService } from '../services/configs.service';
 import { useConfigContext } from '../context';
@@ -139,7 +140,7 @@ export const CreateTestView: React.FC = () => {
     setConfigName(config.name.replace(/\.cfg$/, ''));
 
     if (meta) {
-      // Restore the builder form state — switches to the right RAT type and fills all fields
+      // Fast path: builder metadata present → restore form state directly
       setConfigType(meta.type);
       if (meta.type === 'lte' || meta.type === 'nbiot' || meta.type === 'catm') {
         setLteForm({ ...DEFAULT_LTE_FORM, ...(meta.form as LTEFormState) });
@@ -147,14 +148,35 @@ export const CreateTestView: React.FC = () => {
         setNrForm({ ...DEFAULT_NR_FORM, ...(meta.form as NRFormState) });
       }
       toast({ title: 'Loaded into Builder', description: `${config.name} — edit the blocks, then Save.` });
-    } else {
-      // Legacy config without builder meta — just show preview
-      setShowPreview(true);
-      toast({
-        title: 'Loaded (View Only)',
-        description: `${config.name} has no builder metadata. Previewing text — create a new config to edit in builder.`,
-      });
+      return;
     }
+
+    // Fallback: parse the raw Amarisoft .cfg and reverse-engineer form state
+    const imported = importCfgToBuilder(config.content, config.name);
+    if (imported) {
+      setConfigType(imported.type);
+      if (imported.type === 'lte' || imported.type === 'nbiot' || imported.type === 'catm') {
+        setLteForm({ ...DEFAULT_LTE_FORM, ...(imported.form as LTEFormState) });
+      } else {
+        setNrForm({ ...DEFAULT_NR_FORM, ...(imported.form as NRFormState) });
+      }
+      const warnSuffix = imported.warnings.length > 0
+        ? ` (${imported.warnings.length} field${imported.warnings.length === 1 ? '' : 's'} unmapped — review before saving)`
+        : '';
+      toast({
+        title: 'Imported into Builder',
+        description: `Parsed ${config.name} as ${imported.type.toUpperCase()}${warnSuffix}. Edit and re-save to embed builder metadata.`,
+      });
+      return;
+    }
+
+    // Could not parse — fall back to read-only preview
+    setShowPreview(true);
+    toast({
+      title: 'Loaded (View Only)',
+      description: `${config.name} couldn't be parsed into the builder. Preview only.`,
+      variant: 'destructive',
+    });
   };
 
   return (
