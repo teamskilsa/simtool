@@ -4,7 +4,7 @@ import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ConfigItem, ModuleType } from '../../types';
-import { useSystem } from '../../context/SystemContext';
+import { useSystem, type ImportSystem } from '../../context/SystemContext';
 import { ConfigSelector } from './ConfigSelector';
 import { Loader2, Server, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +18,7 @@ interface ImportFormProps {
 
 export const ImportForm: React.FC<ImportFormProps> = ({ onImport, onCancel }) => {
     const { systems, selectedSystem, setSelectedSystem } = useSystem();
+
     const [selectedModule, setSelectedModule] = useState<ModuleType | ''>('');
     const [selectedConfigs, setSelectedConfigs] = useState<ConfigItem[]>([]);
     const [isImporting, setIsImporting] = useState(false);
@@ -87,18 +88,24 @@ export const ImportForm: React.FC<ImportFormProps> = ({ onImport, onCancel }) =>
                     <div className="space-y-4">
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Select System</label>
-                            <Select value={selectedSystem?.id || ''} onValueChange={handleSystemSelect}>
-                                <SelectTrigger className="bg-background">
-                                    <SelectValue placeholder="Choose a system..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {systems.map((system) => (
-                                        <SelectItem key={system.id} value={system.id}>
-                                            {system.name} ({system.host}:{system.port})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            {systems.length === 0 ? (
+                                <p className="text-sm text-muted-foreground rounded-md border border-dashed px-3 py-2">
+                                    No systems configured. Add a callbox in the Systems section first.
+                                </p>
+                            ) : (
+                                <Select value={selectedSystem?.id || ''} onValueChange={handleSystemSelect}>
+                                    <SelectTrigger className="bg-background">
+                                        <SelectValue placeholder="Choose a system..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {systems.map((system) => (
+                                            <SelectItem key={system.id} value={system.id}>
+                                                {system.name} ({system.host})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
                         </div>
 
                         {selectedSystem && (
