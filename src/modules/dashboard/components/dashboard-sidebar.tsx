@@ -22,7 +22,6 @@ import {
   Signal,
   Code,
   Bell,
-  Shield,
   User,
   Package,
 } from 'lucide-react';
@@ -59,13 +58,11 @@ const NAVIGATION_ITEMS = [
 ];
 
 const ADMIN_ITEMS = [
-  {
-    id: 'user-management', icon: Users, label: 'User Management',
-    subItems: [
-      { id: 'users', label: 'Users',              icon: Users  },
-      { id: 'roles', label: 'Roles & Permissions', icon: Shield },
-    ],
-  },
+  // User Management is a single-view section now — there's no separate
+  // Roles screen; roles ('admin' | 'user') are picked inside the user
+  // create/edit dialogs. Keeping it as a leaf entry so clicks land
+  // directly on the user list instead of a non-existent group page.
+  { id: 'users', icon: Users, label: 'User Management' },
 ];
 
 const PROFILE_ITEMS = [
@@ -95,9 +92,16 @@ export const DashboardSidebar = ({
     ...PROFILE_ITEMS,
   ];
 
-  const isSectionActive = (id: string) =>
-    activeSection === id || activeSection.startsWith(`${id}-`);
-
+  // A group is "active" (expanded + highlighted) when any of its sub-items
+  // is the current section. Sub-item IDs don't share a prefix with the
+  // group ID in this app (e.g. 'test-execution' vs 'test-management'), so
+  // we look the group up directly and walk its sub-items.
+  const groupContainsActive = (id: string): boolean => {
+    if (activeSection === id || activeSection.startsWith(`${id}-`)) return true;
+    const item = allItems.find(i => i.id === id);
+    return !!item?.subItems?.some(s => s.id === activeSection);
+  };
+  const isSectionActive = groupContainsActive;
   const isSubItemActive = (id: string) => activeSection === id;
 
   return (
@@ -117,7 +121,17 @@ export const DashboardSidebar = ({
         {allItems.map((item) => (
           <div key={item.id}>
             <button
-              onClick={() => setActiveSection(item.id)}
+              onClick={() => {
+                // For groups with sub-items, jumping to the parent ID lands
+                // on a placeholder ("Content for <id> section will be
+                // displayed here"). Always default to the first sub-item so
+                // a click on the group label gets the user to a real view.
+                if (item.subItems && item.subItems.length > 0) {
+                  setActiveSection(item.subItems[0].id);
+                } else {
+                  setActiveSection(item.id);
+                }
+              }}
               className={`
                 flex items-center w-full px-3 py-2 rounded-xl
                 transition-all group relative
