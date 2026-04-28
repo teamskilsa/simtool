@@ -1,2 +1,1 @@
-export * from './enb/EnbStats';
-export * from './enb/EnbTestPage';
+export * from './enb';

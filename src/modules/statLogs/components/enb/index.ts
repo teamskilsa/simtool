@@ -1,2 +1,7 @@
-export { default as EnbStats } from './EnbStats';
-export { default as EnbTestPage } from './EnbTestPage';
+// Barrel — only the real, in-use exports. The legacy EnbStats / EnbTestPage
+// test pages were removed; the live entry point is EnbMonitoringDashboard
+// (rendered by /stats).
+export { EnbMonitoringDashboard } from './EnbMonitoringDashboard';
+export { EnbStatsView } from './EnbStatsView';
+export { PerformanceView, DetailedStatsView } from './StatsViews';
+export { DashboardSettings } from './DashboardComponents';

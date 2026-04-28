@@ -1,102 +1,127 @@
+// Generic Amarisoft remote-API stats poller. Despite the file name, this hook
+// is module-agnostic — eNB (port 9001), gNB (9002), MME (9000), IMS (9003), UE
+// (9002) all expose a websocket remote API that responds to the `stats` message
+// in the same protocol shape, just with different stat fields.
+//
+// Caller must pass `ip` AND `port` — there is no default port. The dashboard
+// resolves the right port from the module selector + per-system override.
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRemoteAPI } from '@/modules/remoteAPI';
 
-interface UseEnbStatsOptions {
+export type MonitoringPhase = 'idle' | 'connecting' | 'connected' | 'error';
+
+interface UseAmariStatsOptions {
   pollInterval?: number;
-  autoConnect?: boolean;
   onStatsUpdate?: (stats: any) => void;
-  port?: number;
 }
 
-export function useEnbStats(ip: string, options: UseEnbStatsOptions = {}) {
-  const {
-    pollInterval = 5000,
-    autoConnect = false,
-    onStatsUpdate,
-    port = 9001  // Default ENB port
-  } = options;
+/**
+ * @param ip   target host (no scheme, no port)
+ * @param port remote-API port for the chosen module
+ */
+export function useEnbStats(
+  ip: string,
+  port: number,
+  options: UseAmariStatsOptions = {},
+) {
+  const { pollInterval = 1000, onStatsUpdate } = options;
 
   const remoteAPI = useRemoteAPI({
     server: ip,
-    port: port,
-    ssl: false
+    port,
+    ssl: false,
   });
 
-  const [stats, setStats] = useState<any>(null);
+  const [phase, setPhase] = useState<MonitoringPhase>('idle');
   const [error, setError] = useState<Error | null>(null);
-  const [isPolling, setIsPolling] = useState(false);
   const pollIntervalRef = useRef<NodeJS.Timeout>();
 
-  const fetchStats = useCallback(async () => {
-    if (!remoteAPI.connected) {
-      console.log(`Not connected to ${ip}:${port}, skipping fetch`);
-      return;
-    }
+  // Keep a ref to the latest onStatsUpdate so we don't re-create fetchStats
+  // every render (which would otherwise cancel the polling interval).
+  const onStatsUpdateRef = useRef(onStatsUpdate);
+  useEffect(() => { onStatsUpdateRef.current = onStatsUpdate; }, [onStatsUpdate]);
 
+  const fetchStats = useCallback(async () => {
+    if (!remoteAPI.connected) return;
     try {
-      console.log(`Fetching stats from ${ip}:${port}`);
       const response = await remoteAPI.execute('stats', {
-        message: "stats",
+        message: 'stats',
         samples: true,
         rf: true,
-        Initial_delay: 0.7
       });
-
-      console.log('Stats response:', response);
-      setStats(response);
-      onStatsUpdate?.(response);
+      onStatsUpdateRef.current?.(response);
     } catch (err) {
-      console.error('Stats fetch error:', err);
-      setError(err instanceof Error ? err : new Error('Failed to fetch stats'));
+      const e = err instanceof Error ? err : new Error('Failed to fetch stats');
+      setError(e);
+      // Don't tear down — keep polling; the next tick may succeed.
     }
-  }, [remoteAPI, ip, port, onStatsUpdate]);
+  }, [remoteAPI]);
 
   const startMonitoring = useCallback(async () => {
-    console.log(`Starting monitoring on ${ip}:${port}`);
+    setError(null);
+    setPhase('connecting');
     try {
       if (!remoteAPI.connected) {
-        console.log(`Connecting to ${ip}:${port}`);
         await remoteAPI.connect();
-        console.log('Connected successfully');
       }
-
-      setIsPolling(true);
-      console.log('Initial fetch...');
+      setPhase('connected');
       await fetchStats();
-      console.log(`Setting up polling interval: ${pollInterval}ms`);
       pollIntervalRef.current = setInterval(fetchStats, pollInterval);
     } catch (err) {
-      console.error('Start monitoring error:', err);
-      setError(err instanceof Error ? err : new Error('Failed to start monitoring'));
-      setIsPolling(false);
+      // The websocket-client emits raw browser errors (Event objects). Pull a
+      // useful message out of whatever shape it gave us.
+      const msg = friendlyWsError(err, ip, port);
+      setError(new Error(msg));
+      setPhase('error');
     }
   }, [remoteAPI, fetchStats, pollInterval, ip, port]);
 
   const stopMonitoring = useCallback(() => {
-    console.log(`Stopping monitoring on ${ip}:${port}`);
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = undefined;
     }
-    setIsPolling(false);
     remoteAPI.disconnect();
-  }, [remoteAPI, ip, port]);
-
-  useEffect(() => {
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-      if (remoteAPI.connected) {
-        remoteAPI.disconnect();
-      }
-    };
+    setPhase('idle');
+    setError(null);
   }, [remoteAPI]);
 
+  // When the underlying socket drops (server gone, network blip), reflect that
+  // in our phase so the UI can show a "disconnected" banner instead of a stale
+  // "connected" status.
+  useEffect(() => {
+    if (phase === 'connected' && !remoteAPI.connected) {
+      setPhase('error');
+      if (!error) setError(new Error(`Connection to ${ip}:${port} closed`));
+    }
+  }, [remoteAPI.connected, phase, ip, port, error]);
+
+  // Cleanup on unmount only.
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, []);
+
   return {
-    stats,
-    error: error || remoteAPI.error,
+    phase,
+    error: error || (remoteAPI.error as Error | null),
     isConnected: remoteAPI.connected,
     startMonitoring,
     stopMonitoring,
   };
+}
+
+/**
+ * Browser WebSocket errors arrive as opaque Event objects with no message.
+ * Translate the most common failure modes into something a user can act on.
+ */
+function friendlyWsError(err: unknown, host: string, port: number): string {
+  if (err instanceof Error && err.message) return err.message;
+  // Mixed content (page is https, ws is ws://) — bail with a hint.
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    return `Cannot reach ws://${host}:${port} from an HTTPS page (mixed content). Serve the app over HTTP or enable WSS on the callbox.`;
+  }
+  return `Failed to connect to ${host}:${port}. Verify the callbox is up, the remote API is enabled on this port, and the host is reachable from this browser.`;
 }
