@@ -13,13 +13,14 @@ import {
   DEFAULT_LTE_FORM, DEFAULT_LTE_EARFCN, makeDefaultLteCell,
   type LTEFormState, type LTECellEntry,
 } from './lteConstants';
+import { DEFAULT_NSA_FORM, type NSAFormState } from './nsaConstants';
 import { tryParseAmarisoftConfig, parseLogOptions } from './cfgParser';
 
-export type BuilderConfigType = 'nr' | 'lte' | 'nbiot' | 'catm' | 'core';
+export type BuilderConfigType = 'nr' | 'lte' | 'nbiot' | 'catm' | 'core' | 'nsa';
 
 export interface ImportedBuilderState {
   type: BuilderConfigType;
-  form: NRFormState | LTEFormState;
+  form: NRFormState | LTEFormState | NSAFormState;
   /** Non-fatal warnings about fields the parser couldn't map */
   warnings: string[];
 }
@@ -42,13 +43,10 @@ export function detectConfigType(
     return 'core';
   }
 
-  // NSA / EN-DC: BOTH cell_list (LTE) and nr_cell_list (NR) are non-empty,
-  // with mme_list as the core (LTE anchor + NR secondary). The LTE anchor
-  // is what binds the device to the network, so route to 'lte' (the LTE
-  // importer surfaces a warning naming the NR cells that won't be editable).
-  if (hasNonEmpty(ast.cell_list) && hasNonEmpty(ast.nr_cell_list)
-      && ast.mme_list !== undefined && ast.amf_list === undefined) {
-    return 'lte';
+  // NSA / EN-DC: BOTH cell_list (LTE) and nr_cell_list (NR) are non-empty.
+  // Single config file, mixed RAT — use the dedicated NSA builder.
+  if (hasNonEmpty(ast.cell_list) && hasNonEmpty(ast.nr_cell_list)) {
+    return 'nsa';
   }
 
   // NR SA (gNB Standalone): nr_cell_list + amf_list (5G core), no LTE cells
@@ -68,7 +66,7 @@ export function detectConfigType(
   if (fileName) {
     const lower = fileName.toLowerCase();
     if (/^mme|^ims|\.db$/.test(lower)) return 'core';
-    if (lower.includes('-nsa') || lower.includes('endc')) return 'lte';
+    if (lower.includes('-nsa') || lower.includes('endc')) return 'nsa';
     if (lower.startsWith('gnb') || lower.includes('-nr') || lower.includes('-sa')) return 'nr';
     if (lower.includes('nbiot') || lower.includes('nb-iot')) return 'nbiot';
     if (lower.includes('catm') || lower.includes('cat-m')) return 'catm';
@@ -229,22 +227,7 @@ function astToNRForm(ast: Record<string, any>, warnings: string[]): NRFormState 
 
 function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormState {
   const cellList: any[] = Array.isArray(ast.cell_list) ? ast.cell_list : [];
-  const nrCellList: any[] = Array.isArray(ast.nr_cell_list) ? ast.nr_cell_list : [];
   const cell0 = cellList[0] || {};
-
-  // NSA / EN-DC detection: both LTE anchor and NR secondary cells present.
-  // The builder edits the LTE anchor; NR cells are loaded read-only context.
-  if (nrCellList.length > 0) {
-    const nrSummary = nrCellList
-      .map((c: any) => `cell_id=${c.cell_id ?? '?'}, band=n${c.band ?? '?'}, ARFCN=${c.dl_nr_arfcn ?? '?'}`)
-      .join('; ');
-    warnings.push(
-      `NSA / EN-DC config: ${nrCellList.length} NR secondary cell${nrCellList.length === 1 ? '' : 's'} ` +
-      `(${nrSummary}) detected. The LTE anchor is loaded into the builder; ` +
-      `NR-side fields are NOT editable here and will be lost on save. ` +
-      `For NR-only editing, import a gNB SA config instead.`
-    );
-  }
 
   // Multi-cell (carrier aggregation) — info-only when 2+ LTE cells imported.
   if (cellList.length > 1) {
@@ -431,6 +414,25 @@ function astToCoreForm(ast: Record<string, any>, warnings: string[]): NRFormStat
   };
 }
 
+// ─── NSA / EN-DC mapper — combine LTE anchor + NR secondary forms ─────────
+
+function astToNSAForm(ast: Record<string, any>, warnings: string[]): NSAFormState {
+  // Reuse the existing LTE and NR mappers — they each look at their own
+  // top-level keys (cell_list / cell_default for LTE, nr_cell_list /
+  // nr_cell_default for NR), so a single AST works for both.
+  const lteForm = astToLTEForm(ast, warnings);
+  const nrForm  = astToNRForm(ast, warnings);
+
+  const lteCells = lteForm.cells.length;
+  const nrCells  = nrForm.cells.length;
+  warnings.unshift(
+    `NSA / EN-DC config: ${lteCells} LTE anchor cell${lteCells === 1 ? '' : 's'} ` +
+    `+ ${nrCells} NR secondary cell${nrCells === 1 ? '' : 's'}. ` +
+    `Edit either side via the Anchor / Secondary tabs.`
+  );
+  return { lteForm, nrForm };
+}
+
 // ─── Public entry point ─────────────────────────────────────────────────────
 
 /**
@@ -451,6 +453,9 @@ export function importCfgToBuilder(text: string, fileName?: string): ImportedBui
 
   if (detected === 'core') {
     return { type: 'core', form: astToCoreForm(ast, warnings), warnings };
+  }
+  if (detected === 'nsa') {
+    return { type: 'nsa', form: astToNSAForm(ast, warnings), warnings };
   }
   if (detected === 'nr') {
     return { type: 'nr', form: astToNRForm(ast, warnings), warnings };

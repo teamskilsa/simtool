@@ -12,3 +12,7 @@ export type { BuilderMeta } from './builderMeta';
 export { parseAmarisoftConfig, tryParseAmarisoftConfig, parseLogOptions } from './cfgParser';
 export { importCfgToBuilder, detectConfigType } from './cfgImporter';
 export type { ImportedBuilderState, BuilderConfigType } from './cfgImporter';
+export { NSAConfigBuilder } from './NSAConfigBuilder';
+export { generateNSAConfig } from './nsaConfigGenerator';
+export { DEFAULT_NSA_FORM } from './nsaConstants';
+export type { NSAFormState } from './nsaConstants';

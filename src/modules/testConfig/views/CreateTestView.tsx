@@ -9,22 +9,23 @@ import { Save, Copy, Download, Eye, EyeOff, FolderOpen, Radio, Shield, Wifi, Sig
 import { ResizablePanel } from '@/components/ui/resizable-panel';
 import { toast } from '@/components/ui/use-toast';
 import {
-  ConfigBuilder, CoreConfigBuilder, LTEConfigBuilder,
-  DEFAULT_NR_FORM, DEFAULT_LTE_FORM,
-  generateNRConfig, generateCoreConfig, generateLTEConfig,
+  ConfigBuilder, CoreConfigBuilder, LTEConfigBuilder, NSAConfigBuilder,
+  DEFAULT_NR_FORM, DEFAULT_LTE_FORM, DEFAULT_NSA_FORM,
+  generateNRConfig, generateCoreConfig, generateLTEConfig, generateNSAConfig,
   embedBuilderMeta, extractBuilderMeta,
   importCfgToBuilder,
 } from '../components/ConfigBuilder';
 import { configsService } from '../services/configs.service';
 import { useConfigContext } from '../context';
-import type { NRFormState, LTEFormState } from '../components/ConfigBuilder';
+import type { NRFormState, LTEFormState, NSAFormState } from '../components/ConfigBuilder';
 import type { ConfigItem } from '../types';
 
-type ConfigType = 'nr' | 'lte' | 'nbiot' | 'catm' | 'core';
+type ConfigType = 'nr' | 'lte' | 'nbiot' | 'catm' | 'core' | 'nsa';
 
 const RAT_OPTIONS: { id: ConfigType; label: string; icon: any; description: string }[] = [
   { id: 'nr',    label: 'NR (5G)',    icon: Radio,  description: 'gNB SA' },
   { id: 'lte',   label: 'LTE',       icon: Wifi,   description: 'eNB' },
+  { id: 'nsa',   label: 'NSA',       icon: Radio,  description: 'EN-DC LTE+NR' },
   { id: 'nbiot', label: 'NB-IoT',    icon: Signal, description: 'IoT' },
   { id: 'catm',  label: 'CAT-M',     icon: Signal, description: 'eMTC' },
   { id: 'core',  label: 'Core',      icon: Shield, description: 'MME/AMF' },
@@ -36,16 +37,20 @@ export const CreateTestView: React.FC = () => {
   const [configName, setConfigName] = useState('gnb-config');
   const [nrForm, setNrForm] = useState<NRFormState>({ ...DEFAULT_NR_FORM });
   const [lteForm, setLteForm] = useState<LTEFormState>({ ...DEFAULT_LTE_FORM });
+  const [nsaForm, setNsaForm] = useState<NSAFormState>({ ...DEFAULT_NSA_FORM });
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
   const handleNrChange = (key: string, value: any) => setNrForm(prev => ({ ...prev, [key]: value }));
   const handleLteChange = (key: string, value: any) => setLteForm(prev => ({ ...prev, [key]: value }));
+  const handleNsaChange = (key: 'lteForm' | 'nrForm', value: any) =>
+    setNsaForm(prev => ({ ...prev, [key]: value }));
 
   const handleTypeChange = (type: ConfigType) => {
     setConfigType(type);
     const nameMap: Record<ConfigType, string> = {
-      nr: 'gnb-config', lte: 'enb-config', nbiot: 'nbiot-config', catm: 'catm-config', core: 'mme-config',
+      nr: 'gnb-config', lte: 'enb-config', nsa: 'enb-nsa-config',
+      nbiot: 'nbiot-config', catm: 'catm-config', core: 'mme-config',
     };
     setConfigName(nameMap[type]);
   };
@@ -55,16 +60,17 @@ export const CreateTestView: React.FC = () => {
     switch (configType) {
       case 'nr': return generateNRConfig(nrForm);
       case 'lte': return generateLTEConfig(lteForm, 'lte');
+      case 'nsa': return generateNSAConfig(nsaForm);
       case 'nbiot': return generateLTEConfig(lteForm, 'nbiot');
       case 'catm': return generateLTEConfig(lteForm, 'catm');
       case 'core': return generateCoreConfig(nrForm);
     }
-  }, [configType, nrForm, lteForm]);
+  }, [configType, nrForm, lteForm, nsaForm]);
 
   const moduleType = (() => {
     switch (configType) {
       case 'nr': return nrForm.fr2 ? 'gnb' : 'enb';
-      case 'lte': case 'nbiot': case 'catm': return 'enb';
+      case 'lte': case 'nbiot': case 'catm': case 'nsa': return 'enb';
       case 'core': return 'mme';
     }
   })();
@@ -90,7 +96,10 @@ export const CreateTestView: React.FC = () => {
     try {
       const fileName = configName.endsWith('.cfg') ? configName : `${configName}.cfg`;
       // Embed builder metadata at the top so this config can be loaded back into the form
-      const form = (configType === 'lte' || configType === 'nbiot' || configType === 'catm') ? lteForm : nrForm;
+      const form =
+        configType === 'nsa' ? nsaForm :
+        (configType === 'lte' || configType === 'nbiot' || configType === 'catm') ? lteForm :
+        nrForm;
       const contentWithMeta = embedBuilderMeta(configOutput, { type: configType, form });
 
       await configsService.importConfig({
@@ -149,14 +158,23 @@ export const CreateTestView: React.FC = () => {
     const meta = extractBuilderMeta(config.content);
     setConfigName(config.name.replace(/\.cfg$/, ''));
 
+    const applyForm = (type: ConfigType, form: any) => {
+      setConfigType(type);
+      if (type === 'nsa') {
+        setNsaForm({
+          lteForm: { ...DEFAULT_LTE_FORM, ...(form?.lteForm ?? {}) },
+          nrForm:  { ...DEFAULT_NR_FORM,  ...(form?.nrForm  ?? {}) },
+        });
+      } else if (type === 'lte' || type === 'nbiot' || type === 'catm') {
+        setLteForm({ ...DEFAULT_LTE_FORM, ...(form as LTEFormState) });
+      } else {
+        setNrForm({ ...DEFAULT_NR_FORM, ...(form as NRFormState) });
+      }
+    };
+
     if (meta) {
       // Fast path: builder metadata present → restore form state directly
-      setConfigType(meta.type);
-      if (meta.type === 'lte' || meta.type === 'nbiot' || meta.type === 'catm') {
-        setLteForm({ ...DEFAULT_LTE_FORM, ...(meta.form as LTEFormState) });
-      } else {
-        setNrForm({ ...DEFAULT_NR_FORM, ...(meta.form as NRFormState) });
-      }
+      applyForm(meta.type, meta.form);
       toast({ title: 'Loaded into Builder', description: `${config.name} — edit the blocks, then Save.` });
       return;
     }
@@ -164,14 +182,9 @@ export const CreateTestView: React.FC = () => {
     // Fallback: parse the raw Amarisoft .cfg and reverse-engineer form state
     const imported = importCfgToBuilder(config.content, config.name);
     if (imported) {
-      setConfigType(imported.type);
-      if (imported.type === 'lte' || imported.type === 'nbiot' || imported.type === 'catm') {
-        setLteForm({ ...DEFAULT_LTE_FORM, ...(imported.form as LTEFormState) });
-      } else {
-        setNrForm({ ...DEFAULT_NR_FORM, ...(imported.form as NRFormState) });
-      }
+      applyForm(imported.type, imported.form);
       const warnSuffix = imported.warnings.length > 0
-        ? ` (${imported.warnings.length} field${imported.warnings.length === 1 ? '' : 's'} unmapped — review before saving)`
+        ? ` — ${imported.warnings.length} note${imported.warnings.length === 1 ? '' : 's'}; review before saving`
         : '';
       toast({
         title: 'Imported into Builder',
@@ -273,6 +286,7 @@ export const CreateTestView: React.FC = () => {
               {(configType === 'lte' || configType === 'nbiot' || configType === 'catm') && (
                 <LTEConfigBuilder form={lteForm} onChange={handleLteChange} ratMode={configType} />
               )}
+              {configType === 'nsa' && <NSAConfigBuilder form={nsaForm} onChange={handleNsaChange} />}
               {configType === 'core' && <CoreConfigBuilder form={nrForm} onChange={handleNrChange} />}
             </>
           }
@@ -280,7 +294,7 @@ export const CreateTestView: React.FC = () => {
             <div className="flex flex-col h-full">
               <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800 bg-gray-900 rounded-tr-lg">
                 <span className="text-xs font-mono text-gray-400">
-                  {configType === 'core' ? 'mme.cfg' : 'enb.cfg'}
+                  {configType === 'core' ? 'mme.cfg' : configType === 'nsa' ? 'enb-nsa.cfg' : 'enb.cfg'}
                 </span>
                 <Badge variant="outline" className="text-[10px] border-gray-700 text-gray-400">
                   {RAT_OPTIONS.find(r => r.id === configType)?.description}
@@ -299,6 +313,7 @@ export const CreateTestView: React.FC = () => {
             {(configType === 'lte' || configType === 'nbiot' || configType === 'catm') && (
               <LTEConfigBuilder form={lteForm} onChange={handleLteChange} ratMode={configType} />
             )}
+            {configType === 'nsa' && <NSAConfigBuilder form={nsaForm} onChange={handleNsaChange} />}
             {configType === 'core' && <CoreConfigBuilder form={nrForm} onChange={handleNrChange} />}
           </CardContent>
         </Card>
