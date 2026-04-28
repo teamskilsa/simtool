@@ -117,7 +117,17 @@ export const CreateTestView: React.FC = () => {
     configType === 'core' ? c.module === 'mme' : ['enb', 'gnb'].includes(c.module)
   );
 
-  // If the user clicked "Edit in Builder" from Test Configurations, auto-load that config
+  // CreateTestView mounts with a fresh ConfigProvider (per-section), whose
+  // initial configs[] comes from localStorage and is usually empty. Trigger an
+  // API fetch on mount so configs populate from the server (where imported
+  // .cfg files actually live).
+  useEffect(() => {
+    loadConfigs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // If the user clicked "Edit in Builder" from Test Configurations, auto-load
+  // that config once the configs array has been populated by the fetch above.
   useEffect(() => {
     const pendingId = typeof window !== 'undefined' ? sessionStorage.getItem('simtool_load_config_id') : null;
     if (!pendingId || configs.length === 0) return;
