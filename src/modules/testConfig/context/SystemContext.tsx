@@ -11,8 +11,12 @@ import { useSystems } from '@/modules/systems/hooks/use-systems';
 export interface ImportSystem {
     id: string;
     name: string;
-    host: string;   // IP address
-    port: string;   // agent port (9050)
+    host: string;          // IP address
+    sshPort: number;       // SSH port (default 22)
+    username: string;
+    password?: string;
+    privateKey?: string;
+    authMode?: 'password' | 'privateKey';
 }
 
 interface SystemContextType {
@@ -34,7 +38,11 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
             id: String(s.id),
             name: s.name,
             host: s.ip,
-            port: '9050',
+            sshPort: s.sshPort ?? 22,
+            username: s.username ?? '',
+            password: s.password,
+            privateKey: s.privateKey,
+            authMode: s.authMode,
         })),
     [globalSystems]);
 

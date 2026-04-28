@@ -9,12 +9,10 @@ import { useToast } from '@/components/ui/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import type { ImportSystem } from '../../context/SystemContext';
 
 interface ConfigSelectorProps {
-    system: {
-        host: string;
-        port: string;
-    };
+    system: ImportSystem;
     module: ModuleType;
     selectedConfigs: ConfigItem[];
     customPath?: string;
@@ -41,16 +39,14 @@ export const ConfigSelector: React.FC<ConfigSelectorProps> = ({
 
     const fetchConfigList = async () => {
         if (fetchInProgress.current) return;
-        
+
         try {
             fetchInProgress.current = true;
             setLoading(true);
-            console.log('Fetching config list with:', { module, host: system.host, port: system.port });
+            console.log('Fetching config list with:', { module, host: system.host });
             const list = await testConfigService.fetchConfigList(
                 module,
-                system.host,
-                system.port,
-                customPath
+                system,
             );
             console.log('Fetched config list:', list);
             setConfigs(list);
@@ -89,9 +85,7 @@ export const ConfigSelector: React.FC<ConfigSelectorProps> = ({
                 const fullConfig = await testConfigService.fetchConfigContent(
                     module,
                     config.name,
-                    system.host,
-                    system.port,
-                    customPath
+                    system,
                 );
                 console.log('Fetched config content:', fullConfig);
                 onConfigSelect([...selectedConfigs, fullConfig]);
@@ -118,9 +112,7 @@ export const ConfigSelector: React.FC<ConfigSelectorProps> = ({
                     const fullConfig = await testConfigService.fetchConfigContent(
                         module,
                         config.name,
-                        system.host,
-                        system.port,
-                        customPath
+                        system,
                     );
                     allConfigs.push(fullConfig);
                 }
