@@ -189,6 +189,25 @@ export class WebSocketClient extends EventEmitter {
     });
   }
 
+  /**
+   * Fire-and-forget send. Doesn't add message_id, doesn't track a response,
+   * doesn't return a Promise. Used for streaming channels like the
+   * `monitor` command where the server pushes back zero-or-more responses
+   * over time and matching them to a single client request would lose data.
+   *
+   * Listen via `client.on('message', ...)` or `client.on('<msg-name>', ...)`
+   * for the responses.
+   */
+  sendRaw(message: RemoteAPIMessage): void {
+    if (!this.ws || !this.connected) {
+      throw new Error('Not connected');
+    }
+    if (this.authState !== 'authenticated') {
+      throw new Error('Not authenticated yet');
+    }
+    this.ws.send(JSON.stringify(message));
+  }
+
   private handleMessage(message: any) {
     if (message.message_id) {
       const pending = this.pendingMessages.get(message.message_id.toString());
