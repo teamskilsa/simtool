@@ -31,26 +31,28 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
   const logOptions = logParts.join(',');
 
   // ── cipher / integ algo arrays ───────────────────────────────────────────────
-  // Amarisoft's parser expects INTEGER values here, e.g.
-  //   cipher_algo_pref: [0, 2, 3]
-  //   integ_algo_pref:  [2, 3]
-  // where 0=EEA0/null, 1=EEA1/SNOW, 2=EEA2/AES, 3=EEA3/ZUC (similarly
-  // for EIAn). The NR generator already does this. We tried two wrong
-  // forms before:
+  // Amarisoft's parser expects INTEGER values, AND on lteenb 2026-04-22+
+  // the valid range is 1–3 ONLY. Earlier rounds of this bug:
   //   ["eea0", "eea2"]   → "algorithm identifier expected"
   //   [EEA0, EEA2]       → "unexpected identifier: EEA0"
-  // Both kill lteenb at config-load and leave the deploy stuck at
-  // port-check. Form state stores 'eeaN' / 'eiaN' strings (or sometimes
-  // raw numbers); strip the trailing digit and emit as int regardless.
+  //   [0, 2, 3]          → "valid algorithm identifiers are between 1 and 3"
+  //
+  // 1=EEA1/SNOW, 2=EEA2/AES, 3=EEA3/ZUC (similarly for EIAn). 0 (null
+  // cipher) is rejected by Amarisoft as insecure. We strip it both at
+  // generation time AND in the deploy sanitizer so old saved configs
+  // that had it inherit the fix.
   const toAlgoInt = (a: string | number) => {
     if (typeof a === 'number') return a;
     const m = String(a).match(/(\d+)\s*$/);
-    return m ? parseInt(m[1], 10) : 0;
+    return m ? parseInt(m[1], 10) : NaN;
   };
-  const cipherArr = (form.cipherAlgoPref ?? ['eea0', 'eea2', 'eea3'])
-    .map(toAlgoInt).join(', ');
-  const integArr = (form.integAlgoPref ?? ['eia2', 'eia3'])
-    .map(toAlgoInt).join(', ');
+  const filterValidAlgo = (n: number) => Number.isFinite(n) && n >= 1 && n <= 3;
+
+  // Default form value used to ship 'eea0' first; bumped to start at 1.
+  const cipherArr = (form.cipherAlgoPref ?? ['eea1', 'eea2', 'eea3'])
+    .map(toAlgoInt).filter(filterValidAlgo).join(', ');
+  const integArr = (form.integAlgoPref ?? ['eia1', 'eia2', 'eia3'])
+    .map(toAlgoInt).filter(filterValidAlgo).join(', ');
 
   // ── Build cell_list — emit every cell in form.cells[] ───────────────────────
   // The flat form fields (cellId, pci, ...) mirror cells[activeCellIdx]; the

@@ -315,9 +315,10 @@ export const DEFAULT_LTE_FORM: LTEFormState = {
   // Bearers
   drbConfig: 'drb.cfg',
 
-  // Security
-  cipherAlgoPref: ['eea0', 'eea2', 'eea3'],
-  integAlgoPref: ['eia2', 'eia3'],
+  // Security — Amarisoft 2026-04-22 only accepts 1..3 (EEA0/EIA0 null
+  // is rejected at parse time as insecure).
+  cipherAlgoPref: ['eea1', 'eea2', 'eea3'],
+  integAlgoPref: ['eia1', 'eia2', 'eia3'],
 
   // NB-IoT
   nbIot: false,

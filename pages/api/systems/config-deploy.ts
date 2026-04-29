@@ -75,21 +75,22 @@ const TAIL = (s: string, n = 500) => (s ?? '').toString().slice(-n);
  * earlier builder versions emitted. Runs right before SCP so old saved
  * configs deploy cleanly without the user having to re-Save every file.
  *
- * cipher_algo_pref / integ_algo_pref normalization. Amarisoft wants
- * INTEGER values (0=EEA0, 1=EEA1, 2=EEA2, 3=EEA3). Three earlier wrong
- * forms we've shipped or seen on disk:
+ * cipher_algo_pref / integ_algo_pref normalization. Amarisoft 2026-04-22
+ * wants INTEGER values 1..3:
+ *   1 = EEA1/SNOW3G   2 = EEA2/AES   3 = EEA3/ZUC
+ * 0 (null cipher) is REJECTED with
+ *   "valid algorithm identifiers are between 1 and 3"
  *
- *   ["eea0", "eea2"]   → quoted lowercase strings.
- *                        Errors: "algorithm identifier expected"
- *   [EEA0, EEA2]       → bare uppercase identifiers.
- *                        Errors: "unexpected identifier: EEA0"
- *   ["EEA2"]           → quoted uppercase (sometimes from manual edits).
+ * Four wrong shapes we've shipped or seen on disk:
+ *   ["eea0", "eea2"]   → quoted lowercase strings ("algorithm identifier expected")
+ *   [EEA0, EEA2]       → bare uppercase identifiers ("unexpected identifier")
+ *   ["EEA2"]           → quoted uppercase (manual edits)
+ *   [0, 2, 3]          → integers including 0 ("between 1 and 3")
  *
- * All three rewrite to bare integers: [0, 2] / [2, 3]. Already-correct
- * integer arrays pass through untouched.
- *
- * Returns the rewritten content + a list of fixes applied so the deploy
- * report can surface what changed.
+ * All four normalize to bare integers in 1..3. The 0 entry is dropped
+ * entirely — null cipher is insecure and Amarisoft refuses it. If the
+ * array would end up empty after dropping 0s we still emit `[]` rather
+ * than nothing, matching Amarisoft's "no preference" semantics.
  */
 function sanitizeAmarisoftCfg(content: string): { fixed: string; appliedFixes: string[] } {
   const applied: string[] = [];
@@ -97,31 +98,34 @@ function sanitizeAmarisoftCfg(content: string): { fixed: string; appliedFixes: s
 
   for (const field of ['cipher_algo_pref', 'integ_algo_pref']) {
     const re = new RegExp(`(${field}\\s*:\\s*\\[)([^\\]]*)(\\])`, 'g');
-    out = out.replace(re, (full: string, head: string, body: string, tail: string) => {
-      // Empty array → leave alone.
-      const trimmed = body.trim();
-      if (!trimmed) return full;
+    out = out.replace(re, (full: string, head: string, _body: string, _tail: string) => {
+      const body = _body.trim();
+      if (!body) return full;
 
-      // Already pure integers? Skip — no need to touch.
-      const allInts = trimmed.split(',').every(s => /^\s*\d+\s*$/.test(s));
-      if (allInts) return full;
-
-      // Convert each entry — quoted/unquoted, lowercase/uppercase — to
-      // an int by taking the trailing digit off "EEA2" / "eia3" etc.
-      const ints = trimmed
+      // Convert every entry — quoted/unquoted, lowercase/uppercase, even
+      // already-integer — to an int via the trailing digit. Then keep
+      // only 1..3.
+      const allInts: number[] = body
         .split(',')
         .map(s => s.trim().replace(/^["']|["']$/g, ''))
         .filter(Boolean)
         .map(s => {
           const m = s.match(/(\d+)\s*$/);
           return m ? parseInt(m[1], 10) : NaN;
-        })
-        .filter(n => Number.isFinite(n));
+        });
+      const valid = allInts.filter(n => Number.isFinite(n) && n >= 1 && n <= 3);
 
-      if (ints.length === 0) return full;
-      const replaced = `[${ints.join(', ')}]`;
-      applied.push(`${field}: '${trimmed}' → '${ints.join(', ')}'`);
-      // head ends with '['; tail is ']'. Replace the whole thing.
+      // No-op fast path: if the parse already produced exactly the
+      // valid ints in the same order with no whitespace differences,
+      // skip rewriting — keeps reports quiet on configs that are fine.
+      const wasAlreadyValid =
+        allInts.length === valid.length &&
+        allInts.every((n, i) => n === valid[i]) &&
+        /^\s*\d+(\s*,\s*\d+)*\s*$/.test(body);
+      if (wasAlreadyValid) return full;
+
+      const replaced = `[${valid.join(', ')}]`;
+      applied.push(`${field}: '${body}' → '${valid.join(', ')}'`);
       return `${head.replace(/\[\s*$/, '')}${replaced}`;
     });
   }
@@ -334,15 +338,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // ── Phase 5.5: diagnostics on port-check failure ─────────────────
     // The daemon "restarted cleanly" per systemd but never opened its
-    // API port. Three likely causes, all answerable from on-box state:
-    //   (a) config parse error — journalctl / log file shows it
-    //   (b) daemon hangs waiting on RF init (e.g. trx_ip peer down)
-    //       — process is alive, log file exists but truncated
-    //   (c) daemon exited silently after parse — process gone, no log
-    //       in expected path because Amarisoft writes the log
-    //       relative to its working directory or to a different path
-    //       than the cfg's `log_filename` field
-    // The diagnostics below cover all three.
+    // API port. Three likely causes:
+    //   (a) config parse error
+    //   (b) daemon hangs on RF init (e.g. trx_ip peer down)
+    //   (c) daemon exited silently after parse
+    //
+    // Critically: Amarisoft's daemons run inside a `screen` session
+    // (so users can attach via `screen -x lte` to see live output).
+    // The startup parse-error messages go to that screen's stdout,
+    // NOT to systemd-journald and NOT to the cfg-declared log file
+    // (which is only written AFTER successful init). So the deploy
+    // report must capture the screen buffer or it'll keep telling
+    // you "port didn't come up" without the actual reason. We dump
+    // it here via `screen -X hardcopy -h` and read it back.
     if (mapping.service && restartSuccess && !portStatus) {
       // (1) systemd's view — was the unit actually running?
       await exec(
@@ -377,20 +385,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         'log-tail',
         `${sudo} tail -n 40 ${q(logPath)} 2>&1 || true`,
       );
+
+      // (6) THE one that actually catches Amarisoft startup errors:
+      //     dump the running screen session's hardcopy. Amarisoft's
+      //     daemons print parse errors to their stdout inside a screen
+      //     wrapper named after the unit (`screen -x lte` etc.), and
+      //     those messages NEVER reach journalctl or the cfg log file.
+      //     `screen -X hardcopy -h <file>` writes the visible buffer +
+      //     full scrollback to a file we then cat back.
+      //
+      //     Try the unit name as the screen session name; fall back to
+      //     listing all sessions and dumping the first one that looks
+      //     Amarisoft-y. Without this the report would just say "port
+      //     didn't come up" — same as before — and the user would have
+      //     to manually attach to screen and screenshot.
+      const dumpFile = `/tmp/simtool-screen-${Date.now()}.txt`;
+      await exec(
+        'screen-list',
+        `${sudo} screen -ls 2>&1 | head -20 || echo '(no screen sessions)'`,
+      );
+      // -h includes scrollback. -p 0 picks the first window.
+      await exec(
+        'screen-hardcopy',
+        `${sudo} screen -S ${q(mapping.service)} -p 0 -X hardcopy -h ${q(dumpFile)} 2>&1; ` +
+        `${sudo} sed -e 's/^[[:space:]]*$//' ${q(dumpFile)} 2>/dev/null | grep -v '^$' | tail -n 80 || ` +
+        `echo '(no screen buffer captured; daemon may not be running under screen, or session name differs from unit name)'`,
+      );
     }
 
     // ── Wrap up ──────────────────────────────────────────────────────
-    // If we tailed journalctl/log, surface anything that looks like an
-    // Amarisoft parse error in the headline message — it's the single
-    // most actionable signal.
+    // Surface any Amarisoft parse error in the headline. We pull from
+    // every diagnostic source we collected — the screen-hardcopy is the
+    // most likely match (Amarisoft writes parse errors to stdout inside
+    // the screen wrapper), but also scan journalctl + log-tail in case
+    // the daemon happened to write to the cfg log file before exit.
     let portCheckHint = '';
     if (mapping.service && restartSuccess && !portStatus) {
+      const screenEntry  = log.find(e => e.step === 'screen-hardcopy');
       const journalEntry = log.find(e => e.step === 'journalctl');
       const logEntry     = log.find(e => e.step === 'log-tail');
-      const haystack = `${journalEntry?.stdout ?? ''}\n${logEntry?.stdout ?? ''}`;
+      const haystack = `${screenEntry?.stdout ?? ''}\n${journalEntry?.stdout ?? ''}\n${logEntry?.stdout ?? ''}`;
       // Line like:  config/enb.cfg:75:26: algorithm identifier expected
-      const m = haystack.match(/config\/[^\s:]+:\d+:\d+:[^\n]+/);
-      if (m) portCheckHint = ` — ${m[0].trim()}`;
+      const parseErr = haystack.match(/config\/[^\s:]+:\d+:\d+:[^\n]+/);
+      // Or a generic Amarisoft error stem: "[CONFIG] error", "[INIT]..."
+      const tagged = !parseErr && haystack.match(/\[(?:CONFIG|INIT|RF|FATAL|ERROR)\][^\n]+/);
+      if (parseErr) portCheckHint = ` — ${parseErr[0].trim()}`;
+      else if (tagged) portCheckHint = ` — ${tagged[0].trim()}`;
     }
 
     const finalError = !restartSuccess
