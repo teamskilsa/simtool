@@ -130,12 +130,30 @@ class ExecutionService {
       step.endTime = new Date();
       step.duration = (step.endTime.getTime() - step.startTime!.getTime()) / 1000;
 
-      if (result.copySuccess && result.restartSuccess) {
-        step.status = result.portStatus ? 'success' : 'failure';
-        if (!result.portStatus) step.error = `Service started but port not listening`;
+      // Forward the diagnostic surface from the API verbatim — phase tag,
+      // tail of restart output, and the full per-command log. Without
+      // this the UI could only ever say "Deploy failed" no matter what
+      // actually went wrong; with it the user can see "sudo: no tty
+      // present" or "config/enb.cfg:44:16: field 'cell_id': range is
+      // [0:255]" inline.
+      step.phase = result.phase;
+      step.output = result.output;
+      step.commandLog = result.commandLog;
+
+      const isSuccess = result.copySuccess && result.restartSuccess && result.portStatus;
+      if (isSuccess) {
+        step.status = 'success';
       } else {
         step.status = 'failure';
-        step.error = result.restartError || result.copyMessage || 'Deploy failed';
+        // Prefer the API's high-level `error` message (it's already
+        // composed for human reading); fall back through restartError /
+        // copyMessage / a generic placeholder.
+        step.error =
+          result.error
+          || result.restartError
+          || (!result.copySuccess && result.copyMessage)
+          || (!result.portStatus && result.restartSuccess && `Service started but port did not come up`)
+          || 'Deploy failed (no error details from server — check the network tab)';
       }
     } catch (error) {
       step.status = 'failure';

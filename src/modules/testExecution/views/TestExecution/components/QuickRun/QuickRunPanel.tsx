@@ -52,6 +52,17 @@ const MODULE_LABEL: Record<ModuleType, string> = {
 // Modules with KPIs worth viewing post-run. UE-DB is just a subscriber list.
 const RADIO_MODULES: ModuleType[] = ['enb', 'gnb'];
 
+/**
+ * True when the file is an Amarisoft *dependency* file, not a deployable
+ * top-level config. Examples: drb.cfg / drb_nr.cfg (data radio bearer
+ * defs included by enb.cfg via `drb_config`), sib*.asn (system info
+ * blocks), rrc_nr.cfg (RRC ASN.1 includes). These would silently
+ * overwrite the wrong target file if a user picked them in Quick Run, so
+ * we hide them from the dropdown.
+ */
+const DEPENDENCY_NAME_RE = /^(drb|sib|rrc[_-]?nr|fapi)/i;
+const isDependencyFile = (name: string) => DEPENDENCY_NAME_RE.test(name);
+
 // How long to wait before auto-jumping to Stats after a successful radio
 // deploy. Long enough that the user can read the success line and press
 // Cancel if they don't want it.
@@ -158,6 +169,9 @@ export function QuickRunPanel() {
     const out: Array<StoredConfig & { module: ModuleType }> = [];
     for (const m of Object.keys(configs) as ModuleType[]) {
       for (const c of configs[m] ?? []) {
+        // Skip dependency files (drb*.cfg, sib*.asn, etc.) — they're
+        // included by the main cfg, not deployed standalone.
+        if (isDependencyFile(c.name)) continue;
         out.push({ ...c, module: m });
       }
     }
@@ -412,7 +426,53 @@ export function QuickRunPanel() {
           <AlertDescription className="space-y-2">
             <p>{result.name}</p>
             {result.error && (
-              <p className="font-mono text-xs">{result.error}</p>
+              <p className="font-mono text-xs whitespace-pre-wrap">{result.error}</p>
+            )}
+            {result.phase && (
+              <p className="text-[11px] opacity-80">
+                Failed at phase: <span className="font-mono">{result.phase}</span>
+              </p>
+            )}
+
+            {/* Command log — collapsed by default. The phase + error line
+                above answers most "why" questions, but for the trickier
+                failures (sudo password prompt, exotic Amarisoft errors)
+                the full per-command stderr is the only thing that
+                actually pins down the cause. Show as a <details> so it
+                doesn't shout when it's not needed. */}
+            {result.commandLog && result.commandLog.length > 0 && (
+              <details className="text-[11px]">
+                <summary className="cursor-pointer opacity-80 hover:opacity-100">
+                  Show details ({result.commandLog.length} step{result.commandLog.length === 1 ? '' : 's'})
+                </summary>
+                <div className="mt-2 space-y-2 pl-2 border-l border-current/30">
+                  {result.commandLog.map((entry, i) => (
+                    <div key={i} className="font-mono text-[11px] leading-snug">
+                      <div className="flex items-baseline gap-2">
+                        <span className={cn(entry.ok ? 'text-emerald-600' : 'text-destructive')}>
+                          {entry.ok ? '✓' : '✗'}
+                        </span>
+                        <span className="font-semibold">{entry.step}</span>
+                        {typeof entry.code === 'number' && (
+                          <span className="opacity-60">exit={entry.code}</span>
+                        )}
+                        {typeof entry.ms === 'number' && (
+                          <span className="opacity-60">{entry.ms}ms</span>
+                        )}
+                      </div>
+                      {entry.cmd && (
+                        <pre className="opacity-70 whitespace-pre-wrap break-all pl-4">$ {entry.cmd}</pre>
+                      )}
+                      {entry.stdout && (
+                        <pre className="opacity-90 whitespace-pre-wrap break-all pl-4">{entry.stdout}</pre>
+                      )}
+                      {entry.stderr && (
+                        <pre className="text-destructive whitespace-pre-wrap break-all pl-4">{entry.stderr}</pre>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </details>
             )}
 
             {result.status === 'success' && module && RADIO_MODULES.includes(module) && (
