@@ -172,9 +172,12 @@ export const CreateTestView: React.FC = () => {
       const goDeploy = () => {
         if (typeof window === 'undefined') return;
         try {
+          // configName alone — Quick Run derives the module from the
+          // saved config's own `module` field, so we don't need to ship
+          // it across the handoff.
           window.sessionStorage.setItem(
             'simtool_quickrun_target',
-            JSON.stringify({ module: moduleType, configName: fileName }),
+            JSON.stringify({ configName: fileName }),
           );
         } catch { /* sessionStorage unavailable — user can pick manually */ }
         window.dispatchEvent(
