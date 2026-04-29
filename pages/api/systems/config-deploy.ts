@@ -70,6 +70,46 @@ function q(s: string): string {
 
 const TAIL = (s: string, n = 500) => (s ?? '').toString().slice(-n);
 
+/**
+ * Defensively fix known patterns that Amarisoft's parser rejects but the
+ * builder used to emit before commit 331e4c6. Runs as the last step
+ * before SCP so existing saved configs deploy cleanly without the user
+ * having to re-Save every file through the new generator.
+ *
+ * Currently rewrites:
+ *   - cipher_algo_pref / integ_algo_pref arrays of QUOTED lowercase
+ *     strings (`["eea0", "eea2"]`) → bare UPPERCASE tokens
+ *     (`[EEA0, EEA2]`). The quoted form errors with
+ *       "algorithm identifier expected (LTE Cell #N)"
+ *     and lteenb dies at config-load, leaving the deploy stuck at
+ *     port-check with no obvious cause.
+ *
+ * Returns the rewritten content + a list of fixes applied so the deploy
+ * report can surface what changed.
+ */
+function sanitizeAmarisoftCfg(content: string): { fixed: string; appliedFixes: string[] } {
+  const applied: string[] = [];
+  let out = content;
+
+  for (const field of ['cipher_algo_pref', 'integ_algo_pref']) {
+    const re = new RegExp(`(${field}\\s*:\\s*\\[)([^\\]]*)(\\])`, 'g');
+    out = out.replace(re, (_full: string, head: string, body: string, tail: string) => {
+      // Body has no quoted strings → already in the bare-token form, or
+      // some other shape we shouldn't touch.
+      if (!/["']/.test(body)) return _full;
+      const tokens = body
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+        .map(s => s.replace(/^["']|["']$/g, '').toUpperCase());
+      applied.push(`${field}: quoted strings → ${tokens.join(', ')}`);
+      return `${head}${tokens.join(', ')}${tail}`;
+    });
+  }
+
+  return { fixed: out, appliedFixes: applied };
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -126,7 +166,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ));
   }
 
+  // Auto-rewrite known broken patterns from older saved configs (e.g.
+  // quoted lowercase cipher_algo_pref). Logged below as a 'sanitize'
+  // entry in the commandLog so the user can see what changed.
+  const { fixed: sanitizedContent, appliedFixes: sanitizeFixes } = sanitizeAmarisoftCfg(configContent);
+
   const log: CommandLogEntry[] = [];
+  if (sanitizeFixes.length > 0) {
+    log.push({
+      step: 'sanitize',
+      ok: true,
+      stdout: sanitizeFixes.map(f => `auto-fixed: ${f}`).join('\n'),
+    });
+  }
   const exec = async (step: string, cmd: string) => {
     const t0 = Date.now();
     const r = await ssh.execCommand(cmd);
@@ -145,7 +197,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Local temp file for cleanly SCP-ing the cfg (avoids shell-quoting hell)
   const localTmp = path.join(os.tmpdir(), `simtool-cfg-${Date.now()}.cfg`);
-  await fs.writeFile(localTmp, String(configContent), 'utf8');
+  await fs.writeFile(localTmp, sanitizedContent, 'utf8');
 
   const ssh = new NodeSSH();
 
@@ -167,7 +219,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const msg = e?.message || 'SSH connection failed';
       return res.status(200).json({
         ...fail('connect', `SSH connect to ${host}:${port} failed — ${msg}`, msg),
-        commandLog: [{ step: 'connect', ok: false, stderr: msg }],
+        commandLog: [...log, { step: 'connect', ok: false, stderr: msg }],
       });
     }
 
