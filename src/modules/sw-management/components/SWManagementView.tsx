@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Package, Download, Key } from 'lucide-react';
+import { Package, Download, Key, Server, Activity } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/use-toast';
@@ -10,6 +10,8 @@ import { SystemSelector } from './SystemSelector';
 import { InstallForm, type BuildInstallOptions } from './InstallForm';
 import { InstallProgress } from './InstallProgress';
 import { LicenseView } from './LicenseView';
+import { LicensePollView } from './LicensePollView';
+import { ServicesView } from './ServicesView';
 import type { InstallResult } from '../types';
 
 export function SWManagementView() {
@@ -17,6 +19,7 @@ export function SWManagementView() {
   const [selectedSystemId, setSelectedSystemId] = useState('');
   const [isInstalling, setIsInstalling] = useState(false);
   const [result, setResult] = useState<InstallResult | null>(null);
+  const [activeTab, setActiveTab] = useState('install');
 
   const selectedSystem = systems.find((s) => String(s.id) === selectedSystemId) || null;
 
@@ -96,13 +99,19 @@ export function SWManagementView() {
         </div>
       </div>
 
-      <Tabs defaultValue="install" className="w-full">
-        <TabsList className="grid w-fit grid-cols-2">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-fit grid-cols-4">
           <TabsTrigger value="install" className="flex items-center gap-2 px-6">
             <Download className="h-4 w-4" /> Install
           </TabsTrigger>
           <TabsTrigger value="license" className="flex items-center gap-2 px-6">
-            <Key className="h-4 w-4" /> License
+            <Key className="h-4 w-4" /> Licenses
+          </TabsTrigger>
+          <TabsTrigger value="poll-license" className="flex items-center gap-2 px-6">
+            <Server className="h-4 w-4" /> Poll License Server
+          </TabsTrigger>
+          <TabsTrigger value="services" className="flex items-center gap-2 px-6">
+            <Activity className="h-4 w-4" /> Services
           </TabsTrigger>
         </TabsList>
 
@@ -144,6 +153,27 @@ export function SWManagementView() {
 
         <TabsContent value="license">
           <LicenseView />
+        </TabsContent>
+
+        <TabsContent value="poll-license">
+          <LicensePollView
+            onUseLicense={(addr, tag) => {
+              // Poll → Deploy handoff. Stash the picked server in
+              // sessionStorage; LicenseView's mount effect reads it and
+              // pre-fills the deploy form. Then jump tabs.
+              if (typeof window !== 'undefined') {
+                window.sessionStorage.setItem(
+                  'simtool_license_deploy_target',
+                  JSON.stringify({ addr, tag }),
+                );
+              }
+              setActiveTab('license');
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="services">
+          <ServicesView />
         </TabsContent>
       </Tabs>
     </div>

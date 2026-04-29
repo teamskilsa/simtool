@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Key, Search, Upload, Server, Usb, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Key, Search, Upload, Server, Usb, CheckCircle2, XCircle, AlertCircle, Loader2, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from '@/components/ui/use-toast';
 import { SystemSelector } from './SystemSelector';
 import { useSystems } from '@/modules/systems/hooks/use-systems';
+import { useCachedAddresses } from '../hooks/useCachedAddresses';
 import type { System } from '@/modules/systems/types';
 
 type DeployMode = 'system' | 'server' | 'dongle';
@@ -73,6 +74,37 @@ export function LicenseView() {
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployResult, setDeployResult] = useState<DeployResult | null>(null);
 
+  // History of license-server addresses, shared with the Poll License tab
+  // via the same localStorage key. Picking one here also seeds future
+  // polls; running a poll seeds future deploys. Single source of truth.
+  const { addresses: cachedAddresses, remember: rememberAddress } = useCachedAddresses('simtool_license_servers');
+
+  // One-shot handoff from the Poll License tab: when the user clicked
+  // "Use this license" over there, the poll view stuffs the server addr
+  // and tag into sessionStorage, switches to this tab, and we read the
+  // values on mount to pre-fill the deploy form.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = window.sessionStorage.getItem('simtool_license_deploy_target');
+    if (!raw) return;
+    window.sessionStorage.removeItem('simtool_license_deploy_target');
+    try {
+      const hint = JSON.parse(raw) as { addr?: string; tag?: string };
+      if (hint.addr) {
+        setDeployMode('server');
+        setServerAddr(hint.addr);
+        if (hint.tag) setServerTag(hint.tag);
+      }
+    } catch { /* malformed — ignore */ }
+  }, []);
+
+  // Persist the address to history once the user actually deploys with it.
+  const persistServerOnDeploy = () => {
+    if (deployMode === 'server' && serverAddr.trim()) {
+      rememberAddress(serverAddr.trim());
+    }
+  };
+
   const handleCheck = async () => {
     if (!selectedSystem) return;
     setIsChecking(true);
@@ -127,8 +159,10 @@ export function LicenseView() {
         description: data.error || (data.success ? 'License installed.' : 'Check step details.'),
         variant: data.success ? 'default' : 'destructive',
       });
-      // Auto-refresh check after successful deploy
-      if (data.success) await handleCheck();
+      if (data.success) {
+        persistServerOnDeploy();
+        await handleCheck();
+      }
     } catch (err: any) {
       toast({ title: 'Error', description: err?.message || 'Deploy failed', variant: 'destructive' });
     } finally {
@@ -232,7 +266,23 @@ export function LicenseView() {
             <div className="space-y-2">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Server Address (ip:port)</Label>
-                <Input className="h-8" placeholder="192.168.0.11:9051" value={serverAddr} onChange={(e) => setServerAddr(e.target.value)} />
+                <div className="flex gap-1.5">
+                  <Input className="h-8 flex-1" placeholder="192.168.0.11:9051" value={serverAddr} onChange={(e) => setServerAddr(e.target.value)} />
+                  {cachedAddresses.length > 0 && (
+                    <Select value="" onValueChange={(v) => { if (v) setServerAddr(v); }}>
+                      <SelectTrigger className="w-[42px] h-8 px-2" title="Recently used addresses">
+                        <History className="h-3.5 w-3.5" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cachedAddresses.map(a => (
+                          <SelectItem key={a} value={a}>
+                            <span className="font-mono text-sm">{a}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Tag</Label>
