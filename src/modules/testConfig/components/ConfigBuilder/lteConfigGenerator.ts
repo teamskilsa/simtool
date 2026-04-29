@@ -31,18 +31,26 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
   const logOptions = logParts.join(',');
 
   // ── cipher / integ algo arrays ───────────────────────────────────────────────
-  // Amarisoft's parser expects unquoted uppercase identifiers here, e.g.
-  //   cipher_algo_pref: [EEA0, EEA2, EEA3]
-  //   integ_algo_pref:  [EIA2, EIA3]
-  // Quoted lowercase strings ("eea0", …) trigger
-  //   config/enb.cfg:75:26: algorithm identifier expected
-  // and lteenb exits before opening port 9001 — leaving the deploy stuck
-  // at port-check with no obvious cause. Always upper-case + bare token.
-  const toAlgoToken = (a: string) => String(a).toUpperCase();
+  // Amarisoft's parser expects INTEGER values here, e.g.
+  //   cipher_algo_pref: [0, 2, 3]
+  //   integ_algo_pref:  [2, 3]
+  // where 0=EEA0/null, 1=EEA1/SNOW, 2=EEA2/AES, 3=EEA3/ZUC (similarly
+  // for EIAn). The NR generator already does this. We tried two wrong
+  // forms before:
+  //   ["eea0", "eea2"]   → "algorithm identifier expected"
+  //   [EEA0, EEA2]       → "unexpected identifier: EEA0"
+  // Both kill lteenb at config-load and leave the deploy stuck at
+  // port-check. Form state stores 'eeaN' / 'eiaN' strings (or sometimes
+  // raw numbers); strip the trailing digit and emit as int regardless.
+  const toAlgoInt = (a: string | number) => {
+    if (typeof a === 'number') return a;
+    const m = String(a).match(/(\d+)\s*$/);
+    return m ? parseInt(m[1], 10) : 0;
+  };
   const cipherArr = (form.cipherAlgoPref ?? ['eea0', 'eea2', 'eea3'])
-    .map(toAlgoToken).join(', ');
+    .map(toAlgoInt).join(', ');
   const integArr = (form.integAlgoPref ?? ['eia2', 'eia3'])
-    .map(toAlgoToken).join(', ');
+    .map(toAlgoInt).join(', ');
 
   // ── Build cell_list — emit every cell in form.cells[] ───────────────────────
   // The flat form fields (cellId, pci, ...) mirror cells[activeCellIdx]; the

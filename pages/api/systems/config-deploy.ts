@@ -71,18 +71,22 @@ function q(s: string): string {
 const TAIL = (s: string, n = 500) => (s ?? '').toString().slice(-n);
 
 /**
- * Defensively fix known patterns that Amarisoft's parser rejects but the
- * builder used to emit before commit 331e4c6. Runs as the last step
- * before SCP so existing saved configs deploy cleanly without the user
- * having to re-Save every file through the new generator.
+ * Defensively fix known patterns that Amarisoft's parser rejects but
+ * earlier builder versions emitted. Runs right before SCP so old saved
+ * configs deploy cleanly without the user having to re-Save every file.
  *
- * Currently rewrites:
- *   - cipher_algo_pref / integ_algo_pref arrays of QUOTED lowercase
- *     strings (`["eea0", "eea2"]`) → bare UPPERCASE tokens
- *     (`[EEA0, EEA2]`). The quoted form errors with
- *       "algorithm identifier expected (LTE Cell #N)"
- *     and lteenb dies at config-load, leaving the deploy stuck at
- *     port-check with no obvious cause.
+ * cipher_algo_pref / integ_algo_pref normalization. Amarisoft wants
+ * INTEGER values (0=EEA0, 1=EEA1, 2=EEA2, 3=EEA3). Three earlier wrong
+ * forms we've shipped or seen on disk:
+ *
+ *   ["eea0", "eea2"]   → quoted lowercase strings.
+ *                        Errors: "algorithm identifier expected"
+ *   [EEA0, EEA2]       → bare uppercase identifiers.
+ *                        Errors: "unexpected identifier: EEA0"
+ *   ["EEA2"]           → quoted uppercase (sometimes from manual edits).
+ *
+ * All three rewrite to bare integers: [0, 2] / [2, 3]. Already-correct
+ * integer arrays pass through untouched.
  *
  * Returns the rewritten content + a list of fixes applied so the deploy
  * report can surface what changed.
@@ -93,17 +97,32 @@ function sanitizeAmarisoftCfg(content: string): { fixed: string; appliedFixes: s
 
   for (const field of ['cipher_algo_pref', 'integ_algo_pref']) {
     const re = new RegExp(`(${field}\\s*:\\s*\\[)([^\\]]*)(\\])`, 'g');
-    out = out.replace(re, (_full: string, head: string, body: string, tail: string) => {
-      // Body has no quoted strings → already in the bare-token form, or
-      // some other shape we shouldn't touch.
-      if (!/["']/.test(body)) return _full;
-      const tokens = body
+    out = out.replace(re, (full: string, head: string, body: string, tail: string) => {
+      // Empty array → leave alone.
+      const trimmed = body.trim();
+      if (!trimmed) return full;
+
+      // Already pure integers? Skip — no need to touch.
+      const allInts = trimmed.split(',').every(s => /^\s*\d+\s*$/.test(s));
+      if (allInts) return full;
+
+      // Convert each entry — quoted/unquoted, lowercase/uppercase — to
+      // an int by taking the trailing digit off "EEA2" / "eia3" etc.
+      const ints = trimmed
         .split(',')
-        .map(s => s.trim())
+        .map(s => s.trim().replace(/^["']|["']$/g, ''))
         .filter(Boolean)
-        .map(s => s.replace(/^["']|["']$/g, '').toUpperCase());
-      applied.push(`${field}: quoted strings → ${tokens.join(', ')}`);
-      return `${head}${tokens.join(', ')}${tail}`;
+        .map(s => {
+          const m = s.match(/(\d+)\s*$/);
+          return m ? parseInt(m[1], 10) : NaN;
+        })
+        .filter(n => Number.isFinite(n));
+
+      if (ints.length === 0) return full;
+      const replaced = `[${ints.join(', ')}]`;
+      applied.push(`${field}: '${trimmed}' → '${ints.join(', ')}'`);
+      // head ends with '['; tail is ']'. Replace the whole thing.
+      return `${head.replace(/\[\s*$/, '')}${replaced}`;
     });
   }
 
