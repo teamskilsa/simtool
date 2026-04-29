@@ -314,37 +314,62 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // ── Phase 5: port probe (only when restart succeeded + module has API) ──
+    // 10 polls × 2s = up to ~20s. lteenb on a busy box can take that
+    // long to bind its API socket — earlier 5×2s was clipping false
+    // negatives on slower hosts.
     let portStatus = false;
+    const PORT_POLL_TRIES = 10;
     if (mapping.checkPort > 0 && restartSuccess) {
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < PORT_POLL_TRIES; i++) {
         const portRes = await exec(
           'port-check',
           `ss -ltn | grep -q ':${mapping.checkPort} ' && echo open || echo closed`,
         );
         if (portRes.stdout.trim() === 'open') { portStatus = true; break; }
-        if (i < 4) await new Promise(r => setTimeout(r, 2000));
+        if (i < PORT_POLL_TRIES - 1) await new Promise(r => setTimeout(r, 2000));
       }
     } else if (mapping.checkPort === 0) {
       portStatus = true; // ue_db / non-API modules have no port to check
     }
 
     // ── Phase 5.5: diagnostics on port-check failure ─────────────────
-    // If the daemon "restarted cleanly" but never opened its API port,
-    // the most common cause is a config parse error that crashed the
-    // daemon during init. The real reason lives in journalctl + the
-    // service log file — without it the report just says "port never
-    // came up", which doesn't tell the user which line of the cfg is
-    // bad. Pull the tail now so the report carries it.
+    // The daemon "restarted cleanly" per systemd but never opened its
+    // API port. Three likely causes, all answerable from on-box state:
+    //   (a) config parse error — journalctl / log file shows it
+    //   (b) daemon hangs waiting on RF init (e.g. trx_ip peer down)
+    //       — process is alive, log file exists but truncated
+    //   (c) daemon exited silently after parse — process gone, no log
+    //       in expected path because Amarisoft writes the log
+    //       relative to its working directory or to a different path
+    //       than the cfg's `log_filename` field
+    // The diagnostics below cover all three.
     if (mapping.service && restartSuccess && !portStatus) {
-      // journalctl since last 2 minutes for this unit, last 60 lines.
-      // No-pager so we don't get hung on a tty. sudo because some
-      // distros restrict journal access.
+      // (1) systemd's view — was the unit actually running?
+      await exec(
+        'systemctl-status',
+        `${sudo} systemctl status ${q(mapping.service)} --no-pager -l 2>&1 || true`,
+      );
+      // (2) Process-level: is the daemon binary running, and with what
+      //     args? Tells us the actual cfg path lteenb loaded (vs what
+      //     we deployed to) and rules out "it crashed and we don't
+      //     know it".
+      await exec(
+        'pgrep',
+        `${sudo} pgrep -af '${mapping.service}|${(module === 'enb' || module === 'gnb') ? 'lteenb' : module === 'mme' || module === 'ims' ? 'ltemme' : module === 'ue' ? 'lteue' : 'lte'}' 2>&1 | head -10 || echo '(no matching process)'`,
+      );
+      // (3) journalctl tail — config parse errors land here.
       await exec(
         'journalctl',
         `${sudo} journalctl -u ${q(mapping.service)} --since '2 minutes ago' --no-pager -n 60 2>&1 || true`,
       );
-      // Also tail the on-box log file the daemon writes — Amarisoft
-      // emits config-syntax errors there before journalctl sees them.
+      // (4) Find the actual log file — the cfg says one path but
+      //     Amarisoft may write somewhere else. List anything modified
+      //     in the last 5 min that looks like an Amarisoft log.
+      await exec(
+        'find-logs',
+        `${sudo} find /tmp /root -maxdepth 3 -type f \\( -name 'enb*.log' -o -name 'mme*.log' -o -name 'ue*.log' -o -name 'gnb*.log' \\) -mmin -5 2>/dev/null | head -10 || echo '(no recent log files)'`,
+      );
+      // (5) Tail the cfg-declared log path if it does exist.
       const logPath = (module === 'mme' || module === 'ims') ? '/tmp/mme.log'
                     : module === 'ue' ? '/tmp/ue0.log'
                     : '/tmp/enb0.log';
