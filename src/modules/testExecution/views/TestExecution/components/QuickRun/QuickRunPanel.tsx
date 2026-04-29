@@ -31,8 +31,9 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import {
-  PlayCircle, Loader2, CheckCircle2, AlertCircle, BarChart3,
+  PlayCircle, Loader2, CheckCircle2, AlertCircle, BarChart3, Copy, Download,
 } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
 import { useConfigs } from '@/modules/testExecution/context/ConfigContext/ConfigContext';
 import { useSystems } from '@/modules/systems/hooks/use-systems';
 import { executionService } from '@/modules/testExecution/services';
@@ -67,6 +68,96 @@ const isDependencyFile = (name: string) => DEPENDENCY_NAME_RE.test(name);
 // deploy. Long enough that the user can read the success line and press
 // Cancel if they don't want it.
 const AUTO_JUMP_SECONDS = 5;
+
+/**
+ * Build a self-contained plain-text deploy report from an ExecutionStep
+ * plus context. The receiver of this report (an ops engineer in Slack,
+ * a vendor support inbox, etc.) needs to understand what happened
+ * without any reference to the running app — so we include target host,
+ * module, config name, timestamps, the high-level error, and the full
+ * per-command log with stdout/stderr.
+ *
+ * Format is plain text (not JSON) because that's what people paste into
+ * tickets and read in dumb terminal viewers.
+ */
+function formatReport(
+  result: ExecutionStep,
+  ctx: { systemName?: string; systemHost?: string; configName?: string; module?: string | null },
+): string {
+  const lines: string[] = [];
+  const ts = (d?: Date) => (d instanceof Date ? d.toISOString() : new Date().toISOString());
+
+  lines.push('SimTool Deploy Report');
+  lines.push('='.repeat(60));
+  lines.push(`Status      : ${result.status.toUpperCase()}`);
+  if (result.duration != null) lines.push(`Duration    : ${result.duration.toFixed(1)} s`);
+  lines.push(`Started     : ${ts(result.startTime)}`);
+  lines.push(`Finished    : ${ts(result.endTime)}`);
+  lines.push('');
+  lines.push(`Target      : ${ctx.systemName ?? '(unknown)'}${ctx.systemHost ? ` (${ctx.systemHost})` : ''}`);
+  lines.push(`Module      : ${ctx.module ?? '(unknown)'}`);
+  lines.push(`Config      : ${ctx.configName ?? '(unknown)'}`);
+  lines.push(`Step name   : ${result.name}`);
+  if (result.phase) lines.push(`Failed phase: ${result.phase}`);
+  lines.push('');
+  if (result.error) {
+    lines.push('Error');
+    lines.push('-'.repeat(60));
+    lines.push(result.error);
+    lines.push('');
+  }
+  if (result.output) {
+    lines.push('Service output (tail)');
+    lines.push('-'.repeat(60));
+    lines.push(result.output);
+    lines.push('');
+  }
+  if (result.commandLog && result.commandLog.length > 0) {
+    lines.push('Command log');
+    lines.push('-'.repeat(60));
+    for (let i = 0; i < result.commandLog.length; i++) {
+      const e = result.commandLog[i];
+      const mark = e.ok ? '✓' : '✗';
+      const meta = [
+        typeof e.code === 'number' ? `exit=${e.code}` : null,
+        typeof e.ms === 'number'   ? `${e.ms}ms`      : null,
+      ].filter(Boolean).join(' ');
+      lines.push(`[${i + 1}] ${mark} ${e.step}${meta ? `  (${meta})` : ''}`);
+      if (e.cmd)    lines.push(`    $ ${e.cmd}`);
+      if (e.stdout) lines.push(e.stdout.split('\n').map(l => `    ${l}`).join('\n'));
+      if (e.stderr) lines.push(e.stderr.split('\n').map(l => `    [stderr] ${l}`).join('\n'));
+      lines.push('');
+    }
+  }
+  lines.push(`Generated   : ${ts(new Date())} by SimTool`);
+  return lines.join('\n');
+}
+
+/**
+ * Build a stable filename for a saved report. Includes the deploy module
+ * + config name + UTC date so multiple reports sort sensibly in a ticket
+ * inbox.
+ */
+function reportFilename(ctx: { configName?: string; module?: string | null; status: string }) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19); // 2026-04-28T15-23-45
+  const slug = (ctx.configName || 'deploy')
+    .replace(/\.cfg$/i, '')
+    .replace(/[^\w.-]+/g, '_');
+  return `simtool-deploy-${ctx.status}-${ctx.module ?? 'unknown'}-${slug}-${stamp}.txt`;
+}
+
+function downloadText(filename: string, body: string) {
+  if (typeof window === 'undefined') return;
+  const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Slight delay before revoke so Safari finishes the download.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 /**
  * Hand off to the monitoring dashboard with a pre-selected target. The
@@ -135,6 +226,7 @@ function StepHeader({ step }: { step: 1 | 2 | 3 }) {
 export function QuickRunPanel() {
   const { configs, refreshConfigs } = useConfigs();
   const { systems } = useSystems();
+  const { toast } = useToast();
 
   // The testExecution ConfigProvider mounts at app-startup and only loads
   // once. A user might create or import a config in Test Configurations
@@ -433,6 +525,62 @@ export function QuickRunPanel() {
                 Failed at phase: <span className="font-mono">{result.phase}</span>
               </p>
             )}
+
+            {/* Share controls — turn the result into something the user
+                can paste into a ticket or attach to an email. Available
+                for both success and failure since "send the deploy log
+                to ops" is a common pattern even on success. */}
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[11px]"
+                onClick={async () => {
+                  const txt = formatReport(result, {
+                    systemName: selectedSystem?.name,
+                    systemHost: selectedSystem?.ip,
+                    configName: selectedConfig?.name,
+                    module: module ? MODULE_LABEL[module] : null,
+                  });
+                  try {
+                    await navigator.clipboard.writeText(txt);
+                    toast({ title: 'Copied report', description: 'Paste it into a ticket / Slack / email.' });
+                  } catch {
+                    // Fallback if clipboard API isn't available (e.g. http context)
+                    downloadText(reportFilename({
+                      configName: selectedConfig?.name,
+                      module,
+                      status: result.status,
+                    }), txt);
+                    toast({ title: 'Downloaded report', description: 'Clipboard unavailable — saved as file instead.' });
+                  }
+                }}
+              >
+                <Copy className="w-3 h-3 mr-1" />
+                Copy report
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[11px]"
+                onClick={() => {
+                  const txt = formatReport(result, {
+                    systemName: selectedSystem?.name,
+                    systemHost: selectedSystem?.ip,
+                    configName: selectedConfig?.name,
+                    module: module ? MODULE_LABEL[module] : null,
+                  });
+                  downloadText(reportFilename({
+                    configName: selectedConfig?.name,
+                    module,
+                    status: result.status,
+                  }), txt);
+                }}
+              >
+                <Download className="w-3 h-3 mr-1" />
+                Download .txt
+              </Button>
+            </div>
 
             {/* Command log — collapsed by default. The phase + error line
                 above answers most "why" questions, but for the trickier
