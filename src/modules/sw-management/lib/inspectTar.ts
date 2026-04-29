@@ -11,9 +11,19 @@ import {
  * one of these (e.g. a `simnovus-UE-PB-*.tar.gz` UE-only build), we want
  * that one defaulted ON regardless of its individual `defaultOn` flag —
  * otherwise the "auto-detect didn't pick anything to install" complaint
- * wins. Infra components (ots / view / www) are NOT primaries.
+ * wins.
+ *
+ * Deliberately NARROW. Things that look service-like but really pair with
+ * one of these primaries are excluded:
+ *   - sat:     NTN / satellite *utilities* — Amarisoft bundles ltesat into
+ *              UE-PB packages for NTN UE testing, and into eNB packages
+ *              for satellite eNB. It's not standalone, so counting it as
+ *              a primary made a UE-PB build look like "two primaries" and
+ *              bailed back to static defaults (UE off).
+ *   - probe / scan / monitor: tools, not standalone services.
+ *   - ots / view / www / license: infrastructure layer.
  */
-const PRIMARY_SERVICE_IDS = new Set(['enb', 'mme', 'ue', 'n3iwf', 'mbmsgw', 'sat', 'probe', 'scan']);
+const PRIMARY_SERVICE_IDS = new Set(['enb', 'mme', 'ue', 'n3iwf', 'mbmsgw']);
 
 export function parseTarListing(entries: string[], systemArch: TargetArch = 'unknown'): DetectionResult {
   // Drop directory entries, keep just filenames
