@@ -14,6 +14,24 @@ function formatPlmn(mcc: string, mnc: string): string {
   return `${paddedMcc}${paddedMnc}`;
 }
 
+/**
+ * LTE channel bandwidth (MHz) → number of resource blocks. Amarisoft's
+ * enb.cfg per-cell field is `n_rb_dl`, NOT `bandwidth` — emitting the
+ * MHz value as `bandwidth: 5` gets you
+ *   config/enb.cfg:45:7: expecting 'n_rb_dl' field
+ * (NR cells DO use `bandwidth` in nr_cell_default — this only applies
+ * to the LTE cell list.)
+ */
+function mhzToRbLte(mhz: number): number {
+  // Form stores 1.4 as the literal 1.4 number. Round to one decimal
+  // before lookup so 1.40000001 still resolves.
+  const key = Math.round(Number(mhz) * 10) / 10;
+  const map: Record<string, number> = {
+    '1.4': 6, '3': 15, '5': 25, '10': 50, '15': 75, '20': 100,
+  };
+  return map[String(key)] ?? 50;  // 10 MHz default if something weird
+}
+
 export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' | 'catm'): string {
   const isTdd = LTE_TDD_BANDS.includes(form.band);
   const ratLabel = ratMode === 'nbiot' ? 'NB-IoT' : ratMode === 'catm' ? 'CAT-M1 (eMTC)' : 'LTE';
@@ -107,7 +125,7 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
       n_id_cell: ${c.pci},
       tac: ${c.tac},
       dl_earfcn: ${c.dlEarfcn},
-      bandwidth: ${c.bandwidth},
+      n_rb_dl: ${mhzToRbLte(c.bandwidth)},
       n_antenna_dl: ${form.nAntennaDl},
       n_antenna_ul: ${form.nAntennaUl},
       cyclic_prefix: "${form.cpMode}",

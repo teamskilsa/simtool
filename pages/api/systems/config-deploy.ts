@@ -92,9 +92,38 @@ const TAIL = (s: string, n = 500) => (s ?? '').toString().slice(-n);
  * array would end up empty after dropping 0s we still emit `[]` rather
  * than nothing, matching Amarisoft's "no preference" semantics.
  */
+/** LTE channel bandwidth (MHz) → number of resource blocks (n_rb_dl). */
+function mhzToRb(mhz: number): number {
+  const key = Math.round(mhz * 10) / 10;
+  const map: Record<string, number> = {
+    '1.4': 6, '3': 15, '5': 25, '10': 50, '15': 75, '20': 100,
+  };
+  return map[String(key)] ?? 50;
+}
+
 function sanitizeAmarisoftCfg(content: string): { fixed: string; appliedFixes: string[] } {
   const applied: string[] = [];
   let out = content;
+
+  // ── LTE cell_list[].bandwidth → n_rb_dl ────────────────────────────
+  // Amarisoft LTE cells use `n_rb_dl` (number of resource blocks),
+  // NOT `bandwidth` (MHz). NR cells DO use `bandwidth` in
+  // nr_cell_default, so we have to scope this rewrite to LTE only.
+  // The \b before `cell_list` prevents matching `nr_cell_list:` —
+  // there's a word-char `_` between `nr` and `cell` so no boundary.
+  out = out.replace(/\bcell_list\s*:\s*\[([\s\S]*?)\]/g, (full, body: string) => {
+    if (!/\bbandwidth\s*:/.test(body) || /\bn_rb_dl\s*:/.test(body)) return full;
+    const fixedBody = body.replace(
+      /\bbandwidth\s*:\s*([\d.]+)\s*,?/g,
+      (_m: string, num: string) => {
+        const mhz = parseFloat(num);
+        const rb = mhzToRb(mhz);
+        applied.push(`cell_list[].bandwidth: ${num} MHz → n_rb_dl: ${rb}`);
+        return `n_rb_dl: ${rb},`;
+      },
+    );
+    return full.replace(body, fixedBody);
+  });
 
   for (const field of ['cipher_algo_pref', 'integ_algo_pref']) {
     const re = new RegExp(`(${field}\\s*:\\s*\\[)([^\\]]*)(\\])`, 'g');
