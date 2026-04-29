@@ -48,11 +48,10 @@ export function TestExecutionView() {
     setDialogOpen(true);
   };
 
-  const handleEditScenario = (scenario: ScenarioConfig) => {
-    setDialogMode('edit');
-    setSelectedScenario(scenario);
-    setDialogOpen(true);
-  };
+  // Edit / delete / duplicate from a row are handled inside ScenarioActions
+  // (it owns its own Edit dialog wired to the same /api/scenarios PUT).
+  // This view only owns the *Create* path through the header button — Edit
+  // from a row doesn't bubble back here.
 
   return (
     <Card className="bg-background/60 backdrop-blur-sm border-muted/20">
@@ -100,7 +99,7 @@ export function TestExecutionView() {
               mme + ims + ue_db + enb), pick a config per module, save as
               a scenario, then re-run from this list.
             </p>
-            <ScenarioList key={refreshKey} onEditScenario={handleEditScenario} />
+            <ScenarioList refreshTrigger={refreshKey} />
           </TabsContent>
         </Tabs>
       </div>

@@ -32,8 +32,6 @@ class ExecutionService {
    * @param sshCreds    SSH credentials for the target system
    */
   async executeScenario(scenarioId: string, sshCreds: SshCredentials): Promise<ExecutionStep[]> {
-    console.log(`[ExecuteScenario] Starting execution for scenario: ${scenarioId}`);
-
     // 1. Fetch scenario.
     const response = await fetch(`/api/scenarios/execute?id=${encodeURIComponent(scenarioId)}`);
     if (!response.ok) {

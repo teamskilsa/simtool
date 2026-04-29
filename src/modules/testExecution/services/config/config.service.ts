@@ -7,41 +7,29 @@ class ConfigurationService {
 
   async getAllConfigs(): Promise<Record<ModuleType, StoredConfig[]>> {
     try {
-      console.log('Fetching configurations for user:', this.userId);
-      
       const response = await fetch(`/api/configs?userId=${this.userId}`);
-      
       if (!response.ok) {
-        throw new Error('Failed to fetch configurations');
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.error || `HTTP ${response.status} fetching configs`);
       }
 
       const allConfigs: StoredConfig[] = await response.json();
-      
-      // Group configs by module
-      const groupedConfigs: Record<ModuleType, StoredConfig[]> = {
-        enb: [],
-        gnb: [],
-        mme: [],
-        ims: [],
-        ue_db: []
-      };
 
-      allConfigs.forEach(config => {
+      const groupedConfigs: Record<ModuleType, StoredConfig[]> = {
+        enb: [], gnb: [], mme: [], ims: [], ue_db: [],
+      };
+      for (const config of allConfigs) {
         if (config.module in groupedConfigs) {
           groupedConfigs[config.module as ModuleType].push(config);
         }
-      });
-
-      console.log('Configurations grouped by module:', {
-        totalConfigs: allConfigs.length,
-        byModule: Object.entries(groupedConfigs).map(([module, configs]) => 
-          `${module}: ${configs.length}`
-        )
-      });
-
+      }
       return groupedConfigs;
     } catch (error) {
-      console.error('Error fetching configurations:', error);
+      // Keep error logging — this is a real failure surface. Just don't
+      // chatter on every successful fetch (StrictMode + ConfigProvider
+      // double-mount + ConfigContext refresh would emit ~12 lines per
+      // page load before).
+      console.error('[configService] failed to fetch /api/configs:', error);
       throw error;
     }
   }
