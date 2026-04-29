@@ -16,6 +16,9 @@ import {
   embedBuilderMeta, extractBuilderMeta,
   importCfgToBuilder, extractReferencedFiles,
 } from '../components/ConfigBuilder';
+import {
+  validateNRForm, validateLTEForm, validateCoreForm,
+} from '../components/ConfigBuilder/validation';
 import { configsService } from '../services/configs.service';
 import { useConfigContext } from '../context';
 import type { NRFormState, LTEFormState, NSAFormState } from '../components/ConfigBuilder';
@@ -116,6 +119,30 @@ export const CreateTestView: React.FC = () => {
 
   const handleSave = async () => {
     if (!configName.trim()) return;
+
+    // ─── Pre-flight validation ───────────────────────────────────────
+    // Catch out-of-range values before they hit the file. Without this,
+    // a typo like cell_id=500 (LTE max is 255) would only surface at
+    // deploy time when Amarisoft rejects the config with an obscure
+    // message. Block save and tell the user exactly which fields are
+    // wrong so they can fix them in place.
+    const issues =
+      configType === 'core'  ? validateCoreForm(nrForm) :
+      configType === 'nsa'   ? [...validateLTEForm(nsaForm.lteForm), ...validateNRForm(nsaForm.nrForm)] :
+      (configType === 'lte' || configType === 'nbiot' || configType === 'catm') ? validateLTEForm(lteForm) :
+      validateNRForm(nrForm);
+
+    if (issues.length > 0) {
+      const summary = issues.slice(0, 5).map(i => `• ${i.field}: ${i.message}`).join('\n');
+      const moreSuffix = issues.length > 5 ? `\n…and ${issues.length - 5} more` : '';
+      toast({
+        title: `Can't save — ${issues.length} issue${issues.length === 1 ? '' : 's'}`,
+        description: summary + moreSuffix,
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       const fileName = configName.endsWith('.cfg') ? configName : `${configName}.cfg`;
