@@ -1,5 +1,10 @@
-// SSB layer — SSB Period and DMRS Position. Lives in the Layers tab so the
-// Cell tab stays focused on identity / band / TDD / RF / antenna.
+// SSB layer — SSB Period, DMRS Position, and the in-half-frame position
+// bitmap. Lives in the Layers tab so the Cell tab stays focused on
+// identity / band / TDD / RF / antenna.
+//
+// Note: the SSB ARFCN (GSCN override) lives over in Band & Frequency next
+// to DL NR-ARFCN, since they're frequency-domain neighbors and users
+// expect them side-by-side.
 import { Field } from '../Field';
 import { BoxedSection } from '../../BoxedSection';
 import type { NRFormState } from '../../constants';

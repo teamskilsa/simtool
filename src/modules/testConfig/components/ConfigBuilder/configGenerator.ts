@@ -54,22 +54,32 @@ export function generateNRConfig(form: NRFormState): string {
           ...(i === form.activeCellIdx ? {
             cellId: form.cellId, band: form.band, dlNrArfcn: form.dlNrArfcn,
             subcarrierSpacing: form.subcarrierSpacing, ssbPosBitmap: form.ssbPosBitmap,
+            ssbArfcn: form.ssbArfcn,
           } : c),
           name: c.name,
         }))
       : [{
           cellId: form.cellId, band: form.band, dlNrArfcn: form.dlNrArfcn,
-          subcarrierSpacing: form.subcarrierSpacing, ssbPosBitmap: form.ssbPosBitmap, name: 'Cell 1',
+          subcarrierSpacing: form.subcarrierSpacing, ssbPosBitmap: form.ssbPosBitmap,
+          ssbArfcn: form.ssbArfcn, name: 'Cell 1',
         }];
-    return cells.map((c, i) => `    {
+    return cells.map((c, i) => {
+      // gscn line is only emitted when the user opted in via the SSB ARFCN
+      // override checkbox in the UI. null/undefined → omit entirely so
+      // Amarisoft auto-derives the SSB position from band + dl_nr_arfcn.
+      const gscnLine = (c.ssbArfcn !== null && c.ssbArfcn !== undefined)
+        ? `\n      gscn: ${c.ssbArfcn},`
+        : '';
+      return `    {
       /* ${c.name} */
       rf_port: ${i},
       cell_id: ${c.cellId},
       band: ${c.band},
       dl_nr_arfcn: ${c.dlNrArfcn},
       subcarrier_spacing: ${c.subcarrierSpacing}, /* kHz */
-      ssb_pos_bitmap: "${c.ssbPosBitmap}",
-    }`).join(',\n');
+      ssb_pos_bitmap: "${c.ssbPosBitmap}",${gscnLine}
+    }`;
+    }).join(',\n');
   })();
 
   // ── PRACH — per reference: single object with nested fields ───────────────

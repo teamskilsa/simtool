@@ -57,6 +57,13 @@ export interface NRFormState {
   tac: number;
   ssbPeriod: number;
   dmrsTypeAPos: number;
+  /** Optional SSB sync-raster override (Amarisoft `gscn` field). When the
+   *  user leaves this blank/null, Amarisoft auto-derives the SSB position
+   *  from `band` + `dl_nr_arfcn` and we omit `gscn` from the generated
+   *  config. Set this only to pin the SSB to a specific GSCN — useful in
+   *  lab setups where the default sync raster doesn't land where the UE
+   *  expects, or when matching another network. */
+  ssbArfcn: number | null;
   // Band
   band: number;
   nrBandwidth: number;
@@ -244,6 +251,7 @@ export const DEFAULT_NR_FORM: NRFormState = {
   tac: 1,
   ssbPeriod: 20,
   dmrsTypeAPos: 2,
+  ssbArfcn: null,        // null = let Amarisoft auto-derive from band + dl_nr_arfcn
   band: 78,
   nrBandwidth: 40,
   subcarrierSpacing: 30,

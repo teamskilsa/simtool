@@ -213,6 +213,11 @@ function astToNRForm(ast: Record<string, any>, warnings: string[]): NRFormState 
     subcarrierSpacing: num(cell0.subcarrier_spacing, DEFAULT_NR_FORM.subcarrierSpacing),
     dlNrArfcn:        num(cell0.dl_nr_arfcn, DEFAULT_NR_FORM.dlNrArfcn),
     ssbPosBitmap:     str(cell0.ssb_pos_bitmap, DEFAULT_NR_FORM.ssbPosBitmap),
+    // Round-trip the SSB ARFCN override: present in the parsed AST →
+    // checkbox lights up; absent → null so the UI shows it as off.
+    ssbArfcn:         (cell0.gscn !== undefined && cell0.gscn !== null)
+                        ? Number(cell0.gscn)
+                        : null,
     tddPattern:       cells[0].tddPattern,
     nAntennaDl:       num(cellDefault.n_antenna_dl, DEFAULT_NR_FORM.nAntennaDl),
     nAntennaUl:       num(cellDefault.n_antenna_ul, DEFAULT_NR_FORM.nAntennaUl),
