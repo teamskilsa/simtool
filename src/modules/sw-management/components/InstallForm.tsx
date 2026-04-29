@@ -319,12 +319,23 @@ export function InstallForm({ system, isInstalling, onInstall }: InstallFormProp
             </div>
           </section>
 
-          {/* ── Step 3b: gNB TRX driver ─────────────────────────────────── */}
-          {componentsOn.enb && (detection?.trxDrivers.length ?? 0) > 0 && (
+          {/* ── Step 3b: TRX driver (eNB/gNB *or* UE simulator) ─────────────
+                Both lteenb (radio access) and lteue (UE simulator) talk
+                to the same TRX layer — SDR, Split 7.2, IP loopback,
+                etc. Earlier this section gated on enb only, so a
+                UE-only build (where enb isn't even available) never
+                showed the picker. Now: any radio-touching component
+                enabled → render. */}
+          {(componentsOn.enb || componentsOn.ue) && (detection?.trxDrivers.length ?? 0) > 0 && (
             <section className="space-y-3">
               <div className="flex items-center gap-2">
                 <span className="inline-flex w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 items-center justify-center text-xs font-semibold">3</span>
-                <Label className="text-sm font-semibold flex items-center gap-1.5"><Radio className="w-4 h-4" /> TRX Radio Frontend</Label>
+                <Label className="text-sm font-semibold flex items-center gap-1.5">
+                  <Radio className="w-4 h-4" /> TRX Radio Frontend
+                  <span className="text-[11px] font-normal text-muted-foreground">
+                    (used by {[componentsOn.enb && 'eNB/gNB', componentsOn.ue && 'UE'].filter(Boolean).join(' + ')})
+                  </span>
+                </Label>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <Select value={trxDriver} onValueChange={setTrxDriver}>
