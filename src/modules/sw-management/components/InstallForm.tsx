@@ -68,6 +68,18 @@ export function InstallForm({ system, isInstalling, onInstall }: InstallFormProp
   const canDetect = !!system && !isInstalling && !detecting &&
     ((source === 'remote-path' && remotePath.trim()) || (source === 'upload' && file));
 
+  // Explain why Detect is disabled. Used as both a tooltip on the
+  // disabled button and an inline hint underneath it. Without this the
+  // button just sits silently in a faded-purple state and clicks do
+  // nothing — users (rightly) report "auto-detect didn't work".
+  const detectBlockedReason: string | null = (() => {
+    if (!system) return 'Pick a target system above to detect its arch.';
+    if (source === 'remote-path' && !remotePath.trim()) return 'Enter the remote tar path first.';
+    if (source === 'upload' && !file) return 'Drop a tar.gz file above first.';
+    if (isInstalling) return 'Wait for the current install to finish.';
+    return null;
+  })();
+
   const handleDetect = async () => {
     if (!system) return;
     setDetecting(true);
@@ -195,23 +207,31 @@ export function InstallForm({ system, isInstalling, onInstall }: InstallFormProp
         </RadioGroup>
 
         {source === 'remote-path' && (
-          <div className="flex gap-2">
-            <Input
-              placeholder="/tmp/amarisoft.2026-04-22.tar.gz"
-              value={remotePath}
-              onChange={e => { setRemotePath(e.target.value); setDetection(null); }}
-              className="flex-1"
-            />
-            <Button
-              onClick={handleDetect}
-              disabled={!canDetect}
-              className="bg-indigo-600 text-white hover:bg-indigo-700"
-            >
-              {detecting
-                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {detectStatus || 'Detecting…'}</>
-                : <><Search className="h-4 w-4 mr-2" /> Detect</>
-              }
-            </Button>
+          <div className="space-y-1.5">
+            <div className="flex gap-2">
+              <Input
+                placeholder="/tmp/amarisoft.2026-04-22.tar.gz"
+                value={remotePath}
+                onChange={e => { setRemotePath(e.target.value); setDetection(null); }}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleDetect}
+                disabled={!canDetect}
+                title={detectBlockedReason ?? 'Inspect the tar and auto-fill the install form'}
+                className="bg-indigo-600 text-white hover:bg-indigo-700"
+              >
+                {detecting
+                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {detectStatus || 'Detecting…'}</>
+                  : <><Search className="h-4 w-4 mr-2" /> Detect</>
+                }
+              </Button>
+            </div>
+            {detectBlockedReason && !detecting && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                ⚠ {detectBlockedReason}
+              </p>
+            )}
           </div>
         )}
 
@@ -229,16 +249,24 @@ export function InstallForm({ system, isInstalling, onInstall }: InstallFormProp
               </div>
             </FileUpload>
             {file && (
-              <Button
-                onClick={handleDetect}
-                disabled={!canDetect}
-                className="bg-indigo-600 text-white hover:bg-indigo-700"
-              >
-                {detecting
-                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {detectStatus || 'Detecting…'}</>
-                : <><Search className="h-4 w-4 mr-2" /> Detect</>
-              }
-              </Button>
+              <div className="space-y-1.5">
+                <Button
+                  onClick={handleDetect}
+                  disabled={!canDetect}
+                  title={detectBlockedReason ?? 'Inspect the tar and auto-fill the install form'}
+                  className="bg-indigo-600 text-white hover:bg-indigo-700"
+                >
+                  {detecting
+                    ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {detectStatus || 'Detecting…'}</>
+                    : <><Search className="h-4 w-4 mr-2" /> Detect</>
+                  }
+                </Button>
+                {detectBlockedReason && !detecting && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                    ⚠ {detectBlockedReason}
+                  </p>
+                )}
+              </div>
             )}
             <Alert className="bg-indigo-50/50 border-indigo-200">
               <AlertDescription className="text-xs">

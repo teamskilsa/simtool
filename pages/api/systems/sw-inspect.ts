@@ -22,25 +22,56 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!tarPath && !entries) return res.status(400).json({ error: 'tarPath or entries is required' });
 
   const ssh = new NodeSSH();
-  try {
-    await ssh.connect({
-      host: String(host),
-      port: Number(port),
-      username: String(username),
-      ...(privateKey ? { privateKey: String(privateKey), passphrase } : { password: String(password) }),
-      readyTimeout: 8000,
-    });
 
-    // Detect target arch (always done — whether input is path or pre-parsed)
-    const archRes = await ssh.execCommand('uname -m');
-    const machine = archRes.stdout.trim();
+  /**
+   * Best-effort arch fallback for upload mode when the SSH probe fails.
+   * Looks at the suffixed component tarballs in the package — if every
+   * suffixed entry is `-aarch64-` we infer aarch64; if every suffixed
+   * entry is `-linux-` we infer linux; mixed/none → 'unknown'. Lets
+   * detection still produce something useful when SSH is broken.
+   */
+  const archFromEntries = (es: string[]): TargetArch => {
+    let sawLinux = false, sawAarch = false;
+    for (const f of es) {
+      const base = f.split('/').pop() ?? '';
+      if (!base.endsWith('.tar.gz')) continue;
+      if (base.includes('-aarch64-')) sawAarch = true;
+      else if (base.includes('-linux-')) sawLinux = true;
+    }
+    if (sawLinux && !sawAarch) return 'linux';
+    if (sawAarch && !sawLinux) return 'aarch64';
+    return 'unknown';
+  };
+
+  try {
     let targetArch: TargetArch = 'unknown';
-    if (machine === 'x86_64' || machine === 'amd64') targetArch = 'linux';
-    else if (machine === 'aarch64' || machine === 'arm64') targetArch = 'aarch64';
+    let sshOk = false;
+    try {
+      await ssh.connect({
+        host: String(host),
+        port: Number(port),
+        username: String(username),
+        ...(privateKey ? { privateKey: String(privateKey), passphrase } : { password: String(password) }),
+        readyTimeout: 8000,
+      });
+      sshOk = true;
+      const archRes = await ssh.execCommand('uname -m');
+      const machine = archRes.stdout.trim();
+      if (machine === 'x86_64' || machine === 'amd64') targetArch = 'linux';
+      else if (machine === 'aarch64' || machine === 'arm64') targetArch = 'aarch64';
+    } catch (e: any) {
+      // Upload mode doesn't strictly need SSH — we already have the
+      // entries and can guess arch from them. Remote-path mode does
+      // need SSH (we run `tar tzf` over it), so re-throw there.
+      if (!Array.isArray(entries)) throw e;
+    }
 
     // ── Path A: Client provided pre-parsed entries (upload mode) ───────────
     if (Array.isArray(entries)) {
+      if (targetArch === 'unknown') targetArch = archFromEntries(entries as string[]);
       const result = parseTarListing(entries as string[], targetArch);
+      if (!sshOk) (result as any).warning =
+        'SSH probe failed — target arch guessed from package contents.';
       return res.status(200).json(result);
     }
 
