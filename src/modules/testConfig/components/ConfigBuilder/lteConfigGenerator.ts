@@ -98,12 +98,27 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
         tddConfig: form.tddConfig, tddSpecialSubframe: form.tddSpecialSubframe,
       })];
 
+  // ── Per-cell entries: ONLY the fields Amarisoft requires per-cell, in
+  //    the exact order its parser expects. Everything else lives in the
+  //    cell_default block below and is merged into each cell at parse
+  //    time (per the doc: "cell_default ... will be merged with each
+  //    element of cell_list").
+  //
+  //    The parser is positional/sequential: emitting fields in the wrong
+  //    order or unrecognized fields causes errors like
+  //      "expecting 'pdsch_dedicated' field (LTE Cell #N)"
+  //    Order observed to work on Amarisoft 2026-04-22:
+  //      rf_port → cell_id → n_id_cell → tac → dl_earfcn → n_rb_dl →
+  //      pdsch_dedicated → plmn_list → root_sequence_index →
+  //      cipher_algo_pref → integ_algo_pref
+  //
+  //    TDD / NB-IoT / CAT-M / scell extras are cell-specific so they go
+  //    on the cell entry (after the required fields).
   const cellListBlock = cellEntries.map((c, i) => {
     const cellTdd = LTE_TDD_BANDS.includes(c.band);
     const tddPart = cellTdd ? `
       tdd_ul_dl_config: ${c.tddConfig},
       tdd_special_subframe_pattern: ${c.tddSpecialSubframe},` : '';
-    // NB-IoT / CAT-M per-cell extras
     const nbiotPart = ratMode === 'nbiot'
       ? (form.nbIotMode === 'standalone'
           ? `\n      nb_iot: true,\n      nb_iot_mode: "standalone",`
@@ -112,12 +127,12 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
     const catmPart = ratMode === 'catm'
       ? `\n      ce_mode: "${form.catMCeMode}",\n      max_repetitions: ${form.catMRepetitions},`
       : '';
-    // Optional scell_list for carrier aggregation: each cell aggregates the others
     const otherCellIds = cellEntries.filter((_, j) => j !== i).map(o => o.cellId);
     const scellPart = otherCellIds.length > 0 ? `
       scell_list: [${otherCellIds.map(id => `
         { cell_id: ${id}, cross_carrier_scheduling: false }`).join(',')}
       ],` : '';
+
     return `    {
       /* ${c.name} */
       rf_port: ${c.rfPort},
@@ -126,35 +141,42 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
       tac: ${c.tac},
       dl_earfcn: ${c.dlEarfcn},
       n_rb_dl: ${mhzToRbLte(c.bandwidth)},
-      n_antenna_dl: ${form.nAntennaDl},
-      n_antenna_ul: ${form.nAntennaUl},
-      cyclic_prefix: "${form.cpMode}",
-      phich_duration: "${form.phichDuration}",
-      phich_resource: "${form.phichResource}",
-      root_sequence_index: ${c.rootSequenceIndex},${c.cellBarred ? `
-      cell_barred: true,` : ''}${tddPart}${nbiotPart}${catmPart}${scellPart}
+      pdsch_dedicated: { p_a: 0 },
       plmn_list: [{
         plmn: "${formatPlmn(form.plmn.mcc, form.plmn.mnc)}",
         attach_without_pdn: ${form.attachWithoutPdn},
         reserved: ${form.plmnReserved},
       }],
-      si_coderate: ${form.siCoderate},
-      si_window_length: ${form.siWindowLength},
-      intra_freq_reselection: ${form.intraFreqReselection},
-      q_rx_lev_min: ${form.qRxLevMin},
-      p_max: ${form.pMax},
-      sr_period: ${form.srPeriod},
-      cqi_period: ${form.cqiPeriod},
-      mac_config: { ul_max_harq_tx: ${form.ulMaxHarqTx}, dl_max_harq_tx: ${form.dlMaxHarqTx} },
-      dpc: ${form.dpc},
-      dpc_pusch_snr_target: ${form.dpcPuschSnrTarget},
-      dpc_pucch_snr_target: ${form.dpcPucchSnrTarget},
-      inactivity_timer: ${form.inactivityTimer},
-      drb_config: "${form.drbConfig}",
+      root_sequence_index: ${c.rootSequenceIndex},
       cipher_algo_pref: [${cipherArr}],
-      integ_algo_pref: [${integArr}],
+      integ_algo_pref: [${integArr}],${c.cellBarred ? `
+      cell_barred: true,` : ''}${tddPart}${nbiotPart}${catmPart}${scellPart}
     }`;
   }).join(',\n');
+
+  // ── cell_default: optional / shared parameters, merged into every
+  //    cell at parse time. Keeps cell_list[] entries minimal so the
+  //    parser doesn't trip on field-order mismatches.
+  const cellDefaultBlock = `  cell_default: {
+    n_antenna_dl: ${form.nAntennaDl},
+    n_antenna_ul: ${form.nAntennaUl},
+    cyclic_prefix: "${form.cpMode}",
+    phich_duration: "${form.phichDuration}",
+    phich_resource: "${form.phichResource}",
+    si_coderate: ${form.siCoderate},
+    si_window_length: ${form.siWindowLength},
+    intra_freq_reselection: ${form.intraFreqReselection},
+    q_rx_lev_min: ${form.qRxLevMin},
+    p_max: ${form.pMax},
+    sr_period: ${form.srPeriod},
+    cqi_period: ${form.cqiPeriod},
+    mac_config: { ul_max_harq_tx: ${form.ulMaxHarqTx}, dl_max_harq_tx: ${form.dlMaxHarqTx} },
+    dpc: ${form.dpc},
+    dpc_pusch_snr_target: ${form.dpcPuschSnrTarget},
+    dpc_pucch_snr_target: ${form.dpcPucchSnrTarget},
+    inactivity_timer: ${form.inactivityTimer},
+    drb_config: "${form.drbConfig}",
+  },`;
 
   return `/* ${ratLabel} eNB Configuration
  * Generated: ${new Date().toISOString()}
@@ -195,6 +217,8 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
   gtp_addr: "${form.gtpAddr}",
   // enb.cfg: enb_id
   enb_id: ${form.enbId},
+
+${cellDefaultBlock}
 
   cell_list: [
 ${cellListBlock}

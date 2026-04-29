@@ -101,29 +101,143 @@ function mhzToRb(mhz: number): number {
   return map[String(key)] ?? 50;
 }
 
+/**
+ * Find the matching closing bracket for an opener at `openIdx`. Skips
+ * over inner string literals and other bracket pairs at deeper depth.
+ * Returns the index of the matching close, or -1 if unmatched.
+ *
+ * Plain regex `\[([\s\S]*?)\]` doesn't work for nested arrays — `]`
+ * inside `cipher_algo_pref: [...]` truncates the outer cell_list match.
+ */
+function findMatchingClose(s: string, openIdx: number): number {
+  const open = s[openIdx];
+  const close = open === '[' ? ']' : open === '{' ? '}' : '';
+  if (!close) return -1;
+  let depth = 0;
+  let inString: string | null = null;
+  for (let i = openIdx; i < s.length; i++) {
+    const c = s[i];
+    if (inString) {
+      if (c === '\\') { i++; continue; }       // skip escaped char
+      if (c === inString) inString = null;
+    } else if (c === '"' || c === "'") {
+      inString = c;
+    } else if (c === open) {
+      depth++;
+    } else if (c === close) {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Return all top-level cell_list: [ ... ] blocks (LTE only — `\b` excludes
+ * `nr_cell_list:`). Each result has the bracket-matched body and the
+ * indices needed to splice a replacement back into the original string.
+ */
+function findLteCellLists(content: string): Array<{ blockStart: number; blockEnd: number; body: string }> {
+  const results: Array<{ blockStart: number; blockEnd: number; body: string }> = [];
+  const re = /\bcell_list\s*:\s*\[/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    const openIdx = m.index + m[0].length - 1;
+    const closeIdx = findMatchingClose(content, openIdx);
+    if (closeIdx < 0) continue;
+    results.push({
+      blockStart: openIdx,                 // index of [
+      blockEnd: closeIdx + 1,              // one past ]
+      body: content.slice(openIdx + 1, closeIdx),
+    });
+  }
+  return results;
+}
+
 function sanitizeAmarisoftCfg(content: string): { fixed: string; appliedFixes: string[] } {
   const applied: string[] = [];
   let out = content;
 
-  // ── LTE cell_list[].bandwidth → n_rb_dl ────────────────────────────
-  // Amarisoft LTE cells use `n_rb_dl` (number of resource blocks),
-  // NOT `bandwidth` (MHz). NR cells DO use `bandwidth` in
-  // nr_cell_default, so we have to scope this rewrite to LTE only.
-  // The \b before `cell_list` prevents matching `nr_cell_list:` —
-  // there's a word-char `_` between `nr` and `cell` so no boundary.
-  out = out.replace(/\bcell_list\s*:\s*\[([\s\S]*?)\]/g, (full, body: string) => {
-    if (!/\bbandwidth\s*:/.test(body) || /\bn_rb_dl\s*:/.test(body)) return full;
-    const fixedBody = body.replace(
-      /\bbandwidth\s*:\s*([\d.]+)\s*,?/g,
-      (_m: string, num: string) => {
-        const mhz = parseFloat(num);
-        const rb = mhzToRb(mhz);
-        applied.push(`cell_list[].bandwidth: ${num} MHz → n_rb_dl: ${rb}`);
-        return `n_rb_dl: ${rb},`;
-      },
-    );
-    return full.replace(body, fixedBody);
-  });
+  // ── LTE cell_list[] rewrites: bandwidth → n_rb_dl, inject pdsch_dedicated ─
+  // We extract LTE cell_list[] blocks via bracket-aware traversal —
+  // a non-greedy regex `\[([\s\S]*?)\]` would truncate at the first
+  // inner `]` (e.g. inside cipher_algo_pref: [...]) and miss the
+  // rest of the cell. The findLteCellLists helper handles nesting
+  // and string literals correctly.
+  //
+  // NR cell_list and nr_cell_default are skipped (the \b in the
+  // helper's regex makes `cell_list` not match `nr_cell_list`).
+  const lteBlocks = findLteCellLists(out);
+  // Process from the END so earlier indices stay valid after splice.
+  for (let bi = lteBlocks.length - 1; bi >= 0; bi--) {
+    const block = lteBlocks[bi];
+    let body = block.body;
+
+    // (a) bandwidth → n_rb_dl
+    if (/\bbandwidth\s*:/.test(body) && !/\bn_rb_dl\s*:/.test(body)) {
+      body = body.replace(
+        /\bbandwidth\s*:\s*([\d.]+)\s*,?/g,
+        (_m: string, num: string) => {
+          const mhz = parseFloat(num);
+          const rb = mhzToRb(mhz);
+          applied.push(`cell_list[].bandwidth: ${num} MHz → n_rb_dl: ${rb}`);
+          return `n_rb_dl: ${rb},`;
+        },
+      );
+    }
+
+    // (b) inject pdsch_dedicated:{p_a:0} after n_rb_dl if missing.
+    //     We walk each `{...}` cell entry inside the cell_list body
+    //     using the same bracket-aware helper (cell entries can
+    //     contain nested objects + arrays, so a regex won't cut it).
+    const cellOpens: number[] = [];
+    for (let i = 0; i < body.length; i++) {
+      if (body[i] === '{') cellOpens.push(i);
+    }
+    // Only top-level cell entries (depth-1 inside the [...] body).
+    // Walk from end to front again so indices stay valid.
+    const topLevelCellOpens: number[] = [];
+    {
+      let depth = 0;
+      let inStr: string | null = null;
+      for (let i = 0; i < body.length; i++) {
+        const c = body[i];
+        if (inStr) {
+          if (c === '\\') { i++; continue; }
+          if (c === inStr) inStr = null;
+          continue;
+        }
+        if (c === '"' || c === "'") { inStr = c; continue; }
+        if (c === '{') {
+          if (depth === 0) topLevelCellOpens.push(i);
+          depth++;
+        } else if (c === '}') {
+          depth--;
+        }
+      }
+    }
+    let bodyMutable = body;
+    for (let ci = topLevelCellOpens.length - 1; ci >= 0; ci--) {
+      const cellOpen = topLevelCellOpens[ci];
+      const cellClose = findMatchingClose(bodyMutable, cellOpen);
+      if (cellClose < 0) continue;
+      const cellEntry = bodyMutable.slice(cellOpen, cellClose + 1);
+      if (/\bpdsch_dedicated\s*:/.test(cellEntry)) continue;
+      // Find n_rb_dl: <num>, inside this cell entry only.
+      const nrb = cellEntry.match(/\n([ \t]+)\bn_rb_dl\s*:\s*\d+\s*,/);
+      if (!nrb) continue;
+      const nrbAbsIdx = cellOpen + cellEntry.indexOf(nrb[0]) + nrb[0].length;
+      const indent = nrb[1];
+      const insertion = `\n${indent}pdsch_dedicated: { p_a: 0 },`;
+      bodyMutable = bodyMutable.slice(0, nrbAbsIdx) + insertion + bodyMutable.slice(nrbAbsIdx);
+      applied.push(`cell_list[]: injected required pdsch_dedicated:{p_a:0}`);
+    }
+    body = bodyMutable;
+
+    if (body !== block.body) {
+      out = out.slice(0, block.blockStart + 1) + body + out.slice(block.blockEnd - 1);
+    }
+  }
 
   for (const field of ['cipher_algo_pref', 'integ_algo_pref']) {
     const re = new RegExp(`(${field}\\s*:\\s*\\[)([^\\]]*)(\\])`, 'g');
