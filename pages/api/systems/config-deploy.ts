@@ -257,11 +257,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       portStatus = true; // ue_db / non-API modules have no port to check
     }
 
+    // ── Phase 5.5: diagnostics on port-check failure ─────────────────
+    // If the daemon "restarted cleanly" but never opened its API port,
+    // the most common cause is a config parse error that crashed the
+    // daemon during init. The real reason lives in journalctl + the
+    // service log file — without it the report just says "port never
+    // came up", which doesn't tell the user which line of the cfg is
+    // bad. Pull the tail now so the report carries it.
+    if (mapping.service && restartSuccess && !portStatus) {
+      // journalctl since last 2 minutes for this unit, last 60 lines.
+      // No-pager so we don't get hung on a tty. sudo because some
+      // distros restrict journal access.
+      await exec(
+        'journalctl',
+        `${sudo} journalctl -u ${q(mapping.service)} --since '2 minutes ago' --no-pager -n 60 2>&1 || true`,
+      );
+      // Also tail the on-box log file the daemon writes — Amarisoft
+      // emits config-syntax errors there before journalctl sees them.
+      const logPath = (module === 'mme' || module === 'ims') ? '/tmp/mme.log'
+                    : module === 'ue' ? '/tmp/ue0.log'
+                    : '/tmp/enb0.log';
+      await exec(
+        'log-tail',
+        `${sudo} tail -n 40 ${q(logPath)} 2>&1 || true`,
+      );
+    }
+
     // ── Wrap up ──────────────────────────────────────────────────────
+    // If we tailed journalctl/log, surface anything that looks like an
+    // Amarisoft parse error in the headline message — it's the single
+    // most actionable signal.
+    let portCheckHint = '';
+    if (mapping.service && restartSuccess && !portStatus) {
+      const journalEntry = log.find(e => e.step === 'journalctl');
+      const logEntry     = log.find(e => e.step === 'log-tail');
+      const haystack = `${journalEntry?.stdout ?? ''}\n${logEntry?.stdout ?? ''}`;
+      // Line like:  config/enb.cfg:75:26: algorithm identifier expected
+      const m = haystack.match(/config\/[^\s:]+:\d+:\d+:[^\n]+/);
+      if (m) portCheckHint = ` — ${m[0].trim()}`;
+    }
+
     const finalError = !restartSuccess
       ? `Service ${mapping.service} did not restart cleanly — ${restartError}`
       : !portStatus
-        ? `Service started but port ${mapping.checkPort} never came up after ~10s`
+        ? `Service started but port ${mapping.checkPort} never came up after ~10s${portCheckHint}`
         : undefined;
     const finalPhase = !restartSuccess ? 'restart' : !portStatus ? 'port-check' : undefined;
 

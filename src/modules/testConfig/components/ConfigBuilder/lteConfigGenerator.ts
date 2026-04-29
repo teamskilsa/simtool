@@ -31,10 +31,18 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
   const logOptions = logParts.join(',');
 
   // ── cipher / integ algo arrays ───────────────────────────────────────────────
+  // Amarisoft's parser expects unquoted uppercase identifiers here, e.g.
+  //   cipher_algo_pref: [EEA0, EEA2, EEA3]
+  //   integ_algo_pref:  [EIA2, EIA3]
+  // Quoted lowercase strings ("eea0", …) trigger
+  //   config/enb.cfg:75:26: algorithm identifier expected
+  // and lteenb exits before opening port 9001 — leaving the deploy stuck
+  // at port-check with no obvious cause. Always upper-case + bare token.
+  const toAlgoToken = (a: string) => String(a).toUpperCase();
   const cipherArr = (form.cipherAlgoPref ?? ['eea0', 'eea2', 'eea3'])
-    .map((a: string) => `"${a}"`).join(', ');
+    .map(toAlgoToken).join(', ');
   const integArr = (form.integAlgoPref ?? ['eia2', 'eia3'])
-    .map((a: string) => `"${a}"`).join(', ');
+    .map(toAlgoToken).join(', ');
 
   // ── Build cell_list — emit every cell in form.cells[] ───────────────────────
   // The flat form fields (cellId, pci, ...) mirror cells[activeCellIdx]; the
