@@ -21,6 +21,10 @@ interface ModuleEntry {
   service: string;
   /** TCP port to probe after restart. 0 = don't probe (no API). */
   checkPort: number;
+  /** Daemon binary + working dir for the pre-deploy validate dry-run.
+   *  Empty binary = skip validate (e.g. ue_db is just data, no daemon). */
+  binary?: string;
+  workingDir?: string;
 }
 
 // ── Module → remote config path + service name + verification port ───────────
@@ -29,11 +33,11 @@ interface ModuleEntry {
 // same /root/enb/config/ directory and the same `lte` unit gets bounced.
 // IMS runs inside ltemme; restarting ltemme also brings IMS back.
 const MODULE_MAP: Record<string, ModuleEntry> = {
-  enb:   { configPath: '/root/enb/config/enb.cfg',   service: 'lte',    checkPort: 9001 },
-  gnb:   { configPath: '/root/enb/config/gnb.cfg',   service: 'lte',    checkPort: 9002 },
-  mme:   { configPath: '/root/mme/config/mme.cfg',   service: 'ltemme', checkPort: 9000 },
-  ims:   { configPath: '/root/mme/config/ims.cfg',   service: 'ltemme', checkPort: 9000 },
-  ue:    { configPath: '/root/ue/config/ue.cfg',     service: 'lteue',  checkPort: 9002 },
+  enb:   { configPath: '/root/enb/config/enb.cfg',   service: 'lte',    checkPort: 9001, binary: '/root/enb/lteenb', workingDir: '/root/enb' },
+  gnb:   { configPath: '/root/enb/config/gnb.cfg',   service: 'lte',    checkPort: 9002, binary: '/root/enb/lteenb', workingDir: '/root/enb' },
+  mme:   { configPath: '/root/mme/config/mme.cfg',   service: 'ltemme', checkPort: 9000, binary: '/root/mme/ltemme', workingDir: '/root/mme' },
+  ims:   { configPath: '/root/mme/config/ims.cfg',   service: 'ltemme', checkPort: 9000, binary: '/root/mme/ltemme', workingDir: '/root/mme' },
+  ue:    { configPath: '/root/ue/config/ue.cfg',     service: 'lteue',  checkPort: 9002, binary: '/root/ue/lteue', workingDir: '/root/ue' },
   ue_db: { configPath: '/root/mme/config/ue_db.cfg', service: '',       checkPort: 0    },
 };
 
@@ -436,6 +440,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     await fs.unlink(localTmp).catch(() => {});
 
+    // ── Phase 2.5: Pre-deploy validate (dry-run) ─────────────────────
+    // Run the daemon binary against the cfg in /tmp BEFORE we promote
+    // it to the live path. If it parses+inits cleanly we proceed; if
+    // it errors out we abort here, leaving the existing live cfg
+    // untouched. This is the only documented-or-not way to capture
+    // Amarisoft init errors per the lteenb doc — there's no API for
+    // it, the cfg log_filename only writes after init, and the
+    // screen-hardcopy diagnostic was unreliable. So we just run the
+    // daemon ourselves.
+    if (mapping.binary && mapping.workingDir) {
+      const validateRes = await exec(
+        'validate',
+        // 5s watchdog — long enough for parse + RF init, short enough
+        // not to stall the deploy. SIGKILL so we don't accidentally
+        // leave a daemon running.
+        `cd ${q(mapping.workingDir)} && ` +
+        `${sudo} timeout -s KILL 5s ${q(mapping.binary)} ${q(remoteTmp)} 2>&1 | head -200 || true`,
+      );
+      const out = validateRes.stdout;
+      // First parse-error-format match wins.
+      const parseErr = out.match(/config\/[^\s:]+:\d+:\d+:[^\n]+/);
+      // Otherwise look for runtime init failures the daemon prints
+      // before exiting.
+      const initErr = !parseErr && out.match(
+        /(\[(?:CONFIG|INIT|RF|FATAL|ERROR)\][^\n]+|Could not[^\n]+|Missing[^\n]+|License error[^\n]+)/,
+      );
+      if (parseErr || initErr) {
+        const why = (parseErr ? parseErr[0] : initErr?.[1] ?? 'unknown error').trim();
+        // Make sure /tmp/<remoteTmp> is cleaned up since we're aborting.
+        await ssh.execCommand(`${sudo} rm -f ${q(remoteTmp)} 2>/dev/null || true`);
+        return res.status(200).json({
+          copySuccess: false,
+          copyMessage: `Pre-deploy validate failed — ${why}`,
+          restartSuccess: false,
+          portStatus: false,
+          output: TAIL(out, 1500),
+          error: `Pre-deploy validate failed — ${why}`,
+          phase: 'validate',
+          commandLog: log,
+        });
+      }
+    }
+
     // ── Phase 3: sudo mv → final path ────────────────────────────────
     const mvRes = await exec(
       'mv',
@@ -529,11 +576,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         `${sudo} journalctl -u ${q(mapping.service)} --since '2 minutes ago' --no-pager -n 60 2>&1 || true`,
       );
       // (4) Find the actual log file — the cfg says one path but
-      //     Amarisoft may write somewhere else. List anything modified
-      //     in the last 5 min that looks like an Amarisoft log.
+      //     Amarisoft may write somewhere else. Looks under /tmp,
+      //     /root/ots/log (the watchdog sometimes logs respawn
+      //     events here), and /var/log for anything modified in the
+      //     last 5 min that looks like an Amarisoft daemon log.
       await exec(
         'find-logs',
-        `${sudo} find /tmp /root -maxdepth 3 -type f \\( -name 'enb*.log' -o -name 'mme*.log' -o -name 'ue*.log' -o -name 'gnb*.log' \\) -mmin -5 2>/dev/null | head -10 || echo '(no recent log files)'`,
+        `${sudo} find /tmp /root/ots/log /var/log -maxdepth 4 -type f \\( -name 'enb*.log' -o -name 'mme*.log' -o -name 'ue*.log' -o -name 'gnb*.log' -o -name 'lte*.log' -o -name 'ots*.log' \\) -mmin -5 2>/dev/null | head -10 || echo '(no recent log files)'`,
       );
       // (5) Tail the cfg-declared log path if it does exist.
       const logPath = (module === 'mme' || module === 'ims') ? '/tmp/mme.log'
@@ -544,48 +593,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         `${sudo} tail -n 40 ${q(logPath)} 2>&1 || true`,
       );
 
-      // (6) THE one that actually catches Amarisoft startup errors:
-      //     dump the running screen session's hardcopy. Amarisoft's
-      //     daemons print parse errors to their stdout inside a screen
-      //     wrapper named after the unit (`screen -x lte` etc.), and
-      //     those messages NEVER reach journalctl or the cfg log file.
-      //     `screen -X hardcopy -h <file>` writes the visible buffer +
-      //     full scrollback to a file we then cat back.
-      //
-      //     Try the unit name as the screen session name; fall back to
-      //     listing all sessions and dumping the first one that looks
-      //     Amarisoft-y. Without this the report would just say "port
-      //     didn't come up" — same as before — and the user would have
-      //     to manually attach to screen and screenshot.
-      const dumpFile = `/tmp/simtool-screen-${Date.now()}.txt`;
+      // (6) screen-list only (kept for visibility into whether the
+      //     watchdog screen session is alive). The screen-hardcopy
+      //     step that used to live here has been retired — it was
+      //     unreliable (the watchdog respawns lteenb on death, which
+      //     clears the screen buffer before our hardcopy can fire),
+      //     and the new pre-deploy validate phase already captures
+      //     the same information directly via SSH-invoked dry-run.
       await exec(
         'screen-list',
         `${sudo} screen -ls 2>&1 | head -20 || echo '(no screen sessions)'`,
       );
-      // -h includes scrollback. -p 0 picks the first window.
-      await exec(
-        'screen-hardcopy',
-        `${sudo} screen -S ${q(mapping.service)} -p 0 -X hardcopy -h ${q(dumpFile)} 2>&1; ` +
-        `${sudo} sed -e 's/^[[:space:]]*$//' ${q(dumpFile)} 2>/dev/null | grep -v '^$' | tail -n 80 || ` +
-        `echo '(no screen buffer captured; daemon may not be running under screen, or session name differs from unit name)'`,
-      );
     }
 
     // ── Wrap up ──────────────────────────────────────────────────────
-    // Surface any Amarisoft parse error in the headline. We pull from
-    // every diagnostic source we collected — the screen-hardcopy is the
-    // most likely match (Amarisoft writes parse errors to stdout inside
-    // the screen wrapper), but also scan journalctl + log-tail in case
-    // the daemon happened to write to the cfg log file before exit.
+    // Surface any Amarisoft parse error in the headline. With pre-deploy
+    // validate enabled, parse/init errors abort earlier and never reach
+    // this branch — but we still scan journalctl + log-tail here for
+    // post-init failures (e.g. license expiry mid-flight) and edge
+    // cases where the daemon dies after the validate dry-run window.
     let portCheckHint = '';
     if (mapping.service && restartSuccess && !portStatus) {
-      const screenEntry  = log.find(e => e.step === 'screen-hardcopy');
       const journalEntry = log.find(e => e.step === 'journalctl');
       const logEntry     = log.find(e => e.step === 'log-tail');
-      const haystack = `${screenEntry?.stdout ?? ''}\n${journalEntry?.stdout ?? ''}\n${logEntry?.stdout ?? ''}`;
-      // Line like:  config/enb.cfg:75:26: algorithm identifier expected
+      const haystack = `${journalEntry?.stdout ?? ''}\n${logEntry?.stdout ?? ''}`;
       const parseErr = haystack.match(/config\/[^\s:]+:\d+:\d+:[^\n]+/);
-      // Or a generic Amarisoft error stem: "[CONFIG] error", "[INIT]..."
       const tagged = !parseErr && haystack.match(/\[(?:CONFIG|INIT|RF|FATAL|ERROR)\][^\n]+/);
       if (parseErr) portCheckHint = ` — ${parseErr[0].trim()}`;
       else if (tagged) portCheckHint = ` — ${tagged[0].trim()}`;
