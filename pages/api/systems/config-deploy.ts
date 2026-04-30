@@ -205,14 +205,16 @@ function sanitizeAmarisoftCfg(content: string): { fixed: string; appliedFixes: s
       const src0 = pairs.get('src0') ?? pairs.get('src') ?? pairs.get('tx_addr') ?? '127.0.0.1:4001';
 
       applied.push(`rf_driver: legacy "args:" string → structured dst0/src0`);
+      // use_tcp:0 / multi_thread:0 verified working on the user's
+      // callbox ↔ UE-sim setup. See generator for rationale.
       return `rf_driver: {
     name: "ip",
     clock: "master",
     clock_factor: 1,
     debug: 0,
     packet_size: 3958,
-    use_tcp: 1,
-    multi_thread: 1,
+    use_tcp: 0,
+    multi_thread: 0,
     /* Port 0 */
     dst0: "${dst0}",
     src0: "${src0}",
