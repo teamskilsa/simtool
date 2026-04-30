@@ -143,10 +143,13 @@ async function run() {
   }
 
   console.log('━'.repeat(70));
-  // The whole point of this test:
-  const ok = data.error?.toLowerCase().match(/missing src port|could not initialize|init error/);
-  if (ok) {
-    console.log('✅ DEPLOY REPORT CAPTURED THE ROOT CAUSE in the headline.');
+  // The whole point of this test: catch the actual root cause in the
+  // headline, fast, instead of timing out on port-check 22s in.
+  const ok = data.error?.toLowerCase().match(
+    /missing src port|could not initialize|init error|expecting '|license error/,
+  );
+  if (ok && data.phase === 'validate') {
+    console.log('✅ Validate phase caught the issue. Headline:');
     console.log(`   "${data.error.trim()}"`);
   } else if (data.phase === 'validate') {
     console.log(`⚠  Aborted at validate phase but headline doesn't match expected pattern.`);

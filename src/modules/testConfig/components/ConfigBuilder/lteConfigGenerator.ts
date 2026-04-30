@@ -4,6 +4,48 @@ import { LTE_TDD_BANDS, makeDefaultLteCell } from './lteConstants';
 import { formatGain } from './rfDefaults';
 
 /**
+ * For the 'ip' rf_driver, derive per-port { dst, src } pairs that match the
+ * Amarisoft trx_ip config.cfg sample shape. The rfArgs form field is a
+ * legacy `args:` string that earlier versions of this generator emitted —
+ * we parse whatever's there and adapt it.
+ *
+ * Recognized inputs:
+ *   "tx_addr=tcp://A:B,rx_addr=tcp://C:D"   (oldest)
+ *   "src=tcp://A:B,dst=tcp://C:D"           (the prev "fix")
+ *   "dst0=A:B,src0=C:D,dst1=…"              (already correct)
+ *   ""                                       (defaults)
+ *
+ * Returns one { dst, src } per requested port. Missing ports get
+ * 127.0.0.1 with a stride-of-2 port range starting at 4000, matching
+ * the canonical Amarisoft sample.
+ */
+function parseIpPortsFromArgs(rfArgs: string | undefined, nPorts: number): Array<{ dst: string; src: string }> {
+  const ports: Array<{ dst: string; src: string }> = [];
+  const normalize = (v: string) => v.trim().replace(/^"+|"+$/g, '').replace(/^tcp:\/\//, '');
+
+  // Read every key=value in the args string into a flat map.
+  const map = new Map<string, string>();
+  for (const tok of (rfArgs ?? '').split(/[,;]/)) {
+    const m = tok.match(/^\s*([a-zA-Z_]\w*)\s*=\s*(.+?)\s*$/);
+    if (m) map.set(m[1].toLowerCase(), normalize(m[2]));
+  }
+
+  // Pull explicit dstN/srcN if present, otherwise fall back to the legacy
+  // tx_addr/rx_addr or src/dst single-pair forms.
+  for (let i = 0; i < nPorts; i++) {
+    const dstK = map.get(`dst${i}`)
+              ?? (i === 0 ? (map.get('dst') ?? map.get('tx_addr')) : undefined);
+    const srcK = map.get(`src${i}`)
+              ?? (i === 0 ? (map.get('src') ?? map.get('rx_addr')) : undefined);
+    ports.push({
+      dst: dstK || `127.0.0.1:${4000 + i * 2}`,
+      src: srcK || `127.0.0.1:${4000 + i * 2 + 1}`,
+    });
+  }
+  return ports;
+}
+
+/**
  * Format PLMN string: MCC (3-digit) + MNC (2- or 3-digit, zero-padded).
  * enb.cfg: cell_list[].plmn_list[].plmn — e.g. "00101" (MCC=001, MNC=01)
  */
@@ -98,22 +140,23 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
         tddConfig: form.tddConfig, tddSpecialSubframe: form.tddSpecialSubframe,
       })];
 
-  // ── Per-cell entries: ONLY the fields Amarisoft requires per-cell, in
-  //    the exact order its parser expects. Everything else lives in the
-  //    cell_default block below and is merged into each cell at parse
-  //    time (per the doc: "cell_default ... will be merged with each
-  //    element of cell_list").
+  // ── Per-cell entries: ONLY the fields that genuinely vary per cell.
+  //    Everything else lives in cell_default below — Amarisoft merges
+  //    cell_default into each cell_list entry at parse time (docs:
+  //    "cell_default ... will be merged with each element of cell_list").
   //
-  //    The parser is positional/sequential: emitting fields in the wrong
-  //    order or unrecognized fields causes errors like
-  //      "expecting 'pdsch_dedicated' field (LTE Cell #N)"
-  //    Order observed to work on Amarisoft 2026-04-22:
-  //      rf_port → cell_id → n_id_cell → tac → dl_earfcn → n_rb_dl →
-  //      pdsch_dedicated → plmn_list → root_sequence_index →
-  //      cipher_algo_pref → integ_algo_pref
+  //    Canonical Amarisoft sample (/root/enb/config/enb.default.cfg)
+  //    keeps cell_list[] minimal:
+  //      plmn_list, dl_earfcn, n_id_cell, cell_id, tac,
+  //      root_sequence_index   (+ TDD / NB-IoT / CAT-M extras)
+  //    Everything else (n_rb_dl, cell_barred, si_value_tag, sib_sched_list,
+  //    pdsch_dedicated, pusch_dedicated, pucch_dedicated, prach_config_index,
+  //    cipher_algo_pref, integ_algo_pref, srs_dedicated, mac_config, dpc, ...)
+  //    sits in cell_default.
   //
-  //    TDD / NB-IoT / CAT-M / scell extras are cell-specific so they go
-  //    on the cell entry (after the required fields).
+  //    Earlier rounds of this bug emitted those fields per-cell and the
+  //    parser balked with "expecting 'X' field" because they're declared
+  //    once-per-config in cell_default, not per-cell.
   const cellListBlock = cellEntries.map((c, i) => {
     const cellTdd = LTE_TDD_BANDS.includes(c.band);
     const tddPart = cellTdd ? `
@@ -132,51 +175,144 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
       scell_list: [${otherCellIds.map(id => `
         { cell_id: ${id}, cross_carrier_scheduling: false }`).join(',')}
       ],` : '';
+    // rf_port only emitted when explicitly non-zero or multi-cell — single-cell
+    // configs match the canonical sample which omits it.
+    const rfPortPart = (cellEntries.length > 1 || (c.rfPort ?? 0) !== 0)
+      ? `\n      rf_port: ${c.rfPort},` : '';
 
     return `    {
       /* ${c.name} */
-      rf_port: ${c.rfPort},
-      cell_id: ${c.cellId},
-      n_id_cell: ${c.pci},
-      tac: ${c.tac},
-      dl_earfcn: ${c.dlEarfcn},
-      n_rb_dl: ${mhzToRbLte(c.bandwidth)},
-      pdsch_dedicated: { p_a: 0 },
       plmn_list: [{
         plmn: "${formatPlmn(form.plmn.mcc, form.plmn.mnc)}",
         attach_without_pdn: ${form.attachWithoutPdn},
         reserved: ${form.plmnReserved},
       }],
-      root_sequence_index: ${c.rootSequenceIndex},
-      cipher_algo_pref: [${cipherArr}],
-      integ_algo_pref: [${integArr}],${c.cellBarred ? `
-      cell_barred: true,` : ''}${tddPart}${nbiotPart}${catmPart}${scellPart}
+      dl_earfcn: ${c.dlEarfcn},
+      n_id_cell: ${c.pci},
+      cell_id: ${c.cellId},
+      tac: ${c.tac},
+      root_sequence_index: ${c.rootSequenceIndex},${rfPortPart}${tddPart}${nbiotPart}${catmPart}${scellPart}
     }`;
   }).join(',\n');
 
-  // ── cell_default: optional / shared parameters, merged into every
-  //    cell at parse time. Keeps cell_list[] entries minimal so the
-  //    parser doesn't trip on field-order mismatches.
+  // ── cell_default: shared / required parameters merged into every cell.
+  //    This block must contain every field Amarisoft requires that isn't
+  //    explicitly per-cell. Field order mirrors the canonical sample.
+  //
+  //    SRS bandwidth tuple varies by N_RB_DL (5/10/15/20 MHz). Values from
+  //    /root/enb/config/enb.default.cfg.
+  const nRbDl = mhzToRbLte(cellEntries[0]?.bandwidth ?? form.bandwidth);
+  const srsBwTuple = (() => {
+    if (nRbDl === 6)   return { config: 7, bw: 1 };
+    if (nRbDl === 15)  return { config: 6, bw: 1 };
+    if (nRbDl === 25)  return { config: 3, bw: 1 };
+    if (nRbDl === 50)  return { config: 2, bw: 2 };
+    if (nRbDl === 75)  return { config: 2, bw: 2 };
+    return { config: 2, bw: 3 };  // 100 / 20 MHz
+  })();
+  // PRACH config index: 4 for FDD (subframe 4 every 10 ms), 15 for 1.4 MHz.
+  const prachConfigIndex = nRbDl === 6 ? 15 : 4;
+  // PUCCH dedicated — TDD adds tdd_ack_nack_feedback_mode.
+  const pucchDedicated = isTdd
+    ? `{ n1_pucch_sr_count: 11, cqi_pucch_n_rb: 1, tdd_ack_nack_feedback_mode: "multiplexing" }`
+    : `{ n1_pucch_sr_count: 11, cqi_pucch_n_rb: 1 }`;
+
   const cellDefaultBlock = `  cell_default: {
     n_antenna_dl: ${form.nAntennaDl},
     n_antenna_ul: ${form.nAntennaUl},
+    n_rb_dl: ${nRbDl},
     cyclic_prefix: "${form.cpMode}",
     phich_duration: "${form.phichDuration}",
     phich_resource: "${form.phichResource}",
-    si_coderate: ${form.siCoderate},
-    si_window_length: ${form.siWindowLength},
+    /* SIB1 */
+    si_value_tag: 1,
+    cell_barred: ${Boolean(cellEntries[0]?.cellBarred)},
     intra_freq_reselection: ${form.intraFreqReselection},
     q_rx_lev_min: ${form.qRxLevMin},
     p_max: ${form.pMax},
+    si_window_length: ${form.siWindowLength},
+    sib_sched_list: [
+      { filename: "sib2_3.asn", si_periodicity: 16 },
+    ],
+    si_coderate: ${form.siCoderate},
+    si_pdcch_format: 2,
+    n_symb_cch: 0,
+    pdsch_dedicated: { p_a: 0, p_b: -1 },
+    pdcch_format: 2,
+    prach_config_index: ${prachConfigIndex},
+    prach_freq_offset: -1,
+    pucch_dedicated: ${pucchDedicated},
+    pusch_dedicated: {
+      beta_offset_ack_index: 9,
+      beta_offset_ri_index: 6,
+      beta_offset_cqi_index: 6,
+    },
+    pusch_hopping_offset: -1,
+    pusch_msg3_mcs: 0,
+    initial_cqi: ${nRbDl === 6 ? 5 : 3},
+    dl_256qam: true,
+    ul_64qam: true,
     sr_period: ${form.srPeriod},
     cqi_period: ${form.cqiPeriod},
+    srs_dedicated: {
+      srs_bandwidth_config: ${srsBwTuple.config},
+      srs_bandwidth: ${srsBwTuple.bw},
+      srs_subframe_config: 3,
+      srs_period: 40,
+      srs_hopping_bandwidth: 0,
+    },
     mac_config: { ul_max_harq_tx: ${form.ulMaxHarqTx}, dl_max_harq_tx: ${form.dlMaxHarqTx} },
+    pusch_max_its: 6,
     dpc: ${form.dpc},
     dpc_pusch_snr_target: ${form.dpcPuschSnrTarget},
     dpc_pucch_snr_target: ${form.dpcPucchSnrTarget},
+    cipher_algo_pref: [${cipherArr}],
+    integ_algo_pref: [${integArr}],
     inactivity_timer: ${form.inactivityTimer},
     drb_config: "${form.drbConfig}",
   },`;
+
+  // ── rf_driver block ──────────────────────────────────────────────────────
+  // Shape varies by driver name. For 'sdr' and 'split' it's a small block
+  // with `args:` (device path / O-RAN options). For 'ip' the trx_ip
+  // driver requires a STRUCTURED block — no args: at all — with per-port
+  // dst<N>/src<N> pairs and several driver-level fields. Source of truth
+  // is /root/enb/config/rf_driver/config.cfg in the Amarisoft package.
+  //
+  // Wrong forms produce:
+  //   args:"tx_addr=…,rx_addr=…"  → "Missing src port definitions"
+  //   args:"src=…,dst=…"          → "Missing src port definitions"
+  // because the parser literally looks for the field NAMES dst0/src0/…
+  // not for an args string.
+  const rfDriverBlock = (() => {
+    if (form.rfMode === 'ip') {
+      const nPorts = Math.max(1, Number(form.nAntennaDl ?? 1));
+      const ipPorts = parseIpPortsFromArgs(form.rfArgs, nPorts);
+      const portLines = ipPorts.map((p, i) =>
+        `    /* Port ${i} */\n    dst${i}: "${p.dst}",\n    src${i}: "${p.src}",`,
+      ).join('\n');
+      return `rf_driver: {
+    name: "ip",
+    clock: "master",
+    clock_factor: 1,
+    debug: 0,
+    packet_size: 3958,
+    use_tcp: 1,
+    multi_thread: 1,
+${portLines}
+  },`;
+    }
+    return `rf_driver: {
+    // enb.cfg: rf_driver.name — sdr / split / ip
+    name: "${form.rfMode}",
+    // enb.cfg: rf_driver.args — content is mode-specific (device path for sdr,
+    // O-RAN fronthaul opts for split). The 'ip' mode does NOT use args
+    // (handled above) — it wants per-port dst<N>/src<N>.
+    args: "${form.rfArgs}",
+    // enb.cfg: rf_driver.rx_antenna
+    rx_antenna: "${form.rxAntenna}",
+  },`;
+  })();
 
   return `/* ${ratLabel} eNB Configuration
  * Generated: ${new Date().toISOString()}
@@ -191,15 +327,7 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
 
   com_addr: "[::]:9001",
 
-  rf_driver: {
-    // enb.cfg: rf_driver.name — sdr / split / ip
-    name: "${form.rfMode}",
-    // enb.cfg: rf_driver.args — content is mode-specific (device path for sdr,
-    // O-RAN fronthaul opts for split, ZMQ socket pair for ip). User-editable.
-    args: "${form.rfArgs}",
-    // enb.cfg: rf_driver.rx_antenna
-    rx_antenna: "${form.rxAntenna}",
-  },
+  ${rfDriverBlock}
 
   // enb.cfg: tx_gain — scalar (all paths) or array (one per antenna)
   tx_gain: ${formatGain(form.txGain)},

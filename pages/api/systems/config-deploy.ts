@@ -162,6 +162,56 @@ function sanitizeAmarisoftCfg(content: string): { fixed: string; appliedFixes: s
   const applied: string[] = [];
   let out = content;
 
+  // ── trx_ip rf_driver block: legacy args: string → structured dst<N>/src<N> ─
+  // Older builder versions emitted
+  //   rf_driver: { name: "ip", args: "tx_addr=…,rx_addr=…", rx_antenna: … }
+  // but Amarisoft's trx_ip driver actually wants a STRUCTURED block with
+  // per-port dst<N>/src<N> keys (and several other fields like clock,
+  // packet_size, use_tcp). Source: /root/enb/config/rf_driver/config.cfg
+  // shipped in the Amarisoft package.
+  //
+  // Detect the inline-args form, extract whatever host:port pairs we can,
+  // and rewrite the whole rf_driver block to the canonical structure. If
+  // the block is already structured (has dst0:/src0: keys), leave it.
+  out = out.replace(
+    /rf_driver\s*:\s*\{([^{}]*?)\}/g,
+    (full: string, body: string) => {
+      // Already structured? Skip.
+      if (/\bdst\d+\s*:/.test(body) || /\bsrc\d+\s*:/.test(body)) return full;
+      // Not the IP driver? Skip.
+      const nameMatch = body.match(/\bname\s*:\s*"([^"]+)"/);
+      if (!nameMatch || nameMatch[1] !== 'ip') return full;
+      const argsMatch = body.match(/\bargs\s*:\s*"([^"]*)"/);
+      if (!argsMatch) return full; // nothing to migrate
+
+      // Parse host:port pairs from the args string. Same logic as the
+      // builder-side parseIpPortsFromArgs but inlined here so the sanitize
+      // doesn't depend on builder code.
+      const argStr = argsMatch[1];
+      const pairs = new Map<string, string>();
+      for (const tok of argStr.split(/[,;]/)) {
+        const m = tok.match(/^\s*([a-zA-Z_]\w*)\s*=\s*(.+?)\s*$/);
+        if (m) pairs.set(m[1].toLowerCase(), m[2].replace(/^tcp:\/\//, ''));
+      }
+      const dst0 = pairs.get('dst0') ?? pairs.get('dst') ?? pairs.get('tx_addr') ?? '127.0.0.1:4000';
+      const src0 = pairs.get('src0') ?? pairs.get('src') ?? pairs.get('rx_addr') ?? '127.0.0.1:4001';
+
+      applied.push(`rf_driver: legacy "args:" string → structured dst0/src0`);
+      return `rf_driver: {
+    name: "ip",
+    clock: "master",
+    clock_factor: 1,
+    debug: 0,
+    packet_size: 3958,
+    use_tcp: 1,
+    multi_thread: 1,
+    /* Port 0 */
+    dst0: "${dst0}",
+    src0: "${src0}",
+  }`;
+    },
+  );
+
   // ── trx_ip args: tx_addr=/rx_addr= → src=/dst= ─────────────────────
   // Older Amarisoft trx_ip drivers accepted tx_addr=/rx_addr=. The
   // 2026-04-22 driver rejects that with
@@ -177,44 +227,53 @@ function sanitizeAmarisoftCfg(content: string): { fixed: string; appliedFixes: s
     }
   }
 
-  // ── LTE cell_list[] rewrites: bandwidth → n_rb_dl, inject pdsch_dedicated ─
-  // We extract LTE cell_list[] blocks via bracket-aware traversal —
-  // a non-greedy regex `\[([\s\S]*?)\]` would truncate at the first
-  // inner `]` (e.g. inside cipher_algo_pref: [...]) and miss the
-  // rest of the cell. The findLteCellLists helper handles nesting
-  // and string literals correctly.
+  // ── LTE cell_list[] rewrites ─────────────────────────────────────
+  // Per the canonical Amarisoft sample (/root/enb/config/enb.default.cfg),
+  // most fields belong in cell_default — Amarisoft merges that block
+  // into every cell_list[] entry at parse time. Only these vary per cell:
+  //   plmn_list, dl_earfcn, n_id_cell, cell_id, tac, root_sequence_index,
+  //   rf_port (multi-port), TDD/NB-IoT/CAT-M extras
   //
-  // NR cell_list and nr_cell_default are skipped (the \b in the
-  // helper's regex makes `cell_list` not match `nr_cell_list`).
+  // Older simtool builders emitted pdsch_dedicated, cipher_algo_pref,
+  // integ_algo_pref, cell_barred, si_value_tag, sib_sched_list, n_rb_dl,
+  // bandwidth — all per-cell. The 2026-04-22 parser rejects this with
+  // "expecting 'X' field" at the next required field it can't find in
+  // the cell_default chain. So this sanitizer:
+  //   1) STRIPS those misplaced fields from each cell_list[] entry
+  //   2) Captures n_rb_dl / cell_barred from the first cell to seed
+  //      cell_default if those fields are missing there
+  //   3) Below, injects any missing required fields into cell_default
+  //
+  // We extract LTE cell_list[] blocks via bracket-aware traversal — a
+  // non-greedy regex would truncate at the first inner `]` inside e.g.
+  // cipher_algo_pref: [...]. The findLteCellLists helper handles nesting
+  // and string literals correctly. NR blocks are skipped via \b.
+  let stripped: { nRbDl?: number; cellBarred?: string; pdschPa?: string } = {};
   const lteBlocks = findLteCellLists(out);
-  // Process from the END so earlier indices stay valid after splice.
   for (let bi = lteBlocks.length - 1; bi >= 0; bi--) {
     const block = lteBlocks[bi];
     let body = block.body;
+    const orig = body;
 
-    // (a) bandwidth → n_rb_dl
+    // (a) bandwidth → n_rb_dl conversion (still useful: legacy configs).
+    //     Captures the value so we can hoist it into cell_default below.
     if (/\bbandwidth\s*:/.test(body) && !/\bn_rb_dl\s*:/.test(body)) {
       body = body.replace(
         /\bbandwidth\s*:\s*([\d.]+)\s*,?/g,
         (_m: string, num: string) => {
           const mhz = parseFloat(num);
           const rb = mhzToRb(mhz);
-          applied.push(`cell_list[].bandwidth: ${num} MHz → n_rb_dl: ${rb}`);
-          return `n_rb_dl: ${rb},`;
+          if (stripped.nRbDl === undefined) stripped.nRbDl = rb;
+          applied.push(`cell_list[].bandwidth: ${num} MHz → cell_default.n_rb_dl: ${rb}`);
+          return '';
         },
       );
     }
 
-    // (b) inject pdsch_dedicated:{p_a:0} after n_rb_dl if missing.
-    //     We walk each `{...}` cell entry inside the cell_list body
-    //     using the same bracket-aware helper (cell entries can
-    //     contain nested objects + arrays, so a regex won't cut it).
-    const cellOpens: number[] = [];
-    for (let i = 0; i < body.length; i++) {
-      if (body[i] === '{') cellOpens.push(i);
-    }
-    // Only top-level cell entries (depth-1 inside the [...] body).
-    // Walk from end to front again so indices stay valid.
+    // (b) Remove the now-misplaced per-cell fields. Walk each top-level
+    //     `{...}` cell entry inside the body so we don't accidentally
+    //     touch fields nested inside other structures. Capture the
+    //     first encountered values to hoist into cell_default.
     const topLevelCellOpens: number[] = [];
     {
       let depth = 0;
@@ -235,26 +294,130 @@ function sanitizeAmarisoftCfg(content: string): { fixed: string; appliedFixes: s
         }
       }
     }
-    let bodyMutable = body;
+
+    // Strip from end so earlier indices stay valid.
     for (let ci = topLevelCellOpens.length - 1; ci >= 0; ci--) {
       const cellOpen = topLevelCellOpens[ci];
-      const cellClose = findMatchingClose(bodyMutable, cellOpen);
+      const cellClose = findMatchingClose(body, cellOpen);
       if (cellClose < 0) continue;
-      const cellEntry = bodyMutable.slice(cellOpen, cellClose + 1);
-      if (/\bpdsch_dedicated\s*:/.test(cellEntry)) continue;
-      // Find n_rb_dl: <num>, inside this cell entry only.
-      const nrb = cellEntry.match(/\n([ \t]+)\bn_rb_dl\s*:\s*\d+\s*,/);
-      if (!nrb) continue;
-      const nrbAbsIdx = cellOpen + cellEntry.indexOf(nrb[0]) + nrb[0].length;
-      const indent = nrb[1];
-      const insertion = `\n${indent}pdsch_dedicated: { p_a: 0 },`;
-      bodyMutable = bodyMutable.slice(0, nrbAbsIdx) + insertion + bodyMutable.slice(nrbAbsIdx);
-      applied.push(`cell_list[]: injected required pdsch_dedicated:{p_a:0}`);
-    }
-    body = bodyMutable;
+      let cell = body.slice(cellOpen, cellClose + 1);
+      const cellOrig = cell;
 
-    if (body !== block.body) {
+      // Strip n_rb_dl (move to cell_default).
+      cell = cell.replace(/\n[ \t]+n_rb_dl\s*:\s*(\d+)\s*,?/g, (_m, v) => {
+        if (stripped.nRbDl === undefined) stripped.nRbDl = parseInt(v, 10);
+        return '';
+      });
+      // Strip cell_barred (move to cell_default).
+      cell = cell.replace(/\n[ \t]+cell_barred\s*:\s*(true|false)\s*,?/g, (_m, v) => {
+        if (stripped.cellBarred === undefined) stripped.cellBarred = v;
+        return '';
+      });
+      // Strip pdsch_dedicated (move to cell_default). Match the whole
+      // `pdsch_dedicated: { ... }` even if it has nested braces.
+      const pdschMatch = cell.match(/\n[ \t]+pdsch_dedicated\s*:\s*\{/);
+      if (pdschMatch) {
+        const startIdx = cell.indexOf(pdschMatch[0]) + pdschMatch[0].length - 1; // index of {
+        const endIdx = findMatchingClose(cell, startIdx);
+        if (endIdx >= 0) {
+          // Capture the body so we can preserve p_a if present.
+          const pa = cell.slice(startIdx, endIdx + 1).match(/\bp_a\s*:\s*(-?\d+)/);
+          if (pa && stripped.pdschPa === undefined) stripped.pdschPa = pa[1];
+          // Also drop trailing comma after the close.
+          let dropEnd = endIdx + 1;
+          while (cell[dropEnd] === ',' || cell[dropEnd] === ' ') dropEnd++;
+          cell = cell.slice(0, cell.indexOf(pdschMatch[0])) + cell.slice(dropEnd);
+        }
+      }
+      // Strip cipher_algo_pref / integ_algo_pref (move to cell_default).
+      cell = cell.replace(/\n[ \t]+cipher_algo_pref\s*:\s*\[[^\]]*\]\s*,?/g, '');
+      cell = cell.replace(/\n[ \t]+integ_algo_pref\s*:\s*\[[^\]]*\]\s*,?/g, '');
+      // Strip si_value_tag.
+      cell = cell.replace(/\n[ \t]+si_value_tag\s*:\s*\d+\s*,?/g, '');
+      // Strip sib_sched_list (array — bracket-aware).
+      const sibMatch = cell.match(/\n[ \t]+sib_sched_list\s*:\s*\[/);
+      if (sibMatch) {
+        const startIdx = cell.indexOf(sibMatch[0]) + sibMatch[0].length - 1; // index of [
+        const endIdx = findMatchingClose(cell, startIdx);
+        if (endIdx >= 0) {
+          let dropEnd = endIdx + 1;
+          while (cell[dropEnd] === ',' || cell[dropEnd] === ' ') dropEnd++;
+          cell = cell.slice(0, cell.indexOf(sibMatch[0])) + cell.slice(dropEnd);
+        }
+      }
+
+      if (cell !== cellOrig) {
+        body = body.slice(0, cellOpen) + cell + body.slice(cellClose + 1);
+        applied.push(`cell_list[]: stripped misplaced per-cell fields (moved to cell_default)`);
+      }
+    }
+
+    if (body !== orig) {
       out = out.slice(0, block.blockStart + 1) + body + out.slice(block.blockEnd - 1);
+    }
+  }
+
+  // ── cell_default: ensure all required fields are present ────────
+  // The canonical Amarisoft sample requires these fields in cell_default.
+  // Inject any that are missing, using values salvaged from cell_list[]
+  // entries above where possible. Order mirrors the sample so the parser
+  // sees fields in the expected sequence.
+  const cellDefaultMatch = out.match(/\bcell_default\s*:\s*\{/);
+  if (cellDefaultMatch) {
+    const openIdx = (cellDefaultMatch.index ?? 0) + cellDefaultMatch[0].length - 1; // index of {
+    const closeIdx = findMatchingClose(out, openIdx);
+    if (closeIdx >= 0) {
+      const block = out.slice(openIdx, closeIdx + 1);
+      const need: Array<{ name: string; emit: string }> = [];
+      const has = (k: string) => new RegExp(`\\b${k}\\s*:`).test(block);
+
+      // Salvaged-value-aware fields first.
+      if (!has('n_rb_dl') && stripped.nRbDl !== undefined) {
+        need.push({ name: 'n_rb_dl', emit: `n_rb_dl: ${stripped.nRbDl}` });
+      }
+      if (!has('cell_barred')) {
+        need.push({ name: 'cell_barred', emit: `cell_barred: ${stripped.cellBarred ?? 'false'}` });
+      }
+      if (!has('pdsch_dedicated')) {
+        const pa = stripped.pdschPa ?? '0';
+        need.push({ name: 'pdsch_dedicated', emit: `pdsch_dedicated: { p_a: ${pa}, p_b: -1 }` });
+      }
+      // Static-default fields. Emit only if absent.
+      const staticDefaults: Array<{ name: string; emit: string }> = [
+        { name: 'si_value_tag', emit: 'si_value_tag: 1' },
+        { name: 'sib_sched_list', emit: 'sib_sched_list: [\n      { filename: "sib2_3.asn", si_periodicity: 16 },\n    ]' },
+        { name: 'si_pdcch_format', emit: 'si_pdcch_format: 2' },
+        { name: 'n_symb_cch', emit: 'n_symb_cch: 0' },
+        { name: 'pdcch_format', emit: 'pdcch_format: 2' },
+        { name: 'prach_config_index', emit: 'prach_config_index: 4' },
+        { name: 'prach_freq_offset', emit: 'prach_freq_offset: -1' },
+        { name: 'pucch_dedicated', emit: 'pucch_dedicated: { n1_pucch_sr_count: 11, cqi_pucch_n_rb: 1 }' },
+        { name: 'pusch_dedicated', emit: 'pusch_dedicated: {\n      beta_offset_ack_index: 9,\n      beta_offset_ri_index: 6,\n      beta_offset_cqi_index: 6,\n    }' },
+        { name: 'pusch_hopping_offset', emit: 'pusch_hopping_offset: -1' },
+        { name: 'pusch_msg3_mcs', emit: 'pusch_msg3_mcs: 0' },
+        { name: 'initial_cqi', emit: 'initial_cqi: 3' },
+        { name: 'dl_256qam', emit: 'dl_256qam: true' },
+        { name: 'ul_64qam', emit: 'ul_64qam: true' },
+        { name: 'srs_dedicated', emit: 'srs_dedicated: {\n      srs_bandwidth_config: 3,\n      srs_bandwidth: 1,\n      srs_subframe_config: 3,\n      srs_period: 40,\n      srs_hopping_bandwidth: 0,\n    }' },
+        { name: 'pusch_max_its', emit: 'pusch_max_its: 6' },
+        { name: 'cipher_algo_pref', emit: 'cipher_algo_pref: [1, 2, 3]' },
+        { name: 'integ_algo_pref', emit: 'integ_algo_pref: [1, 2, 3]' },
+      ];
+      for (const f of staticDefaults) {
+        if (!has(f.name)) need.push(f);
+      }
+
+      if (need.length > 0) {
+        // Inject right before the closing brace, preserving indent.
+        const before = out.slice(0, closeIdx);
+        // Find indent from the line containing the close brace.
+        const lineStart = before.lastIndexOf('\n') + 1;
+        const closeIndent = out.slice(lineStart, closeIdx).match(/^[ \t]*/)?.[0] ?? '  ';
+        const fieldIndent = closeIndent + '  ';
+        const injected = need.map(f => `${fieldIndent}${f.emit},`).join('\n');
+        out = before + '\n' + injected + '\n' + out.slice(closeIdx);
+        applied.push(`cell_default: injected ${need.map(n => n.name).join(', ')}`);
+      }
     }
   }
 
@@ -451,32 +614,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // daemon ourselves.
     if (mapping.binary && mapping.workingDir) {
       // Validate dry-run: invoke the daemon binary directly, kill at 5s,
-      // capture output to a file, then read the head. Implementation
-      // notes hard-won from this taking 5 minutes to time out earlier:
+      // capture output. Implementation notes:
       //
-      //   • cd MUST be inside the sudo shell (/root/<module> is root-only)
+      //   • Cfg goes in the same DIR as the live cfg — Amarisoft
+      //     resolves relative include paths (sib2_3.asn, drb.cfg, etc.)
+      //     from the cfg file's location, not CWD. If we run with cfg
+      //     in /tmp, lteenb tries /tmp/sib2_3.asn and fails; if it sits
+      //     next to the live cfg in /root/<module>/config/ relative
+      //     paths resolve.
+      //   • cd MUST be inside the sudo shell (/root/<module> is root-only).
       //   • Don't use a pipe to `head` — when timeout SIGKILLs lteenb,
-      //     the pipe sometimes doesn't close head cleanly; redirect to a
-      //     file instead and read it back after.
-      //   • </dev/null so the daemon doesn't try to read from a missing
-      //     TTY and block.
+      //     the pipe sometimes doesn't close head cleanly; redirect to
+      //     a file instead.
+      //   • </dev/null so the daemon doesn't block on missing TTY.
       //   • Outer hard timeout of 10s wraps the whole bash so even if
-      //     lteenb gets stuck on radio init holding the device, the
-      //     deploy doesn't stall the user's UI for minutes.
+      //     lteenb gets stuck on radio init the deploy doesn't stall.
+      const cfgDir = path.posix.dirname(mapping.configPath);
+      const validateCfg = `${cfgDir}/.simtool-validate-${Date.now()}.cfg`;
       const valOut = `/tmp/simtool-validate-${Date.now()}.txt`;
       const validateRes = await exec(
         'validate',
         `${sudo} bash -c ${q(
+          // Move our /tmp cfg into the live cfg dir so relative
+          // includes resolve. Run lteenb, capture, clean up the
+          // shadow cfg. If anything fails we don't want the shadow
+          // file lingering — `; rm -f` runs unconditionally.
+          `cp ${remoteTmp} ${validateCfg} && ` +
           `cd ${mapping.workingDir} && ` +
-          `timeout -s KILL 5s ${mapping.binary} ${remoteTmp} </dev/null > ${valOut} 2>&1; ` +
-          `head -200 ${valOut}; rm -f ${valOut}`,
+          `timeout -s KILL 5s ${mapping.binary} ${validateCfg} </dev/null > ${valOut} 2>&1; ` +
+          `RESULT=$?; ` +
+          `head -200 ${valOut}; ` +
+          `rm -f ${valOut} ${validateCfg}; exit $RESULT`,
         )} & VPID=$!; ` +
         `( sleep 10; ${sudo} kill -KILL $VPID 2>/dev/null ) & WPID=$!; ` +
-        `wait $VPID 2>/dev/null; ${sudo} kill -KILL $WPID 2>/dev/null; true`,
+        `wait $VPID 2>/dev/null; ${sudo} kill -KILL $WPID 2>/dev/null; ` +
+        // Belt-and-suspenders cleanup if the kill happened mid-flight.
+        `${sudo} rm -f ${validateCfg} ${valOut} 2>/dev/null; true`,
       );
       const out = validateRes.stdout;
-      // First parse-error-format match wins.
-      const parseErr = out.match(/config\/[^\s:]+:\d+:\d+:[^\n]+/);
+      // Parse-error format is "<path>.cfg:<line>:<col>: <message>". Path
+      // can be the live "config/enb.cfg" OR our temp "/tmp/simtool-cfg-
+      // <id>.cfg" — match either by anchoring on .cfg:<line>:<col>:.
+      const parseErr = out.match(/[^\s]+\.cfg:\d+:\d+:[^\n]+/);
       // Otherwise look for runtime init failures the daemon prints
       // before exiting.
       const initErr = !parseErr && out.match(
@@ -655,7 +834,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const journalEntry = log.find(e => e.step === 'journalctl');
       const logEntry     = log.find(e => e.step === 'log-tail');
       const haystack = `${otsEntry?.stdout ?? ''}\n${journalEntry?.stdout ?? ''}\n${logEntry?.stdout ?? ''}`;
-      const parseErr = haystack.match(/config\/[^\s:]+:\d+:\d+:[^\n]+/);
+      const parseErr = haystack.match(/[^\s]+\.cfg:\d+:\d+:[^\n]+/);
       // Pull out OTS-style "INIT error: ..." or generic "[INIT] / [RF]"
       // tagged lines, or runtime stderr like "Could not initialize…",
       // "Missing src port definitions", "License error".

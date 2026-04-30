@@ -151,8 +151,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // Parse-error line: "config/enb.cfg:75:26: <message>"
-    const parseMatch = output.match(/config\/[^\s:]+:\d+:\d+:[^\n]+/);
+    // Parse-error line: "<path>.cfg:<line>:<col>: <message>". Path can
+    // be the live "config/enb.cfg" or our /tmp/simtool-cfg-<id>.cfg
+    // depending on whether validate is invoked from the live deploy
+    // path or standalone. Anchor on .cfg:<line>:<col>: to catch both.
+    const parseMatch = output.match(/[^\s]+\.cfg:\d+:\d+:[^\n]+/);
     // Init / runtime errors. Includes:
     //   - [OTS] - ENB: INIT error: ... (the OTS watchdog's tag)
     //   - [CONFIG] / [INIT] / [RF] / [FATAL] / [ERROR] (lteenb tags)
