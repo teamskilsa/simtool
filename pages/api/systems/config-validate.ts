@@ -109,18 +109,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     //   - "[INIT] Config error:" / "Could not initialize RF driver" /
     //     similar on init failure.
     // We grep both patterns and surface the first hit explicitly.
+    // cd MUST run inside sudo's shell — /root/{enb,mme,ue} are
+    // root-owned and the SSH user can't cd into them. Earlier form
+    // (`cd … && sudo lteenb`) failed at cd with "Permission denied"
+    // before sudo even started. Wrap the whole pipeline in
+    // `sudo bash -c '…'`.
     const cmd =
-      `cd ${q(mapping.workingDir)} && ` +
-      `${sudo} timeout -s KILL ${Number(timeoutSec)}s ${q(mapping.binary)} ${q(remoteTmp)} 2>&1 | head -200`;
+      `${sudo} bash -c ${q(`cd ${mapping.workingDir} && ` +
+        `timeout -s KILL ${Number(timeoutSec)}s ${mapping.binary} ${remoteTmp} 2>&1 | head -200`)}`;
     const r = await ssh.execCommand(cmd);
-    const output = (r.stdout + (r.stderr ? '\n' + r.stderr : '')).trim();
+    let output = (r.stdout + (r.stderr ? '\n' + r.stderr : '')).trim();
+
+    // Fallback: if the dry-run produced nothing useful (env / perm
+    // issue), peek at the OTS watchdog log. It captures init errors
+    // from the live daemon — same content the user sees on
+    // `screen -x lte`. Useful when validate can't run lteenb directly
+    // but the live daemon is currently failing for the same reason.
+    const sparse =
+      output.length < 40 ||
+      /Permission denied|command not found|sudo:.*not found/.test(output);
+    if (sparse) {
+      const otsRes = await ssh.execCommand(
+        `${sudo} tail -n 60 /var/log/lte/ots.log 2>/dev/null || ` +
+        `${sudo} tail -n 60 /var/log/ots/ots.log 2>/dev/null || ` +
+        `${sudo} tail -n 60 /root/ots/log/ots.log 2>/dev/null || true`,
+      );
+      const otsTail = (otsRes.stdout || '').trim();
+      if (otsTail) {
+        output = `${output}\n\n--- /var/log/lte/ots.log (tail) ---\n${otsTail}`;
+      }
+    }
 
     // Parse-error line: "config/enb.cfg:75:26: <message>"
     const parseMatch = output.match(/config\/[^\s:]+:\d+:\d+:[^\n]+/);
-    // Init / runtime errors. Includes generic "[CONFIG] error", "[INIT]"
-    // messages, and the trx_ip "Could not initialize RF driver" line.
+    // Init / runtime errors. Includes:
+    //   - [OTS] - ENB: INIT error: ... (the OTS watchdog's tag)
+    //   - [CONFIG] / [INIT] / [RF] / [FATAL] / [ERROR] (lteenb tags)
+    //   - "Could not initialize ..." / "Missing src port definitions"
+    //     (raw stderr from trx drivers)
+    //   - "License error" (license-server reachability)
     const initMatch = !parseMatch && output.match(
-      /(\[(?:CONFIG|INIT|RF|FATAL|ERROR)\][^\n]+|Could not[^\n]+|Missing[^\n]+|Permission denied[^\n]+|License error[^\n]+)/,
+      /(\[OTS\][^\n]*INIT\s+error[^\n]*|\[(?:CONFIG|INIT|RF|FATAL|ERROR)\][^\n]+|Could not[^\n]+|Missing[^\s][^\n]*|License error[^\n]+)/,
     );
 
     // Cleanup the remote temp cfg.

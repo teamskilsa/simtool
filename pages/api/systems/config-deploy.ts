@@ -455,8 +455,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // 5s watchdog — long enough for parse + RF init, short enough
         // not to stall the deploy. SIGKILL so we don't accidentally
         // leave a daemon running.
-        `cd ${q(mapping.workingDir)} && ` +
-        `${sudo} timeout -s KILL 5s ${q(mapping.binary)} ${q(remoteTmp)} 2>&1 | head -200 || true`,
+        //
+        // The cd MUST run inside sudo's shell — /root/enb is owned by
+        // root and the SSH user (sysadmin/etc.) can't cd into it. The
+        // earlier form `cd /root/enb && sudo lteenb` failed at cd with
+        // "Permission denied" before sudo even started. Wrap the
+        // entire pipeline in `sudo bash -c '…'`.
+        `${sudo} bash -c ${q(`cd ${mapping.workingDir} && timeout -s KILL 5s ${mapping.binary} ${remoteTmp} 2>&1 | head -200`)} || true`,
       );
       const out = validateRes.stdout;
       // First parse-error-format match wins.
@@ -464,9 +469,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Otherwise look for runtime init failures the daemon prints
       // before exiting.
       const initErr = !parseErr && out.match(
-        /(\[(?:CONFIG|INIT|RF|FATAL|ERROR)\][^\n]+|Could not[^\n]+|Missing[^\n]+|License error[^\n]+)/,
+        /(\[(?:CONFIG|INIT|RF|FATAL|ERROR)\][^\n]+|Could not[^\n]+|Missing[^\s][^\n]*|License error[^\n]+)/,
       );
-      if (parseErr || initErr) {
+      // Detect "couldn't even run the daemon" — env issue, not a cfg
+      // issue. Don't abort the deploy on these; let the live path try.
+      const envFailed = !parseErr && !initErr && (
+        /Permission denied/.test(out) ||
+        /sudo:[^\n]+not found/.test(out) ||
+        /command not found/.test(out) ||
+        out.trim().length < 5
+      );
+      if ((parseErr || initErr) && !envFailed) {
         const why = (parseErr ? parseErr[0] : initErr?.[1] ?? 'unknown error').trim();
         // Make sure /tmp/<remoteTmp> is cleaned up since we're aborting.
         await ssh.execCommand(`${sudo} rm -f ${q(remoteTmp)} 2>/dev/null || true`);
@@ -481,6 +494,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           commandLog: log,
         });
       }
+      // envFailed → we couldn't even run the daemon for the dry-run
+      // (sudo/path/perm issue). Fall through to live deploy; the
+      // post-restart diagnostics will catch errors via /var/log/lte/ots.log.
     }
 
     // ── Phase 3: sudo mv → final path ────────────────────────────────
@@ -575,14 +591,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         'journalctl',
         `${sudo} journalctl -u ${q(mapping.service)} --since '2 minutes ago' --no-pager -n 60 2>&1 || true`,
       );
-      // (4) Find the actual log file — the cfg says one path but
-      //     Amarisoft may write somewhere else. Looks under /tmp,
-      //     /root/ots/log (the watchdog sometimes logs respawn
-      //     events here), and /var/log for anything modified in the
-      //     last 5 min that looks like an Amarisoft daemon log.
+      // (4a) The OTS watchdog log — /var/log/lte/ots.log on Amarisoft
+      //      OTS-managed boxes — captures init errors with timestamps
+      //      and is the most reliable source we've seen for "why did
+      //      lteenb die" on a live deploy. Read the recent tail.
+      await exec(
+        'ots-log-tail',
+        `${sudo} tail -n 60 /var/log/lte/ots.log 2>&1 || ` +
+        `${sudo} tail -n 60 /var/log/ots/ots.log 2>&1 || ` +
+        `${sudo} tail -n 60 /root/ots/log/ots.log 2>&1 || echo '(no ots.log found in standard paths)'`,
+      );
+      // (4b) Catch-all log search — if the daemon writes to an
+      //      unconventional path we still find it as long as it was
+      //      modified in the last 5 minutes.
       await exec(
         'find-logs',
-        `${sudo} find /tmp /root/ots/log /var/log -maxdepth 4 -type f \\( -name 'enb*.log' -o -name 'mme*.log' -o -name 'ue*.log' -o -name 'gnb*.log' -o -name 'lte*.log' -o -name 'ots*.log' \\) -mmin -5 2>/dev/null | head -10 || echo '(no recent log files)'`,
+        `${sudo} find /tmp /root/ots/log /var/log /var/log/lte -maxdepth 4 -type f \\( -name 'enb*.log' -o -name 'mme*.log' -o -name 'ue*.log' -o -name 'gnb*.log' -o -name 'lte*.log' -o -name 'ots*.log' \\) -mmin -5 2>/dev/null | head -10 || echo '(no recent log files)'`,
       );
       // (5) Tail the cfg-declared log path if it does exist.
       const logPath = (module === 'mme' || module === 'ims') ? '/tmp/mme.log'
@@ -607,20 +631,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // ── Wrap up ──────────────────────────────────────────────────────
-    // Surface any Amarisoft parse error in the headline. With pre-deploy
-    // validate enabled, parse/init errors abort earlier and never reach
-    // this branch — but we still scan journalctl + log-tail here for
-    // post-init failures (e.g. license expiry mid-flight) and edge
-    // cases where the daemon dies after the validate dry-run window.
+    // Surface any Amarisoft parse / init error in the headline. Sources
+    // ordered by signal-strength:
+    //   1. /var/log/lte/ots.log — the OTS watchdog log. Most reliable;
+    //      captures init errors with timestamps before screen sees them.
+    //   2. journalctl — only sees the systemd unit lifecycle, not the
+    //      daemon's stdout.
+    //   3. cfg-declared log file — only written after init succeeds.
     let portCheckHint = '';
     if (mapping.service && restartSuccess && !portStatus) {
+      const otsEntry     = log.find(e => e.step === 'ots-log-tail');
       const journalEntry = log.find(e => e.step === 'journalctl');
       const logEntry     = log.find(e => e.step === 'log-tail');
-      const haystack = `${journalEntry?.stdout ?? ''}\n${logEntry?.stdout ?? ''}`;
+      const haystack = `${otsEntry?.stdout ?? ''}\n${journalEntry?.stdout ?? ''}\n${logEntry?.stdout ?? ''}`;
       const parseErr = haystack.match(/config\/[^\s:]+:\d+:\d+:[^\n]+/);
-      const tagged = !parseErr && haystack.match(/\[(?:CONFIG|INIT|RF|FATAL|ERROR)\][^\n]+/);
+      // Pull out OTS-style "INIT error: ..." or generic "[INIT] / [RF]"
+      // tagged lines, or runtime stderr like "Could not initialize…",
+      // "Missing src port definitions", "License error".
+      const tagged = !parseErr && haystack.match(
+        /(\[OTS\][^\n]*INIT\s+error[^\n]*|\[(?:CONFIG|INIT|RF|FATAL|ERROR)\][^\n]+|Could not[^\n]+|Missing[^\s][^\n]*|License error[^\n]+)/,
+      );
       if (parseErr) portCheckHint = ` — ${parseErr[0].trim()}`;
-      else if (tagged) portCheckHint = ` — ${tagged[0].trim()}`;
+      else if (tagged) portCheckHint = ` — ${tagged[1].trim()}`;
     }
 
     const finalError = !restartSuccess
