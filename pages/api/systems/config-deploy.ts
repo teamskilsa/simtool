@@ -656,21 +656,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // can be the live "config/enb.cfg" OR our temp "/tmp/simtool-cfg-
       // <id>.cfg" — match either by anchoring on .cfg:<line>:<col>:.
       const parseErr = out.match(/[^\s]+\.cfg:\d+:\d+:[^\n]+/);
-      // Otherwise look for runtime init failures the daemon prints
-      // before exiting.
-      const initErr = !parseErr && out.match(
+      // Non-cfg post-parse errors. We DON'T abort the deploy on these:
+      // the cfg is structurally valid and the user explicitly asked to
+      // promote it. Examples:
+      //   • License error: "Tag X not found" — license-server-side issue,
+      //     no relation to cfg syntax.
+      //   • "Could not initialize RF driver" / "Missing src port" —
+      //     trx_ip peer down, RF hardware unavailable — ops issue.
+      //   • [CONFIG] / [INIT] / [RF] / [FATAL] / [ERROR] tagged lines —
+      //     runtime issues unrelated to cfg parsing.
+      // We surface these as warnings on the deploy, but the live cfg
+      // still gets updated so the user's `screen -x lte` no longer
+      // shows the OLD parse error after deploy.
+      const postParseErr = !parseErr && out.match(
         /(\[(?:CONFIG|INIT|RF|FATAL|ERROR)\][^\n]+|Could not[^\n]+|Missing[^\s][^\n]*|License error[^\n]+)/,
       );
       // Detect "couldn't even run the daemon" — env issue, not a cfg
-      // issue. Don't abort the deploy on these; let the live path try.
-      const envFailed = !parseErr && !initErr && (
+      // issue. Don't abort on these either; let the live path try.
+      const envFailed = !parseErr && !postParseErr && (
         /Permission denied/.test(out) ||
         /sudo:[^\n]+not found/.test(out) ||
         /command not found/.test(out) ||
         out.trim().length < 5
       );
-      if ((parseErr || initErr) && !envFailed) {
-        const why = (parseErr ? parseErr[0] : initErr?.[1] ?? 'unknown error').trim();
+      // ABORT path — ONLY on real cfg syntax errors. Anything else
+      // (license, RF init, env issues) the user has already triaged
+      // via the live deploy diagnostics.
+      if (parseErr && !envFailed) {
+        const why = parseErr[0].trim();
         // Make sure /tmp/<remoteTmp> is cleaned up since we're aborting.
         await ssh.execCommand(`${sudo} rm -f ${q(remoteTmp)} 2>/dev/null || true`);
         return res.status(200).json({
@@ -682,6 +695,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           error: `Pre-deploy validate failed — ${why}`,
           phase: 'validate',
           commandLog: log,
+        });
+      }
+      // postParseErr → cfg parsed cleanly but daemon won't run for
+      // a non-cfg reason. Log the warning and fall through to deploy
+      // the cfg anyway. Headline of the final report will show the
+      // post-parse issue.
+      if (postParseErr) {
+        log.push({
+          step: 'validate-warning',
+          ok: true,
+          stdout: `cfg parsed cleanly; non-cfg issue surfaced — daemon may not start: ${postParseErr[1].trim()}`,
         });
       }
       // envFailed → we couldn't even run the daemon for the dry-run

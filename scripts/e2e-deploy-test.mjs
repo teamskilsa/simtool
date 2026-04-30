@@ -143,25 +143,65 @@ async function run() {
   }
 
   console.log('━'.repeat(70));
-  // The whole point of this test: catch the actual root cause in the
-  // headline, fast, instead of timing out on port-check 22s in.
-  const ok = data.error?.toLowerCase().match(
-    /missing src port|could not initialize|init error|expecting '|license error/,
-  );
-  if (ok && data.phase === 'validate') {
-    console.log('✅ Validate phase caught the issue. Headline:');
-    console.log(`   "${data.error.trim()}"`);
-  } else if (data.phase === 'validate') {
-    console.log(`⚠  Aborted at validate phase but headline doesn't match expected pattern.`);
-    console.log(`   Headline: "${data.error}"`);
-  } else if (!data.portStatus && data.restartSuccess) {
-    console.log('❌ Reached port-check timeout WITHOUT capturing the daemon error.');
-    console.log('   The validate phase or ots-log-tail diagnostic should have caught it.');
-  } else if (data.copySuccess && data.restartSuccess && data.portStatus) {
-    console.log('🎉 DEPLOY ACTUALLY SUCCEEDED — port 9001 is up.');
+  // ── Proper QA gates ─────────────────────────────────────────────────
+  // The whole point of this test isn't just "did the API return", it's:
+  //   (1) Did the LIVE cfg on the box get replaced? (copySuccess + mv)
+  //   (2) Does the live cfg now PARSE cleanly when the daemon reads it?
+  //   (3) If the daemon ultimately failed, was it for a NON-cfg reason
+  //       (license / RF / hardware) — i.e. simtool's job is done?
+  //
+  // We assert each independently and report which gates passed.
+  let passes = 0, fails = 0;
+  const gate = (label, cond, detail = '') => {
+    if (cond) { console.log(`✅ ${label}`); passes++; }
+    else      { console.log(`❌ ${label}${detail ? `  — ${detail}` : ''}`); fails++; }
+  };
+
+  gate('GATE 1: copySuccess (cfg written to live path)', !!data.copySuccess,
+    data.copySuccess ? '' : `phase=${data.phase} error=${data.error}`);
+
+  // GATE 2: parse the validate output. We need to see banner/license/RF
+  // lines (= parser succeeded) and NOT see "expecting 'X' field".
+  const validateEntry = data.commandLog?.find(e => e.step === 'validate');
+  const valOut = validateEntry?.stdout ?? '';
+  const hasParseErr = /[^\s]+\.cfg:\d+:\d+:\s*expecting/.test(valOut);
+  const hasBanner = /Base Station version|This software is licensed/.test(valOut);
+  gate('GATE 2: validate output shows clean parse (banner + no "expecting field")',
+    hasBanner && !hasParseErr,
+    hasParseErr
+      ? `parse error: ${valOut.match(/[^\s]+\.cfg:\d+:\d+:[^\n]+/)?.[0] ?? '(unknown)'}`
+      : !hasBanner ? '(no banner observed — daemon may not have launched)' : '');
+
+  // GATE 3: validate-warning entry indicates only post-parse issue
+  // (license/RF/init), NOT a cfg structure issue.
+  const warnEntry = data.commandLog?.find(e => e.step === 'validate-warning');
+  if (data.copySuccess) {
+    gate('GATE 3: deploy proceeded past validate (cfg side is good)', true);
+  } else if (data.phase === 'validate' && hasParseErr) {
+    gate('GATE 3: deploy proceeded past validate (cfg side is good)', false,
+      'aborted on real parse error — cfg is structurally broken');
   } else {
-    console.log('?  Unclassified outcome; inspect commandLog above.');
+    gate('GATE 3: deploy proceeded past validate (cfg side is good)', false,
+      `aborted at phase=${data.phase}: ${data.error}`);
   }
+
+  // GATE 4: final state — either port came up (full success), OR port
+  // timed out for a non-cfg reason that the diagnostics surfaced.
+  if (data.portStatus) {
+    gate('GATE 4: port 9001 open (full end-to-end success)', true);
+  } else if (data.copySuccess && warnEntry) {
+    gate('GATE 4: post-parse issue surfaced and cfg deployed (license/RF/etc)',
+      true, `diagnosed: ${warnEntry.stdout.replace(/^.*surfaced — /, '').trim()}`);
+  } else if (!data.copySuccess) {
+    gate('GATE 4: deploy aborted before reaching port check', false);
+  } else {
+    gate('GATE 4: port 9001 never came up; check diagnostics in commandLog', false,
+      data.error ?? '(no headline)');
+  }
+
+  console.log('━'.repeat(70));
+  console.log(`SUMMARY: ${passes} passed, ${fails} failed`);
+  if (fails > 0) process.exitCode = 1;
 }
 
 run().catch(e => { console.error('test crashed:', e); process.exit(1); });
