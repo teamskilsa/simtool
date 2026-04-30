@@ -23,8 +23,11 @@ export function defaultRfArgs(mode: RfMode, nAntennaDl: number): string {
     return 'vlan_tagging=1,vlan_id=10,if_name=eth0,bfp_iq_width=9';
   }
   if (mode === 'ip') {
-    // ZMQ-style IP RF — TX/RX pair on localhost (commonly used with srsRAN UEs)
-    return 'tx_addr=tcp://127.0.0.1:2000,rx_addr=tcp://127.0.0.1:2001';
+    // ZMQ-style IP RF — TX/RX pair on localhost (commonly used with srsRAN UEs).
+    // use_tcp=0 (UDP) + multi_thread=0 are the values verified working with
+    // the typical eNB-first / UE-sim-second startup order. The trx_ip block
+    // emitted from these args sets dst<N>/src<N> per port.
+    return 'tx_addr=tcp://127.0.0.1:2000,rx_addr=tcp://127.0.0.1:2001,use_tcp=0,multi_thread=0';
   }
   return '';
 }

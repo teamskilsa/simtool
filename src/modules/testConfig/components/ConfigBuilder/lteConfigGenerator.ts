@@ -302,19 +302,33 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
       const portLines = ipPorts.map((p, i) =>
         `    /* Port ${i} */\n    dst${i}: "${p.dst}",\n    src${i}: "${p.src}",`,
       ).join('\n');
-      // use_tcp:0 + multi_thread:0 are the values verified working
-      // against the user's callbox (192.168.1.240) ↔ UE-sim (192.168.1.51)
-      // setup. With use_tcp:1 the daemon needs a paired peer that's
-      // already listening; UDP (use_tcp:0) is more forgiving for the
-      // typical eNB-first / UE-sim-second startup order.
+      // use_tcp / multi_thread come from rfArgs (UI-controllable). The
+      // RF section exposes them as selects; defaults are 0/0 — the
+      // values verified working against the user's callbox (192.168.1.240)
+      // ↔ UE-sim (192.168.1.51) setup. With use_tcp:1 the daemon needs a
+      // peer already listening; UDP (use_tcp:0) is more forgiving for
+      // the typical eNB-first / UE-sim-second startup order.
+      const argMap = new Map<string, string>();
+      for (const tok of (form.rfArgs ?? '').split(/[,;]/)) {
+        const m = tok.match(/^\s*([a-zA-Z_]\w*)\s*=\s*(.+?)\s*$/);
+        if (m) argMap.set(m[1].toLowerCase(), m[2].trim());
+      }
+      const useTcp = (() => {
+        const v = argMap.get('use_tcp');
+        return v === '1' ? 1 : 0;
+      })();
+      const multiThread = (() => {
+        const v = argMap.get('multi_thread');
+        return v === '1' ? 1 : 0;
+      })();
       return `rf_driver: {
     name: "ip",
     clock: "master",
     clock_factor: 1,
     debug: 0,
     packet_size: 3958,
-    use_tcp: 0,
-    multi_thread: 0,
+    use_tcp: ${useTcp},
+    multi_thread: ${multiThread},
 ${portLines}
   },`;
     }

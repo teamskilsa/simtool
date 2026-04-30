@@ -104,6 +104,32 @@ export function RFSection({ form, onChange }: Props) {
                   placeholder="tcp://127.0.0.1:2001"
                 />
               </div>
+              {/* trx_ip transport / threading toggles. These map to
+                  rf_driver.use_tcp and rf_driver.multi_thread in the
+                  emitted cfg. UDP + single-thread (0/0) is the default
+                  that worked end-to-end on the user's callbox. */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <Field
+                  label="Transport (rf_driver.use_tcp)"
+                  value={parseRfArgs(form.rfArgs).use_tcp ?? '0'}
+                  onChange={v => onChange('rfArgs', setRfArg(form.rfArgs, 'use_tcp', v))}
+                  type="select"
+                  options={[
+                    { value: '0', label: 'UDP (use_tcp=0) — default, eNB-first startup OK' },
+                    { value: '1', label: 'TCP (use_tcp=1) — peer must be listening first' },
+                  ]}
+                />
+                <Field
+                  label="Threading (rf_driver.multi_thread)"
+                  value={parseRfArgs(form.rfArgs).multi_thread ?? '0'}
+                  onChange={v => onChange('rfArgs', setRfArg(form.rfArgs, 'multi_thread', v))}
+                  type="select"
+                  options={[
+                    { value: '0', label: 'Single-thread (multi_thread=0) — default' },
+                    { value: '1', label: 'Multi-thread (multi_thread=1) — per-port worker' },
+                  ]}
+                />
+              </div>
               <p className="text-[11px] text-muted-foreground mt-1.5">{rfArgsHint('ip')}</p>
             </>
           )}
