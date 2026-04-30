@@ -243,6 +243,17 @@ export function QuickRunPanel() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<ExecutionStep | null>(null);
 
+  // Validate dry-run state. Separate from run/result so a Validate
+  // failure doesn't blow away a previous successful Run result.
+  const [validating, setValidating] = useState(false);
+  const [validateOutput, setValidateOutput] = useState<{
+    accepted: boolean;
+    parseError?: string;
+    initError?: string;
+    output: string;
+    durationMs?: number;
+  } | null>(null);
+
   // Auto-jump countdown state. null = no jump scheduled.
   const [autoJumpIn, setAutoJumpIn] = useState<number | null>(null);
   const autoJumpTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -326,6 +337,70 @@ export function QuickRunPanel() {
     !!selectedConfig.content &&
     !!module &&
     !running;
+
+  // Validate the cfg without bouncing the live daemon. SCPs to /tmp,
+  // runs `lteenb -c <tmp>` with a 5-second watchdog, captures stdout.
+  // Catches both syntax errors and RF init failures (the things that
+  // would otherwise be invisible until we deploy + restart + watch
+  // port 9001 fail to come up).
+  const handleValidate = async () => {
+    if (!selectedSystem || !selectedConfig || !module) return;
+    if (!selectedSystem.username || (!selectedSystem.password && !selectedSystem.privateKey)) {
+      toast({
+        title: 'Missing SSH credentials',
+        description: `System "${selectedSystem.name}" has no SSH username/password set.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    setValidating(true);
+    setValidateOutput(null);
+    try {
+      const r = await fetch('/api/systems/config-validate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          host: selectedSystem.ip,
+          port: selectedSystem.sshPort ?? 22,
+          username: selectedSystem.username,
+          ...(selectedSystem.authMode === 'privateKey' && selectedSystem.privateKey
+            ? { privateKey: selectedSystem.privateKey }
+            : { password: selectedSystem.password ?? '' }),
+          module,
+          configContent: selectedConfig.content,
+          timeoutSec: 5,
+        }),
+      });
+      const data = await r.json();
+      setValidateOutput({
+        accepted: !!data.accepted,
+        parseError: data.parseError,
+        initError: data.initError,
+        output: data.output ?? '',
+        durationMs: data.durationMs,
+      });
+      if (data.accepted) {
+        toast({
+          title: 'Config accepted',
+          description: `${selectedConfig.name} parsed and reached RF init without errors (${data.durationMs}ms).`,
+        });
+      } else if (data.parseError) {
+        toast({ title: 'Parse error', description: data.parseError, variant: 'destructive' });
+      } else if (data.initError) {
+        toast({ title: 'Init error', description: data.initError, variant: 'destructive' });
+      } else if (!data.success) {
+        toast({ title: 'Validate failed', description: data.error || 'Unknown error', variant: 'destructive' });
+      } else {
+        toast({
+          title: 'Validate inconclusive',
+          description: 'Daemon ran without classifiable error — see output below.',
+        });
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message || 'Validate failed', variant: 'destructive' });
+    } finally {
+      setValidating(false);
+    }
+  };
 
   const handleRun = async () => {
     if (!canRun || !selectedSystem || !selectedConfig || !module) return;
@@ -472,7 +547,7 @@ export function QuickRunPanel() {
             </Select>
           </div>
 
-          {/* ─── Step 3 — Run ────────────────────────────────────────── */}
+          {/* ─── Step 3 — Validate (dry-run) + Run (deploy) ──────────── */}
           <div className="flex items-center gap-3 pt-2 border-t">
             <Button onClick={handleRun} disabled={!canRun} size="lg">
               {running ? (
@@ -484,6 +559,29 @@ export function QuickRunPanel() {
                 <>
                   <PlayCircle className="w-4 h-4 mr-2" />
                   Run
+                </>
+              )}
+            </Button>
+
+            {/* Dry-run lteenb against the cfg without replacing the
+                live one. Catches parse + RF init errors in 5s instead
+                of the deploy → restart → port-timeout cycle. */}
+            <Button
+              variant="outline"
+              onClick={handleValidate}
+              disabled={!canRun || validating}
+              size="lg"
+              title="SCP cfg to /tmp, run lteenb against it for 5s, capture stdout — does NOT touch the live daemon"
+            >
+              {validating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Validating…
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Validate
                 </>
               )}
             </Button>
@@ -650,6 +748,52 @@ export function QuickRunPanel() {
                 {MODULE_LABEL[module]} is now running with{' '}
                 <span className="font-mono">{selectedConfig?.name}</span>.
               </p>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* ─── Validate-only result ─────────────────────────────────────
+          Separate panel from the deploy result. Shows what lteenb said
+          when we ran it against the cfg in /tmp without bouncing the
+          live daemon. */}
+      {validateOutput && (
+        <Alert variant={validateOutput.accepted ? 'default' : 'destructive'}>
+          {validateOutput.accepted
+            ? <CheckCircle2 className="h-4 w-4" />
+            : <AlertCircle className="h-4 w-4" />}
+          <AlertTitle className="flex items-center gap-2">
+            {validateOutput.accepted
+              ? 'Config accepted by lteenb'
+              : (validateOutput.parseError ? 'Parse error' : validateOutput.initError ? 'Init error' : 'Inconclusive')}
+            {validateOutput.durationMs != null && (
+              <Badge variant="outline" className="text-[10px]">
+                {(validateOutput.durationMs / 1000).toFixed(1)}s
+              </Badge>
+            )}
+          </AlertTitle>
+          <AlertDescription className="space-y-2">
+            {validateOutput.parseError && (
+              <p className="font-mono text-xs whitespace-pre-wrap">{validateOutput.parseError}</p>
+            )}
+            {validateOutput.initError && (
+              <p className="font-mono text-xs whitespace-pre-wrap">{validateOutput.initError}</p>
+            )}
+            {validateOutput.accepted && (
+              <p className="text-xs opacity-80">
+                Daemon parsed the cfg, reached RF init, and ran for the watchdog window
+                without errors. Safe to deploy.
+              </p>
+            )}
+            {validateOutput.output && (
+              <details className="text-[11px]">
+                <summary className="cursor-pointer opacity-80 hover:opacity-100">
+                  Show full daemon output ({validateOutput.output.split('\n').length} lines)
+                </summary>
+                <pre className="mt-2 font-mono whitespace-pre-wrap break-all leading-snug pl-2 border-l border-current/30">
+                  {validateOutput.output}
+                </pre>
+              </details>
             )}
           </AlertDescription>
         </Alert>

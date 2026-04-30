@@ -158,6 +158,21 @@ function sanitizeAmarisoftCfg(content: string): { fixed: string; appliedFixes: s
   const applied: string[] = [];
   let out = content;
 
+  // ── trx_ip args: tx_addr=/rx_addr= → src=/dst= ─────────────────────
+  // Older Amarisoft trx_ip drivers accepted tx_addr=/rx_addr=. The
+  // 2026-04-22 driver rejects that with
+  //   "Missing src port definitions / Could not initialize RF driver"
+  // and the canonical names are src=/dst=. These tokens only appear
+  // inside the rf_driver.args string so a global replace is safe.
+  if (/\btx_addr\s*=/.test(out) || /\brx_addr\s*=/.test(out)) {
+    const before = out;
+    out = out.replace(/\btx_addr\s*=/g, 'src=');
+    out = out.replace(/\brx_addr\s*=/g, 'dst=');
+    if (out !== before) {
+      applied.push('rf_driver.args: tx_addr=/rx_addr= → src=/dst=');
+    }
+  }
+
   // ── LTE cell_list[] rewrites: bandwidth → n_rb_dl, inject pdsch_dedicated ─
   // We extract LTE cell_list[] blocks via bracket-aware traversal —
   // a non-greedy regex `\[([\s\S]*?)\]` would truncate at the first
