@@ -109,14 +109,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     //   - "[INIT] Config error:" / "Could not initialize RF driver" /
     //     similar on init failure.
     // We grep both patterns and surface the first hit explicitly.
-    // cd MUST run inside sudo's shell — /root/{enb,mme,ue} are
-    // root-owned and the SSH user can't cd into them. Earlier form
-    // (`cd … && sudo lteenb`) failed at cd with "Permission denied"
-    // before sudo even started. Wrap the whole pipeline in
-    // `sudo bash -c '…'`.
+    // Validate dry-run. Notes hard-won from earlier hangs:
+    //   • cd MUST be inside the sudo shell (/root/<module> is root-only)
+    //   • Write daemon output to a file, then read it back — piping to
+    //     `head` after a SIGKILL'd lteenb sometimes leaves head waiting.
+    //   • </dev/null so the daemon doesn't block on a missing TTY.
+    //   • Outer hard timeout (timeoutSec + 5s) wraps the whole bash so
+    //     even if lteenb gets stuck on RF init holding the device, the
+    //     SSH command returns and the request doesn't stall.
+    const valOut = `/tmp/simtool-validate-${Date.now()}.txt`;
+    const inner = `${sudo} bash -c ${q(
+      `cd ${mapping.workingDir} && ` +
+      `timeout -s KILL ${Number(timeoutSec)}s ${mapping.binary} ${remoteTmp} </dev/null > ${valOut} 2>&1; ` +
+      `head -200 ${valOut}; rm -f ${valOut}`,
+    )}`;
+    const outerSec = Number(timeoutSec) + 5;
     const cmd =
-      `${sudo} bash -c ${q(`cd ${mapping.workingDir} && ` +
-        `timeout -s KILL ${Number(timeoutSec)}s ${mapping.binary} ${remoteTmp} 2>&1 | head -200`)}`;
+      `${inner} & VPID=$!; ` +
+      `( sleep ${outerSec}; ${sudo} kill -KILL $VPID 2>/dev/null ) & WPID=$!; ` +
+      `wait $VPID 2>/dev/null; ${sudo} kill -KILL $WPID 2>/dev/null; true`;
     const r = await ssh.execCommand(cmd);
     let output = (r.stdout + (r.stderr ? '\n' + r.stderr : '')).trim();
 

@@ -450,18 +450,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // screen-hardcopy diagnostic was unreliable. So we just run the
     // daemon ourselves.
     if (mapping.binary && mapping.workingDir) {
+      // Validate dry-run: invoke the daemon binary directly, kill at 5s,
+      // capture output to a file, then read the head. Implementation
+      // notes hard-won from this taking 5 minutes to time out earlier:
+      //
+      //   • cd MUST be inside the sudo shell (/root/<module> is root-only)
+      //   • Don't use a pipe to `head` — when timeout SIGKILLs lteenb,
+      //     the pipe sometimes doesn't close head cleanly; redirect to a
+      //     file instead and read it back after.
+      //   • </dev/null so the daemon doesn't try to read from a missing
+      //     TTY and block.
+      //   • Outer hard timeout of 10s wraps the whole bash so even if
+      //     lteenb gets stuck on radio init holding the device, the
+      //     deploy doesn't stall the user's UI for minutes.
+      const valOut = `/tmp/simtool-validate-${Date.now()}.txt`;
       const validateRes = await exec(
         'validate',
-        // 5s watchdog — long enough for parse + RF init, short enough
-        // not to stall the deploy. SIGKILL so we don't accidentally
-        // leave a daemon running.
-        //
-        // The cd MUST run inside sudo's shell — /root/enb is owned by
-        // root and the SSH user (sysadmin/etc.) can't cd into it. The
-        // earlier form `cd /root/enb && sudo lteenb` failed at cd with
-        // "Permission denied" before sudo even started. Wrap the
-        // entire pipeline in `sudo bash -c '…'`.
-        `${sudo} bash -c ${q(`cd ${mapping.workingDir} && timeout -s KILL 5s ${mapping.binary} ${remoteTmp} 2>&1 | head -200`)} || true`,
+        `${sudo} bash -c ${q(
+          `cd ${mapping.workingDir} && ` +
+          `timeout -s KILL 5s ${mapping.binary} ${remoteTmp} </dev/null > ${valOut} 2>&1; ` +
+          `head -200 ${valOut}; rm -f ${valOut}`,
+        )} & VPID=$!; ` +
+        `( sleep 10; ${sudo} kill -KILL $VPID 2>/dev/null ) & WPID=$!; ` +
+        `wait $VPID 2>/dev/null; ${sudo} kill -KILL $WPID 2>/dev/null; true`,
       );
       const out = validateRes.stdout;
       // First parse-error-format match wins.
