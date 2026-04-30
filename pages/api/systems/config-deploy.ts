@@ -187,14 +187,22 @@ function sanitizeAmarisoftCfg(content: string): { fixed: string; appliedFixes: s
       // Parse host:port pairs from the args string. Same logic as the
       // builder-side parseIpPortsFromArgs but inlined here so the sanitize
       // doesn't depend on builder code.
+      //
+      // Mapping (verified against the trx_ip "Cannot assign requested
+      // address" bind failure):
+      //   tx_addr → src (LOCAL TX bind on the daemon host)
+      //   rx_addr → dst (PEER, e.g. UE simulator address)
+      // Earlier versions had this flipped, so legacy saved configs with
+      // tx_addr=<callbox>,rx_addr=<UE-sim> produced src=<UE-sim> which
+      // the callbox couldn't bind locally.
       const argStr = argsMatch[1];
       const pairs = new Map<string, string>();
       for (const tok of argStr.split(/[,;]/)) {
         const m = tok.match(/^\s*([a-zA-Z_]\w*)\s*=\s*(.+?)\s*$/);
         if (m) pairs.set(m[1].toLowerCase(), m[2].replace(/^tcp:\/\//, ''));
       }
-      const dst0 = pairs.get('dst0') ?? pairs.get('dst') ?? pairs.get('tx_addr') ?? '127.0.0.1:4000';
-      const src0 = pairs.get('src0') ?? pairs.get('src') ?? pairs.get('rx_addr') ?? '127.0.0.1:4001';
+      const dst0 = pairs.get('dst0') ?? pairs.get('dst') ?? pairs.get('rx_addr') ?? '127.0.0.1:4000';
+      const src0 = pairs.get('src0') ?? pairs.get('src') ?? pairs.get('tx_addr') ?? '127.0.0.1:4001';
 
       applied.push(`rf_driver: legacy "args:" string → structured dst0/src0`);
       return `rf_driver: {

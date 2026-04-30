@@ -5,15 +5,26 @@ import { formatGain } from './rfDefaults';
 
 /**
  * For the 'ip' rf_driver, derive per-port { dst, src } pairs that match the
- * Amarisoft trx_ip config.cfg sample shape. The rfArgs form field is a
- * legacy `args:` string that earlier versions of this generator emitted —
- * we parse whatever's there and adapt it.
+ * Amarisoft trx_ip config.cfg sample shape.
+ *
+ * trx_ip semantics (verified against canonical /root/enb/config/rf_driver/
+ * config.cfg + the bind-address failure mode `Cannot assign requested
+ * address`):
+ *   • src<N> = LOCAL socket the daemon BINDS to. Must resolve to an
+ *     address on the host running the daemon.
+ *   • dst<N> = PEER address (e.g. UE simulator). Outbound sample target.
+ *
+ * Form-side mapping for legacy `args:` strings:
+ *   tx_addr → src   (local bind for TX path)
+ *   rx_addr → dst   (peer where RX arrives from)
+ * Earlier versions had this flipped, which produced configs that tried
+ * to bind to the user's PC IP from the callbox and failed at RF init.
  *
  * Recognized inputs:
- *   "tx_addr=tcp://A:B,rx_addr=tcp://C:D"   (oldest)
- *   "src=tcp://A:B,dst=tcp://C:D"           (the prev "fix")
- *   "dst0=A:B,src0=C:D,dst1=…"              (already correct)
- *   ""                                       (defaults)
+ *   "tx_addr=tcp://LOCAL,rx_addr=tcp://PEER"  (legacy form)
+ *   "src=tcp://LOCAL,dst=tcp://PEER"          (canonical names)
+ *   "dst0=PEER,src0=LOCAL,dst1=…"             (already structured)
+ *   ""                                         (defaults to loopback)
  *
  * Returns one { dst, src } per requested port. Missing ports get
  * 127.0.0.1 with a stride-of-2 port range starting at 4000, matching
@@ -30,13 +41,13 @@ function parseIpPortsFromArgs(rfArgs: string | undefined, nPorts: number): Array
     if (m) map.set(m[1].toLowerCase(), normalize(m[2]));
   }
 
-  // Pull explicit dstN/srcN if present, otherwise fall back to the legacy
-  // tx_addr/rx_addr or src/dst single-pair forms.
+  // Pull explicit dstN/srcN if present, otherwise fall back. Note:
+  //   tx_addr → src (local TX bind), rx_addr → dst (peer / RX source).
   for (let i = 0; i < nPorts; i++) {
     const dstK = map.get(`dst${i}`)
-              ?? (i === 0 ? (map.get('dst') ?? map.get('tx_addr')) : undefined);
+              ?? (i === 0 ? (map.get('dst') ?? map.get('rx_addr')) : undefined);
     const srcK = map.get(`src${i}`)
-              ?? (i === 0 ? (map.get('src') ?? map.get('rx_addr')) : undefined);
+              ?? (i === 0 ? (map.get('src') ?? map.get('tx_addr')) : undefined);
     ports.push({
       dst: dstK || `127.0.0.1:${4000 + i * 2}`,
       src: srcK || `127.0.0.1:${4000 + i * 2 + 1}`,
