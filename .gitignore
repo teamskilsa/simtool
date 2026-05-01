@@ -28,3 +28,4 @@ dist-ssr
 /data/*
 !/data/.gitkeep
 tsconfig.tsbuildinfo
+data/qa/
