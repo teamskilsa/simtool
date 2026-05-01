@@ -206,6 +206,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     steps.push({ name: 'build-cmd', ok: true, detail: cmd });
 
+    // 6.5 Wait for any in-progress apt run to free the dpkg lock.
+    //
+    // install.sh internally runs `apt-get install` for runtime deps;
+    // if the dpkg-frontend lock is held by something else (almost
+    // always unattended-upgrades fired by the system at boot, or by
+    // our own preceding deploy/provision step) install.sh aborts with:
+    //     "Warning, package manager is currently locked.
+    //      Retry later or use --no-package option."
+    // and returns exit 1. Skipping --no-package is the right default
+    // (we DO need the deps), so instead we poll up to ~3 minutes for
+    // the lock to free, then proceed. If it's still held after that
+    // we surface a clear error so the user knows it's a transient
+    // OS-side issue, not a SimTool / Amarisoft installer bug.
+    const lockWait = await ssh.execCommand(
+      `for i in $(seq 1 90); do ` +
+      `  ${sudoPrefix} fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || ` +
+      `  ${sudoPrefix} fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || break; ` +
+      `  sleep 2; ` +
+      `done; ` +
+      `if ${sudoPrefix} fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then ` +
+      `  ${sudoPrefix} lsof /var/lib/dpkg/lock-frontend 2>&1 | head -3; exit 1; ` +
+      `fi; exit 0`,
+      { execOptions: { pty: false } },
+    );
+    const lockHolder = lockWait.stdout.trim().slice(-200);
+    steps.push({
+      name: 'apt-lock-wait',
+      ok: lockWait.code === 0,
+      detail: lockWait.code === 0
+        ? 'dpkg lock free'
+        : `dpkg lock still held after 180s — ${lockHolder || 'holder unknown'}`,
+    });
+    if (lockWait.code !== 0) {
+      return res.status(200).json({
+        success: false,
+        steps,
+        error:
+          'Amarisoft install requires apt and another process is holding the dpkg lock ' +
+          '(usually unattended-upgrades). Wait a minute and retry. ' +
+          (lockHolder ? `Holder: ${lockHolder}` : ''),
+        installLog,
+      });
+    }
+
     // 7. Run installer (as root). Pass the sudo password via stdin; install.sh
     //    is now non-interactive so stdin isn't consumed further.
     const fullCmd = `(echo ${q(pwd)}) | ${sudoPrefix} -i bash -c ${q(`cd ${q(workspace)} && ${cmd}`)} 2>&1`;
