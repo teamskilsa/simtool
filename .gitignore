@@ -27,3 +27,4 @@ dist-ssr
 # Add to your existing .gitignore:
 /data/*
 !/data/.gitkeep
+tsconfig.tsbuildinfo
