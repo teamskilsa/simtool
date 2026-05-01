@@ -84,7 +84,19 @@ export async function provisionSystem(system: System): Promise<ProvisionResult> 
     return { success: false, steps, error: msg, failedStep: 'ssh-test' };
   }
 
-  // Step 3: deploy agent
+  // Step 3: deploy agent.
+  //
+  // Timeout note: the deploy can legitimately take a few minutes on a
+  // first run because we may need to:
+  //   • wait up to 120s for a running apt / unattended-upgrades to free
+  //     the dpkg-frontend lock, then run apt-get update + install nodejs
+  //   • fall back to NodeSource (curl + apt-get install)
+  //   • or fall back to bundled-node — simtool host fetches a ~25MB
+  //     portable node tarball from nodejs.org (cached after first hit
+  //     per arch), SCPs it, extracts on remote
+  // 60s used to be enough when deploy was just SCP+start, but with auto-
+  // install of node it isn't. 5 minutes gives slow networks enough room
+  // and the user can always hit Retry if something genuinely hangs.
   try {
     const deployRes = await fetchWithTimeout(
       '/api/systems/deploy',
@@ -93,7 +105,7 @@ export async function provisionSystem(system: System): Promise<ProvisionResult> 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(credentials),
       },
-      60000,
+      5 * 60_000,
     ).then((r) => r.json());
 
     if (!deployRes.success) {
