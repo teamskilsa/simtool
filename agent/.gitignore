@@ -2,3 +2,6 @@ node_modules
 dist
 .DS_Store
 *.log
+# Bundled-node cache for offline-target provisioning. Downloaded on
+# first deploy from nodejs.org per arch; not tracked in git.
+runtime/
