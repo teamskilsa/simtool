@@ -85,18 +85,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           });
         }
 
-        // License server config file
+        // License server config file. The cfg can contain multiple
+        // license_server: { server_addr:"X", tag:"Y" } entries — one
+        // per Amarisoft component being licensed (e.g. on a callbox you
+        // typically have one each for cs-enb, cs-mme, cs-ims). The
+        // older single-regex match returned only the first; we now
+        // emit one serverConfig per entry so the UI can list/remove
+        // them individually.
         if (file === 'license_server.cfg' || file.endsWith('.cfg')) {
           const catRes = await ssh.execCommand(`${sudoPrefix} cat '${fullPath}' 2>/dev/null`);
           const text = catRes.stdout;
-          const serverMatch = text.match(/server_addr\s*:\s*"([^"]+)"/);
-          const tagMatch = text.match(/tag\s*:\s*"([^"]+)"/);
-          if (serverMatch) {
-            serverConfigs.push({
-              path: fullPath,
-              serverAddr: serverMatch[1],
-              tag: tagMatch ? tagMatch[1] : '',
-            });
+          // Match each license_server: { ... } block; inside, pull
+          // server_addr and tag. We tolerate any field order and
+          // variable whitespace because hand-edited cfgs are common.
+          const blockRe = /license_server\s*:\s*\{([^}]*)\}/g;
+          let m: RegExpExecArray | null;
+          let matched = false;
+          while ((m = blockRe.exec(text)) !== null) {
+            matched = true;
+            const inner = m[1];
+            const sa = inner.match(/server_addr\s*:\s*"([^"]+)"/);
+            const tg = inner.match(/tag\s*:\s*"([^"]+)"/);
+            if (sa) {
+              serverConfigs.push({
+                path: fullPath,
+                serverAddr: sa[1],
+                tag: tg ? tg[1] : '',
+              });
+            }
+          }
+          // Fallback: cfg without `{...}` blocks (rare, but seen on
+          // some hand-rolled installs) — keep the legacy single-match
+          // behaviour so we don't silently drop them.
+          if (!matched) {
+            const sa = text.match(/server_addr\s*:\s*"([^"]+)"/);
+            const tg = text.match(/tag\s*:\s*"([^"]+)"/);
+            if (sa) {
+              serverConfigs.push({
+                path: fullPath,
+                serverAddr: sa[1],
+                tag: tg ? tg[1] : '',
+              });
+            }
           }
         }
       }

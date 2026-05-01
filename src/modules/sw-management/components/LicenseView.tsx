@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Key, Search, Upload, Server, Usb, CheckCircle2, XCircle, AlertCircle, Loader2, History } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import { Key, Search, Upload, Server, Usb, CheckCircle2, XCircle, AlertCircle, Loader2, History, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { FileUpload } from '@/components/ui/file-upload';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from '@/components/ui/use-toast';
@@ -14,6 +15,22 @@ import { SystemSelector } from './SystemSelector';
 import { useSystems } from '@/modules/systems/hooks/use-systems';
 import { useCachedAddresses } from '../hooks/useCachedAddresses';
 import type { System } from '@/modules/systems/types';
+
+// Components that can be licensed via tags on the license server. The
+// list shown in the UI is filtered by selected system type — Callbox
+// gets eNB/MME/IMS, UE Simulator gets UE only.
+type LicenseComponent = 'enb' | 'mme' | 'ims' | 'ue';
+const COMPONENT_META: Record<LicenseComponent, { label: string; description: string; defaultTag: string }> = {
+  enb: { label: 'eNB / gNB', description: 'Base station daemon (lteenb)', defaultTag: 'cs-enb' },
+  mme: { label: 'MME',       description: 'Mobility Management Entity (ltemme)', defaultTag: 'cs-mme' },
+  ims: { label: 'IMS',       description: 'IP Multimedia Subsystem (folded into ltemme)', defaultTag: 'cs-ims' },
+  ue:  { label: 'UE',        description: 'UE simulator (lteue)', defaultTag: 'cs-ue' },
+};
+function componentsForSystemType(type?: string): LicenseComponent[] {
+  if (type === 'Callbox') return ['enb', 'mme', 'ims'];
+  if (type === 'UESim')   return ['ue'];
+  return ['enb']; // sensible fallback for unknown / mixed types
+}
 
 type DeployMode = 'system' | 'server' | 'dongle';
 
@@ -70,9 +87,24 @@ export function LicenseView() {
   const [targetDir, setTargetDir] = useState('/root/.simnovus');
   const [licenseFile, setLicenseFile] = useState<File | null>(null);
   const [serverAddr, setServerAddr] = useState('');
-  const [serverTag, setServerTag] = useState('');
+  // Per-component tag rows. Defaults to enabled for the components that
+  // make sense for the selected system type; the UI only renders rows
+  // for components in `visibleComponents` so the user only sees what
+  // applies. Values persist if the user switches between systems.
+  const [tagRows, setTagRows] = useState<Record<LicenseComponent, { enabled: boolean; value: string }>>({
+    enb: { enabled: true,  value: COMPONENT_META.enb.defaultTag },
+    mme: { enabled: true,  value: COMPONENT_META.mme.defaultTag },
+    ims: { enabled: false, value: COMPONENT_META.ims.defaultTag },
+    ue:  { enabled: true,  value: COMPONENT_META.ue.defaultTag },
+  });
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployResult, setDeployResult] = useState<DeployResult | null>(null);
+  const [removingTag, setRemovingTag] = useState<string | null>(null);
+
+  const visibleComponents = useMemo(
+    () => componentsForSystemType(selectedSystem?.type),
+    [selectedSystem?.type],
+  );
 
   // History of license-server addresses, shared with the Poll License tab
   // via the same localStorage key. Picking one here also seeds future
@@ -82,7 +114,10 @@ export function LicenseView() {
   // One-shot handoff from the Poll License tab: when the user clicked
   // "Use this license" over there, the poll view stuffs the server addr
   // and tag into sessionStorage, switches to this tab, and we read the
-  // values on mount to pre-fill the deploy form.
+  // values on mount to pre-fill the deploy form. With multi-tag we put
+  // the picked tag into the FIRST visible component's row so it ends
+  // up exactly where the user expects it (e.g. on a callbox the eNB
+  // row gets pre-populated).
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const raw = window.sessionStorage.getItem('simtool_license_deploy_target');
@@ -93,9 +128,18 @@ export function LicenseView() {
       if (hint.addr) {
         setDeployMode('server');
         setServerAddr(hint.addr);
-        if (hint.tag) setServerTag(hint.tag);
+        if (hint.tag) {
+          const target = visibleComponents[0] ?? 'enb';
+          setTagRows((prev) => ({
+            ...prev,
+            [target]: { enabled: true, value: hint.tag! },
+          }));
+        }
       }
     } catch { /* malformed — ignore */ }
+  // visibleComponents only changes when the selected system's type
+  // changes — handoff runs on mount, so this is fine to depend on.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Persist the address to history once the user actually deploys with it.
@@ -136,6 +180,15 @@ export function LicenseView() {
     }
   };
 
+  // Collect enabled tags for server mode. Only emit components that
+  // are both visible for the selected system type AND enabled by the
+  // user, with non-empty values. Backend accepts this as a JSON array.
+  const enabledTags = useMemo(() => {
+    return visibleComponents
+      .filter((c) => tagRows[c]?.enabled && tagRows[c].value.trim())
+      .map((c) => tagRows[c].value.trim());
+  }, [visibleComponents, tagRows]);
+
   const handleDeploy = async () => {
     if (!selectedSystem) return;
     setIsDeploying(true);
@@ -148,7 +201,11 @@ export function LicenseView() {
       if (deployMode === 'system' && licenseFile) formData.append('file', licenseFile);
       if (deployMode === 'server') {
         formData.append('serverAddr', serverAddr);
-        formData.append('tag', serverTag);
+        // New backend supports `tags` as JSON array of strings; one
+        // license_server: line is written per tag. Backend keeps
+        // back-compat with old single `tag` field, but we only send
+        // the new shape from this UI.
+        formData.append('tags', JSON.stringify(enabledTags));
       }
 
       const res = await fetch('/api/systems/license-deploy', { method: 'POST', body: formData });
@@ -170,12 +227,45 @@ export function LicenseView() {
     }
   };
 
+  const handleRemoveTag = async (cfgPath: string, tag: string) => {
+    if (!selectedSystem) return;
+    const removeKey = `${cfgPath}::${tag}`;
+    setRemovingTag(removeKey);
+    try {
+      const res = await fetch('/api/systems/license-remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          host: selectedSystem.ip,
+          username: selectedSystem.username,
+          password: selectedSystem.password,
+          privateKey: selectedSystem.authMode === 'privateKey' ? selectedSystem.privateKey : undefined,
+          cfgPath,
+          tag,
+        }),
+      });
+      const data = await res.json();
+      toast({
+        title: data.success ? 'License Tag Removed' : 'Remove Failed',
+        description: data.success
+          ? `Removed tag "${tag}" from ${cfgPath}`
+          : (data.error || 'Could not remove tag'),
+        variant: data.success ? 'default' : 'destructive',
+      });
+      if (data.success) await handleCheck();
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message || 'Remove failed', variant: 'destructive' });
+    } finally {
+      setRemovingTag(null);
+    }
+  };
+
   const canDeploy =
     selectedSystem &&
     !isDeploying &&
     (
       (deployMode === 'system' && licenseFile !== null) ||
-      (deployMode === 'server' && serverAddr.trim() && serverTag.trim()) ||
+      (deployMode === 'server' && serverAddr.trim() && enabledTags.length > 0) ||
       deployMode === 'dongle'
     );
 
@@ -285,8 +375,48 @@ export function LicenseView() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Tag</Label>
-                <Input className="h-8" placeholder="pre-1000-ue" value={serverTag} onChange={(e) => setServerTag(e.target.value)} />
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground">
+                    Component Tags ({selectedSystem?.type === 'Callbox' ? 'Callbox: enable the daemons you license'
+                      : selectedSystem?.type === 'UESim' ? 'UE Simulator'
+                      : 'select a system to see component options'})
+                  </Label>
+                </div>
+                <div className="space-y-1.5 rounded border p-2 bg-muted/20">
+                  {visibleComponents.map((c) => {
+                    const meta = COMPONENT_META[c];
+                    const row = tagRows[c];
+                    return (
+                      <div key={c} className="flex items-center gap-2">
+                        <Checkbox
+                          id={`tag-${c}`}
+                          checked={row.enabled}
+                          onCheckedChange={(checked) =>
+                            setTagRows((prev) => ({ ...prev, [c]: { ...prev[c], enabled: !!checked } }))
+                          }
+                        />
+                        <label htmlFor={`tag-${c}`} className="text-xs font-medium w-24 shrink-0 cursor-pointer">
+                          {meta.label}
+                        </label>
+                        <Input
+                          className="h-7 text-xs"
+                          placeholder={meta.defaultTag}
+                          value={row.value}
+                          disabled={!row.enabled}
+                          onChange={(e) =>
+                            setTagRows((prev) => ({ ...prev, [c]: { ...prev[c], value: e.target.value } }))
+                          }
+                          title={meta.description}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {enabledTags.length > 0
+                    ? `${enabledTags.length} tag${enabledTags.length === 1 ? '' : 's'} will be written to license_server.cfg`
+                    : 'Enable at least one component to deploy'}
+                </p>
               </div>
             </div>
           )}
@@ -368,20 +498,45 @@ export function LicenseView() {
                 </div>
               ))}
 
-              {/* Server configs */}
-              {checkResult.serverConfigs.map((sc, i) => (
-                <div key={i} className="border rounded-md p-3 bg-indigo-50 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Server className="h-4 w-4 text-indigo-600" />
-                    <span className="font-medium text-sm">License Server</span>
+              {/* Server configs — one entry per `license_server: { ... }`
+                  block. Multiple entries (per-component licensing on
+                  callboxes) each render as their own card with their
+                  own Remove button. */}
+              {checkResult.serverConfigs.map((sc, i) => {
+                const removeKey = `${sc.path}::${sc.tag}`;
+                const isRemoving = removingTag === removeKey;
+                return (
+                  <div key={i} className="border rounded-md p-3 bg-indigo-50 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Server className="h-4 w-4 text-indigo-600" />
+                        <span className="font-medium text-sm">License Server</span>
+                      </div>
+                      {sc.tag && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleRemoveTag(sc.path, sc.tag)}
+                          disabled={isRemoving || !selectedSystem}
+                          title={`Remove tag "${sc.tag}" from ${sc.path}`}
+                        >
+                          {isRemoving ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <><Trash2 className="h-3 w-3 mr-1" /> Remove</>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                    <div className="text-xs space-y-0.5">
+                      <div><span className="text-muted-foreground">Path:</span> <code>{sc.path}</code></div>
+                      <div><span className="text-muted-foreground">Server:</span> <code>{sc.serverAddr}</code></div>
+                      <div><span className="text-muted-foreground">Tag:</span> <code>{sc.tag}</code></div>
+                    </div>
                   </div>
-                  <div className="text-xs space-y-0.5">
-                    <div><span className="text-muted-foreground">Path:</span> <code>{sc.path}</code></div>
-                    <div><span className="text-muted-foreground">Server:</span> <code>{sc.serverAddr}</code></div>
-                    <div><span className="text-muted-foreground">Tag:</span> <code>{sc.tag}</code></div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
               {checkResult.found === false && checkResult.success && (
                 <Alert>

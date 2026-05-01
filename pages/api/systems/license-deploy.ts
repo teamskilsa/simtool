@@ -106,11 +106,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       await fs.unlink(uploadedFile).catch(() => {});
     } else if (deployMode === 'server') {
-      // Write license_server.cfg with server_addr and tag
-      if (!serverAddr || !tag) {
-        return res.status(400).json({ error: 'serverAddr and tag are required for server mode' });
+      // Write license_server.cfg. Supports either:
+      //   • Single tag — legacy `tag` field (back-compat with old UI)
+      //   • Multiple tags — new `tags` field, JSON array of strings
+      // For Callbox a typical multi-tag deploy is ['cs-enb','cs-mme','cs-ims'];
+      // for UESim it's just ['cs-ue']. Each becomes its own
+      //   license_server: {server_addr:"X",tag:"Y"},
+      // line in the cfg (Amarisoft's parser accepts repeated entries).
+      if (!serverAddr) {
+        return res.status(400).json({ error: 'serverAddr is required for server mode' });
       }
-      const cfgContent = `license_server: {server_addr:"${serverAddr}",tag:"${tag}"},\n`;
+      let tagList: string[] = [];
+      if (fields.tags) {
+        try {
+          const parsed = JSON.parse(fields.tags);
+          if (Array.isArray(parsed)) tagList = parsed.map(String).filter((t) => t.trim());
+        } catch {
+          return res.status(400).json({ error: 'tags must be a JSON array of strings' });
+        }
+      } else if (tag) {
+        tagList = [String(tag).trim()].filter(Boolean);
+      }
+      if (tagList.length === 0) {
+        return res.status(400).json({ error: 'at least one tag is required for server mode' });
+      }
+      const cfgContent = tagList
+        .map((t) => `license_server: {server_addr:"${serverAddr}",tag:"${t}"},`)
+        .join('\n') + '\n';
       const cfgPath = `${targetDir}/license_server.cfg`;
 
       // Write to a temp file as the SSH user first (no pipeline conflict with sudo),
@@ -132,7 +154,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           name: 'write-server-config',
           ok: installRes.code === 0,
           detail: installRes.code === 0
-            ? `${cfgPath} → ${serverAddr} (${tag})`
+            ? `${cfgPath} → ${serverAddr} [${tagList.join(', ')}]`
             : (installRes.stderr || installRes.stdout).slice(-200),
         });
       }
