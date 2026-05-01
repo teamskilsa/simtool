@@ -14,6 +14,14 @@ import { NodeSSH } from 'node-ssh';
 
 export const config = { api: { bodyParser: true } };
 
+// license-deploy.ts mirrors the cfg into both /root/.simnovus and
+// /root/.amarisoft. Removal needs to fan out to the same set so a
+// stale entry doesn't linger in one location after the user deletes
+// it from another. We keep the user-clicked cfgPath as the primary
+// (it's where check-license found the entry) and union it with the
+// standard mirror dirs for the rewrite.
+const MIRROR_DIRS = ['/root/.simnovus', '/root/.amarisoft'] as const;
+
 interface RemoveStep {
   name: string;
   ok: boolean;
@@ -51,7 +59,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? `echo '${pwd.replace(/'/g, "'\\''")}' | sudo -S -p ''`
       : 'sudo';
 
-    // Read the cfg.
+    // Resolve the dir part of the user-clicked cfgPath (the cfg that
+    // surfaced the tag in the License Status panel) and merge with the
+    // canonical mirror dirs. Each gets the same edit so we don't leave
+    // a stale entry in another mirror location.
+    const cfgDir = cfgPath.replace(/\/[^/]+$/, '');
+    const allDirs = Array.from(new Set([cfgDir, ...MIRROR_DIRS]));
+    const allCfgPaths = allDirs.map((d) => `${d}/license_server.cfg`);
+
+    // Read the user-clicked cfg as the source of truth for what to
+    // keep. If the same tag also exists in another mirror dir but
+    // its entries differ otherwise, we still rewrite all mirrors to
+    // match the primary's "tag X removed" state — an inconsistency
+    // between mirrors would mean the user already had drift, and
+    // converging them to the primary's view is the right answer.
     const readRes = await ssh.execCommand(`${sudoPrefix} cat '${cfgPath}' 2>/dev/null`);
     if (readRes.code !== 0) {
       steps.push({ name: 'read-cfg', ok: false, detail: `Could not read ${cfgPath}` });
@@ -95,19 +116,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       detail: `removed ${removedCount} entry(ies); ${kept.length} remaining`,
     });
 
-    // Two outcomes: either we still have entries (rewrite the cfg) or
-    // we're empty (remove the file so Amarisoft sees no license-server
-    // config rather than an empty one — different behaviour).
+    // Apply to every mirror cfg path. Two outcomes per path:
+    //   • kept.length > 0 → rewrite cfg with remaining entries.
+    //   • kept.length === 0 → remove the cfg (Amarisoft sees "no
+    //     license-server config" rather than an empty file).
+    //
+    // We tolerate per-path failures (e.g. a mirror dir that's read-only
+    // or missing the cfg) and surface them in the step detail so the
+    // user knows which copies were touched.
+    const results: { path: string; ok: boolean; detail: string }[] = [];
+
     if (kept.length === 0) {
-      const rmRes = await ssh.execCommand(`${sudoPrefix} rm -f '${cfgPath}'`);
+      // Remove from each mirror path.
+      for (const p of allCfgPaths) {
+        const rm = await ssh.execCommand(`${sudoPrefix} rm -f '${p}'`);
+        results.push({
+          path: p,
+          ok: rm.code === 0,
+          detail: rm.code === 0 ? `${p} removed` : (rm.stderr || rm.stdout).slice(-200),
+        });
+      }
       steps.push({
         name: 'remove-empty-cfg',
-        ok: rmRes.code === 0,
-        detail: rmRes.code === 0 ? `${cfgPath} removed (no entries left)` : rmRes.stderr.slice(-200),
+        ok: results.every((r) => r.ok),
+        detail: results.map((r) => `${r.ok ? '✓' : '✗'} ${r.detail}`).join(' | '),
       });
     } else {
-      // Write via /tmp + sudo cp, same pattern as license-deploy to
-      // dodge the broken `echo | sudo tee` race.
+      // Stage the new content once, fan out via sudo-cp.
       const newContent = kept.join('\n') + '\n';
       const encoded = Buffer.from(newContent).toString('base64');
       const tempRemote = `/tmp/license_server_${Date.now()}.cfg`;
@@ -116,15 +151,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         steps.push({ name: 'rewrite-cfg', ok: false, detail: writeTempRes.stderr.slice(-200) });
         return res.status(200).json({ success: false, steps, error: 'Failed to stage new cfg' });
       }
-      const installRes = await ssh.execCommand(
-        `${sudoPrefix} cp '${tempRemote}' '${cfgPath}' && ${sudoPrefix} chmod 644 '${cfgPath}' && rm -f '${tempRemote}'`,
-      );
+      for (const p of allCfgPaths) {
+        const cp = await ssh.execCommand(
+          `${sudoPrefix} cp '${tempRemote}' '${p}' && ${sudoPrefix} chmod 644 '${p}'`,
+        );
+        results.push({
+          path: p,
+          ok: cp.code === 0,
+          detail: cp.code === 0 ? `${p} rewritten` : (cp.stderr || cp.stdout).slice(-200),
+        });
+      }
+      await ssh.execCommand(`rm -f '${tempRemote}'`);
       steps.push({
         name: 'rewrite-cfg',
-        ok: installRes.code === 0,
-        detail: installRes.code === 0
-          ? `${cfgPath} rewritten with ${kept.length} entry(ies)`
-          : (installRes.stderr || installRes.stdout).slice(-200),
+        ok: results.every((r) => r.ok),
+        detail: `${kept.length} entry(ies) remaining; ` +
+          results.map((r) => `${r.ok ? '✓' : '✗'} ${r.detail}`).join(' | '),
       });
     }
 

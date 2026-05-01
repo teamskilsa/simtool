@@ -38,6 +38,14 @@ async function parseRequest(req: NextApiRequest): Promise<{
   });
 }
 
+// Standard Amarisoft license directories that simtool ALWAYS mirrors
+// the cfg/key into. Different installs / daemons look in different
+// places — Amarisoft 2024+ uses /root/.amarisoft by default, older /
+// Simnovus-branded packages used /root/.simnovus. Writing to both
+// removes the "is the daemon looking somewhere else?" guesswork from
+// the user's lap.
+const MIRROR_DIRS = ['/root/.simnovus', '/root/.amarisoft'] as const;
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -76,11 +84,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const escapedPwd = pwd.replace(/'/g, "'\\''");
     const sudoPrefix = pwd ? `echo '${escapedPwd}' | sudo -S -p ''` : 'sudo';
 
-    // Ensure target directory exists
-    const mkdirRes = await ssh.execCommand(`${sudoPrefix} mkdir -p '${targetDir}'`);
-    steps.push({ name: 'mkdir-target', ok: mkdirRes.code === 0, detail: targetDir });
-    if (mkdirRes.code !== 0) {
-      return res.status(200).json({ success: false, steps, error: `Could not create ${targetDir}` });
+    // Always mirror to /root/.simnovus AND /root/.amarisoft, plus the
+    // user-selected targetDir if it's something else (e.g. /mnt/.simnovus
+    // on appliances with separate root partitioning). Deduped to avoid
+    // double-writes when the user picks one of the standard dirs.
+    const allDirs = Array.from(new Set([targetDir, ...MIRROR_DIRS]));
+
+    // Ensure each target dir exists.
+    for (const d of allDirs) {
+      const mkdirRes = await ssh.execCommand(`${sudoPrefix} mkdir -p '${d}'`);
+      steps.push({ name: 'mkdir-target', ok: mkdirRes.code === 0, detail: d });
+      if (mkdirRes.code !== 0) {
+        return res.status(200).json({ success: false, steps, error: `Could not create ${d}` });
+      }
     }
 
     const deployMode = mode as DeployMode;
@@ -94,14 +110,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await ssh.putFile(uploadedFile, remoteTmp);
       steps.push({ name: 'scp-upload', ok: true, detail: remoteTmp });
 
-      // Move to target dir with sudo, fix ownership/perms
-      const mvRes = await ssh.execCommand(
-        `${sudoPrefix} mv '${remoteTmp}' '${targetDir}/${fileName}' && ${sudoPrefix} chmod 644 '${targetDir}/${fileName}'`
-      );
+      // Copy the key to every mirror dir, then remove the staging file.
+      // Using cp (not mv) preserves the staged copy until all dirs have
+      // it; the final rm cleans up. If any cp fails we surface that
+      // dir's error but still try the rest — partial install is better
+      // than no install.
+      const installResults: { dir: string; ok: boolean; detail: string }[] = [];
+      for (const d of allDirs) {
+        const dst = `${d}/${fileName}`;
+        const r = await ssh.execCommand(
+          `${sudoPrefix} cp '${remoteTmp}' '${dst}' && ${sudoPrefix} chmod 644 '${dst}'`,
+        );
+        installResults.push({
+          dir: d,
+          ok: r.code === 0,
+          detail: r.code === 0 ? dst : (r.stderr || r.stdout).slice(-200),
+        });
+      }
+      await ssh.execCommand(`rm -f '${remoteTmp}'`);
+      const allOk = installResults.every((x) => x.ok);
       steps.push({
         name: 'install-key',
-        ok: mvRes.code === 0,
-        detail: mvRes.code === 0 ? `${targetDir}/${fileName}` : mvRes.stderr.slice(-200),
+        ok: allOk,
+        detail: installResults.map((x) => `${x.ok ? '✓' : '✗'} ${x.detail}`).join(' | '),
       });
 
       await fs.unlink(uploadedFile).catch(() => {});
@@ -133,29 +164,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const cfgContent = tagList
         .map((t) => `license_server: {server_addr:"${serverAddr}",tag:"${t}"},`)
         .join('\n') + '\n';
-      const cfgPath = `${targetDir}/license_server.cfg`;
 
-      // Write to a temp file as the SSH user first (no pipeline conflict with sudo),
-      // then sudo-move it to the target directory. This avoids the broken pipeline
-      // `echo content | echo pwd | sudo tee` which ate the content.
+      // Stage the cfg in /tmp, then sudo-cp it into every mirror dir.
+      // /tmp is user-writable so we don't need sudo for the stage; the
+      // base64 encode-then-decode dodges the broken `echo | sudo tee`
+      // pattern that ate trailing content on previous attempts.
       const tempRemote = `/tmp/license_server_${Date.now()}.cfg`;
       const encoded = Buffer.from(cfgContent).toString('base64');
-
-      // Step A: write the temp file (no sudo needed — /tmp is writable)
       const writeTempRes = await ssh.execCommand(`echo '${encoded}' | base64 -d > '${tempRemote}'`);
       if (writeTempRes.code !== 0) {
         steps.push({ name: 'write-server-config', ok: false, detail: writeTempRes.stderr.slice(-200) });
       } else {
-        // Step B: sudo-move the temp file to the target
-        const installRes = await ssh.execCommand(
-          `${sudoPrefix} cp '${tempRemote}' '${cfgPath}' && ${sudoPrefix} chmod 644 '${cfgPath}' && rm -f '${tempRemote}'`
-        );
+        // Fan out to every mirror dir. Same staged-cfg, copied N times
+        // — guarantees the daemons find it regardless of which
+        // location their build looks in (.simnovus vs .amarisoft).
+        const writeResults: { path: string; ok: boolean; detail: string }[] = [];
+        for (const d of allDirs) {
+          const cfgPath = `${d}/license_server.cfg`;
+          const r = await ssh.execCommand(
+            `${sudoPrefix} cp '${tempRemote}' '${cfgPath}' && ${sudoPrefix} chmod 644 '${cfgPath}'`,
+          );
+          writeResults.push({
+            path: cfgPath,
+            ok: r.code === 0,
+            detail: r.code === 0 ? cfgPath : (r.stderr || r.stdout).slice(-200),
+          });
+        }
+        await ssh.execCommand(`rm -f '${tempRemote}'`);
+        const allOk = writeResults.every((x) => x.ok);
         steps.push({
           name: 'write-server-config',
-          ok: installRes.code === 0,
-          detail: installRes.code === 0
-            ? `${cfgPath} → ${serverAddr} [${tagList.join(', ')}]`
-            : (installRes.stderr || installRes.stdout).slice(-200),
+          ok: allOk,
+          detail: allOk
+            ? `${writeResults.map((x) => x.path).join(', ')} → ${serverAddr} [${tagList.join(', ')}]`
+            : writeResults.map((x) => `${x.ok ? '✓' : '✗'} ${x.detail}`).join(' | '),
         });
       }
     } else if (deployMode === 'dongle') {
@@ -173,13 +215,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    // Verify by listing the target dir
-    const verifyRes = await ssh.execCommand(`${sudoPrefix} ls -la '${targetDir}' 2>/dev/null`);
-    steps.push({
-      name: 'verify',
-      ok: verifyRes.code === 0,
-      detail: verifyRes.stdout.trim().slice(-400),
-    });
+    // Verify each mirror dir got the file. We tolerate dongle mode
+    // here (no files to verify) and report the summary so the user
+    // sees one line per dir in the deploy log.
+    if (deployMode !== 'dongle') {
+      const verifyParts: string[] = [];
+      let anyMissing = false;
+      for (const d of allDirs) {
+        const verifyRes = await ssh.execCommand(`${sudoPrefix} ls -la '${d}' 2>/dev/null | head -8`);
+        const ok = verifyRes.code === 0 && verifyRes.stdout.trim().length > 0;
+        if (!ok) anyMissing = true;
+        verifyParts.push(`[${d}] ${verifyRes.stdout.trim().slice(-200)}`);
+      }
+      steps.push({
+        name: 'verify',
+        ok: !anyMissing,
+        detail: verifyParts.join('\n'),
+      });
+    }
 
     const success = steps.every((s) => s.ok);
     return res.status(200).json({ success, steps });
