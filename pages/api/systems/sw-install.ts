@@ -206,46 +206,92 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     steps.push({ name: 'build-cmd', ok: true, detail: cmd });
 
-    // 6.5 Wait for any in-progress apt run to free the dpkg lock.
+    // 6.5 Wait for / aggressively free the dpkg lock.
     //
     // install.sh internally runs `apt-get install` for runtime deps;
     // if the dpkg-frontend lock is held by something else (almost
-    // always unattended-upgrades fired by the system at boot, or by
-    // our own preceding deploy/provision step) install.sh aborts with:
+    // always unattended-upgrades.service) install.sh aborts with:
     //     "Warning, package manager is currently locked.
     //      Retry later or use --no-package option."
-    // and returns exit 1. Skipping --no-package is the right default
-    // (we DO need the deps), so instead we poll up to ~3 minutes for
-    // the lock to free, then proceed. If it's still held after that
-    // we surface a clear error so the user knows it's a transient
-    // OS-side issue, not a SimTool / Amarisoft installer bug.
+    // and returns exit 1. We can't use --no-package (deps are required),
+    // so we have to free the lock.
+    //
+    // Strategy:
+    //   1. Brief wait (~30s) — a normal apt run finishes in seconds,
+    //      this gives the system a chance to release the lock cleanly.
+    //   2. Still held? Inspect the holder.
+    //        - If it's `unattended-upgrades` (the typical culprit on
+    //          isolated callbox VMs that can't reach apt mirrors and
+    //          spin forever on stuck downloads), STOP it. The user
+    //          explicitly asked to install — that takes priority over
+    //          a background auto-updater that's wedged anyway.
+    //        - If it's something else (a human running apt manually,
+    //          dpkg-reconfigure, etc.) we DON'T kill — surface the
+    //          holder so the user can decide what to do.
+    //   3. Verify the lock actually freed; proceed.
+    //
+    // Background: on isolated callbox / UE-sim VMs the box is up but
+    // its apt mirrors aren't reachable, so unattended-upgrades sits
+    // in a permanent retry loop holding the lock indefinitely. Our
+    // earlier 3-min wait was futile — the holder will never finish.
     const lockWait = await ssh.execCommand(
-      `for i in $(seq 1 90); do ` +
+      // Phase 1: wait up to 30s for a normal apt run.
+      `for i in $(seq 1 15); do ` +
       `  ${sudoPrefix} fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || ` +
-      `  ${sudoPrefix} fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || break; ` +
+      `  ${sudoPrefix} fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || ` +
+      `  { echo PHASE1_FREE; exit 0; }; ` +
       `  sleep 2; ` +
       `done; ` +
-      `if ${sudoPrefix} fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then ` +
-      `  ${sudoPrefix} lsof /var/lib/dpkg/lock-frontend 2>&1 | head -3; exit 1; ` +
-      `fi; exit 0`,
+      // Phase 2: still locked. Identify the holder.
+      `HPID=$(${sudoPrefix} fuser /var/lib/dpkg/lock-frontend 2>/dev/null | tr -d ' '); ` +
+      `if [ -z "$HPID" ]; then echo PHASE2_RACE_FREE; exit 0; fi; ` +
+      `HCMD=$(ps -p "$HPID" -o comm= 2>/dev/null); ` +
+      `HFULL=$(ps -p "$HPID" -o args= 2>/dev/null | head -c 200); ` +
+      `echo "HOLDER pid=$HPID cmd=$HCMD args=$HFULL"; ` +
+      // Phase 3: if it's unattended-upgrades, stop it. Otherwise fail
+      // out and let the user decide.
+      `if echo "$HCMD$HFULL" | grep -qiE 'unattended-upgr|apt.systemd.daily'; then ` +
+      `  echo STOPPING_UNATTENDED; ` +
+      `  ${sudoPrefix} systemctl stop unattended-upgrades.service 2>/dev/null; ` +
+      `  ${sudoPrefix} systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null; ` +
+      // SIGTERM first, then SIGKILL after a moment if still alive —
+      // unattended-upgrades sometimes ignores TERM while in
+      // python3 deep-sleep on a download.
+      `  ${sudoPrefix} kill "$HPID" 2>/dev/null; ` +
+      `  for j in $(seq 1 5); do kill -0 "$HPID" 2>/dev/null || break; sleep 1; done; ` +
+      `  ${sudoPrefix} kill -KILL "$HPID" 2>/dev/null; ` +
+      `  sleep 1; ` +
+      `  if ${sudoPrefix} fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then ` +
+      `    echo STILL_LOCKED_AFTER_KILL; exit 2; ` +
+      `  fi; ` +
+      `  echo FREED; exit 0; ` +
+      `fi; ` +
+      `echo HOLDER_NOT_KILLABLE; exit 1`,
       { execOptions: { pty: false } },
     );
-    const lockHolder = lockWait.stdout.trim().slice(-200);
+    const lockOut = lockWait.stdout.trim();
+    const killed = /STOPPING_UNATTENDED|FREED/.test(lockOut);
     steps.push({
       name: 'apt-lock-wait',
       ok: lockWait.code === 0,
       detail: lockWait.code === 0
-        ? 'dpkg lock free'
-        : `dpkg lock still held after 180s — ${lockHolder || 'holder unknown'}`,
+        ? (killed
+            ? `unattended-upgrades was holding the lock — stopped it. ${lockOut.slice(-200)}`
+            : 'dpkg lock free')
+        : (lockWait.code === 2
+            ? `tried to free the lock but it's still held — ${lockOut.slice(-200)}`
+            : `dpkg lock held by a non-killable process — ${lockOut.slice(-200)}`),
     });
     if (lockWait.code !== 0) {
       return res.status(200).json({
         success: false,
         steps,
-        error:
-          'Amarisoft install requires apt and another process is holding the dpkg lock ' +
-          '(usually unattended-upgrades). Wait a minute and retry. ' +
-          (lockHolder ? `Holder: ${lockHolder}` : ''),
+        error: lockWait.code === 2
+          ? 'unattended-upgrades was stopped but the dpkg lock is still held by something. ' +
+            'Reboot the target or run `sudo rm -f /var/lib/dpkg/lock-frontend` if you know it\'s safe.'
+          : 'A non-auto-update process is holding the dpkg lock (likely a human running apt). ' +
+            'Wait for them to finish or kill it manually, then retry. ' +
+            `Holder: ${lockOut.slice(-200)}`,
         installLog,
       });
     }
