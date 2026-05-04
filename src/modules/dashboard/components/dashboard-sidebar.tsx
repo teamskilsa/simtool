@@ -38,6 +38,7 @@ import {
   Bell,
   User,
   Package,
+  Smartphone,
 } from 'lucide-react';
 
 interface DashboardSidebarProps {
@@ -85,6 +86,11 @@ const NAVIGATION_ITEMS: NavEntry[] = [
 
   // Observe phase — live KPIs from the box you just ran configs against.
   { id: 'stats', icon: LineChart, label: 'Stats' },
+
+  // UE Simulator — build & manage UE configurations (separate from eNB/MME
+  // configs which live under Test Management). Top-level because it's a
+  // self-contained workflow with its own profile/section system.
+  { id: 'uesim', icon: Smartphone, label: 'UE Simulator' },
 
   { kind: 'divider' },
 

@@ -10,6 +10,7 @@ import { UserProfile } from '@/modules/users/components/user-profile';
 import { UserManagement } from '@/modules/users/components/user-management';
 import { SWManagementView } from '@/modules/sw-management';
 import { EnbMonitoringDashboard } from '@/modules/statLogs/components/enb';
+import { UeSimView } from '@/modules/ueSim';
 import { useUser } from '@/modules/users/context/user-context';
 
 interface DashboardContentProps {
@@ -72,6 +73,9 @@ export const DashboardContent = ({
       case 'stats':
       case 'monitoring':
         return <EnbMonitoringDashboard />;
+
+      case 'uesim':
+        return <UeSimView />;
 
       case 'users':
         if (user?.role !== 'admin') return null;
