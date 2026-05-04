@@ -50,9 +50,19 @@ export function readLastApplied(profileName: string): MaterializedProfile | null
 export function writeLastApplied(profileName: string, profile: MaterializedProfile): void {
   if (typeof window === 'undefined') return;
   try {
+    // Strip secrets before persisting. com_password is the Amarisoft
+    // Remote API auth password — nothing in this snapshot reads it
+    // back (the diff doesn't need a value, it just classifies the
+    // path), so storing it in localStorage adds risk for zero benefit.
+    // Any XSS payload on the app domain can read localStorage; keep
+    // secrets out of it.
+    const sanitized: MaterializedProfile = {
+      ...profile,
+      settings: { ...profile.settings, com_password: undefined },
+    };
     window.localStorage.setItem(
       LAST_APPLIED_KEY_PREFIX + profileName,
-      JSON.stringify(profile),
+      JSON.stringify(sanitized),
     );
   } catch {
     /* best effort */
@@ -146,7 +156,25 @@ export function ApplyDialog({ open, onClose, baseline, current, profileName }: P
 
               {diff.entries.length > 0 && (
                 <ScrollArea className="max-h-64 border rounded p-2 bg-muted/30">
-                  <pre className="text-xs whitespace-pre-wrap">{summarizeDiff(diff)}</pre>
+                  {/*
+                    summarizeDiff returns Array<{section, lines: string[]}>.
+                    The previous render (`<pre>{summarizeDiff(diff)}</pre>`)
+                    coerced the array to a string and produced
+                    "[object Object][object Object]". We render one block
+                    per section with the section name as a header.
+                  */}
+                  <div className="text-xs space-y-2">
+                    {summarizeDiff(diff).map((group) => (
+                      <div key={group.section}>
+                        <div className="font-semibold uppercase tracking-wide text-muted-foreground">
+                          {group.section}
+                        </div>
+                        <pre className="whitespace-pre-wrap font-mono">
+                          {group.lines.join('\n')}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
                 </ScrollArea>
               )}
 

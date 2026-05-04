@@ -124,15 +124,24 @@ function diffNode(
 // Public API
 // ────────────────────────────────────────────────────────────────────────────
 
-export function diffProfiles(before: MaterializedProfile, after: MaterializedProfile): ApplyDiff {
+export function diffProfiles(
+  before: MaterializedProfile | null,
+  after: MaterializedProfile,
+): ApplyDiff {
+  // Null baseline → "first apply". We could emit one synthetic
+  // "section is brand new" entry per section, but the caller already
+  // surfaces a "first apply — full cfg" badge, and the user mostly
+  // wants to see the same per-key change list they'd get on a normal
+  // apply. So we treat null as an empty per-section object and let
+  // diffNode walk the after-side keys naturally — every leaf shows up
+  // as `∅ → <value>`, which renders cleanly in summarizeDiff.
   const entries: DiffEntry[] = [];
   const sections: Array<keyof MaterializedProfile> =
     ['cell', 'subscriber', 'traffic', 'userPlane', 'channel', 'settings'];
   for (const s of sections) {
-    diffNode(before[s], after[s], s, entries, s);
+    const beforeSection: unknown = before ? before[s] : {};
+    diffNode(beforeSection, after[s], s, entries, s);
   }
-  // Re-classify entries — the diff helper used the raw key path, but we want
-  // section.path. Already correct because we passed `s` as initial path.
   return {
     entries,
     hasHot: entries.some(e => e.kind === 'hot'),

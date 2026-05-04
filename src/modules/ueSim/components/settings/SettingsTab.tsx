@@ -241,6 +241,12 @@ export function SettingsTab({ data, onChange }: Props) {
               placeholder="(unset)"
               disabled={!data.com_auth}
             />
+            {data.com_password && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-500 leading-snug">
+                Stored in browser localStorage — clear it before sharing the device.
+                Excluded from the post-apply snapshot.
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>

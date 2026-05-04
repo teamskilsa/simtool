@@ -46,9 +46,27 @@ components/
   userPlane/UserPlaneTab        sim / tun / remote modes + PDN list
   channel/ChannelTab            x/y inputs PLUS draggable canvas map
   settings/SettingsTab          RF, logging, remote API, performance
-  apply/ApplyDialog             Diff preview → hot (Remote API) or cold (SSH+restart)
+  apply/ApplyDialog             Diff preview + clipboard handoff for full
+                                cfg / hot config_set JSON
 views/UeSimView.tsx             Tab shell that wires everything together
 ```
+
+### What "Apply" actually does today
+
+The Apply dialog **does not push to the target**. It produces two
+clipboard-copyable payloads:
+
+  • **Copy full ue.cfg** — the materialised profile rendered as a
+    Simnovus-flavoured cfg file. Save it onto the target host and
+    `service lte restart`.
+  • **Copy hot config_set JSON** — a minimal Remote-API body covering
+    the diff entries that Amarisoft accepts at runtime (tx_gain,
+    rx_gain, log_options, …). Send it over the existing Remote API
+    console / WebSocket helper.
+
+A future revision will wire SSH-deploy + service-restart into this
+flow via the repo's `pages/api/systems/ssh-execute` endpoint, but
+that integration is **not** in this drop-in.
 
 ## The two things you flagged explicitly
 
@@ -74,7 +92,14 @@ On export, `cfgEmitter.expandDurationsToPowerOff()` automatically emits:
 ```
 
 …and the resulting events are sorted by time before write-out.
-Verified end-to-end: `parse → map → emit → reparse → remap → emit` is **byte-identical**.
+
+Round-trip is **structurally identical**, not byte-identical: the
+emitter pretty-prints with a stable two-space indent and a fixed
+key order, so a parsed/re-emitted cfg won't text-diff `0` against a
+hand-formatted source that used different whitespace, comments, or
+`#define` macros. The materialised state on either side of
+`parse → map → emit → reparse → remap` does match exactly, which is
+the property the diff/apply path relies on.
 
 ## Built-in section seeds (immutable, can be cloned)
 
@@ -85,7 +110,27 @@ User Plane: `tun`, `sim`
 Channel: `off`, `epa-mobility` (speed=5 m/s)
 Settings: `default`
 
-The sidebar already had `'UESim'` (port 9002) registered in `SystemType`, so the
-Remote API hot-apply path uses your existing `useRemoteAPI` WebSocket helper.
-Cold-apply writes the cfg over your existing `pages/api/ssh/execute.ts` and
-restarts the LTE service.
+The sidebar already had `'UESim'` (port 9002) registered in `SystemType`. The
+Remote API hot-apply payload is shaped to drop into the existing Remote API
+console; the cold-apply path is currently clipboard-only and the user
+copies the full cfg onto the target. SSH-driven cold deploy via the repo's
+`pages/api/systems/ssh-execute` endpoint is on the roadmap but not in this
+drop-in.
+
+## Known issues fixed on top of the original drop-in
+
+Landed in the same feature branch as a follow-up commit:
+
+  • `ApplyDialog` rendered `summarizeDiff(diff)` directly — produced
+    `[object Object][object Object]`. Replaced with a per-section
+    block that joins the lines.
+  • `diffProfiles` would crash on first apply (null baseline →
+    `null.cell` deref). Now treats null baseline as an empty-section
+    object so every after-side leaf shows up as `∅ → <value>`.
+  • `EmitOptions.header` was typed `boolean` but the caller passed a
+    string label, which the truthy-only emit silently dropped.
+    Now accepts `boolean | string`.
+  • `writeLastApplied` was persisting `settings.com_password` to
+    localStorage. The diff doesn't need a value (just a path), so we
+    strip it before save. The Settings tab also surfaces a warning
+    when the password is set.
