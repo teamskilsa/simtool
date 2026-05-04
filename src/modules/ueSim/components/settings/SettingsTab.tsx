@@ -1,9 +1,14 @@
 // modules/ueSim/components/settings/SettingsTab.tsx
 //
 // Settings tab — three groups:
-//   • RF & Hardware     — driver name + args + sync, gains, CPU pinning
+//   • Performance       — CPU pinning, PDCCH decode optimisation
 //   • Logging           — per-layer log levels (table)
 //   • Remote API & misc — com_addr, com_auth/password, log_filename
+//
+// RF driver, sync, RF antenna, TX/RX gain, FIFO/RX latency moved into
+// the Cell tab — they're conceptually "what radio drives these cells",
+// and forcing users to bounce between Cell and Settings broke the
+// mental model. See components/cell/RfDriverSection.tsx.
 
 'use client';
 
@@ -36,8 +41,6 @@ const LOG_LEVELS: LogLevel[] = ['none', 'error', 'warn', 'info', 'debug'];
 
 export function SettingsTab({ data, onChange }: Props) {
   const update = (patch: Partial<SettingsSectionData>) => onChange({ ...data, ...patch });
-  const updateRf = (patch: Partial<SettingsSectionData['rf_driver']>) =>
-    update({ rf_driver: { ...data.rf_driver, ...patch } });
 
   const addLayer = () => {
     const used = new Set(data.log_layers.map(l => l.layer));
@@ -62,47 +65,16 @@ export function SettingsTab({ data, onChange }: Props) {
       <Card>
         <CardHeader className="py-3">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Cpu className="h-4 w-4" /> RF & Hardware
+            <Cpu className="h-4 w-4" /> Performance
           </CardTitle>
           <CardDescription className="text-xs">
-            RF driver selection, transmit/receive gains, and CPU pinning.
+            CPU pinning + decode tuning. RF driver and gains live in the
+            Cell tab — same radio that drives those cells.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">Driver name</Label>
-              <Input value={data.rf_driver.name} onChange={e => updateRf({ name: e.target.value })} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Sync</Label>
-              <Select value={data.rf_driver.sync ?? 'internal'} onValueChange={v => updateRf({ sync: v as any })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="internal">internal</SelectItem>
-                  <SelectItem value="gps">gps</SelectItem>
-                  <SelectItem value="external">external</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">TX gain (dB)</Label>
-              <Input type="number" step="any" value={data.tx_gain} onChange={e => update({ tx_gain: Number(e.target.value) })} />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">RX gain (dB)</Label>
-              <Input type="number" step="any" value={data.rx_gain} onChange={e => update({ rx_gain: Number(e.target.value) })} />
-            </div>
-            <div className="space-y-1 sm:col-span-4">
-              <Label className="text-xs">Driver args</Label>
-              <Input
-                value={data.rf_driver.args ?? ''}
-                onChange={e => updateRf({ args: e.target.value || undefined })}
-                className="font-mono"
-                placeholder='e.g. dev0=/dev/sdr0,clock_src=internal'
-              />
-            </div>
-            <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">CPU pinning (cpu_core_list)</Label>
               <Input
                 value={data.cpu_core_list?.join(',') ?? ''}
@@ -114,8 +86,11 @@ export function SettingsTab({ data, onChange }: Props) {
                 }}
                 placeholder="e.g. 4,5,6"
               />
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Worker threads pinned to these cores. Helps under sustained load.
+              </p>
             </div>
-            <div className="space-y-1 sm:col-span-2">
+            <div className="space-y-1">
               <Label className="text-xs">PDCCH decode optimisation</Label>
               <div className="h-9 flex items-center">
                 <Switch

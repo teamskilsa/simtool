@@ -284,7 +284,19 @@ export function UeSimView() {
             onReset={() => onResetTab('cell')}
             onDelete={() => onDeleteTab('cell')}
           />
-          {cellDraft && <CellTab data={cellDraft} onChange={setCellDraft} />}
+          {cellDraft && (
+            <CellTab
+              data={cellDraft}
+              onChange={setCellDraft}
+              // RF driver / gains live in the Settings section but are
+              // edited from the Cell tab so users see "what radio for
+              // these cells" in one place. Pass the settings draft +
+              // setter through; the embedded RfDriverSection mutates
+              // them in place.
+              settings={setDraft ?? materialized?.settings}
+              onSettingsChange={setSetDraft}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="subscriber" className="space-y-3 mt-3">

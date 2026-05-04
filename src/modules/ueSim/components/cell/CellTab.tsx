@@ -31,11 +31,21 @@ import {
 
 import type {
   CellGroupSpec, CellGroupType, CellSectionData, CellSpec, CustomBandSpec,
+  SettingsSectionData,
 } from '../../types';
+import { RfDriverSection } from './RfDriverSection';
 
 interface Props {
   data: CellSectionData;
   onChange: (next: CellSectionData) => void;
+  /**
+   * Settings draft + setter — passed in so the embedded RF Driver
+   * section can edit rf_driver / tx_gain / rx_gain alongside the cell
+   * groups it drives. Optional so tests / storybook can render the
+   * Cell tab without a settings store.
+   */
+  settings?: SettingsSectionData;
+  onSettingsChange?: (next: SettingsSectionData) => void;
 }
 
 const GROUP_TYPES: CellGroupType[] = ['lte', 'nr', 'catm', 'nbiot'];
@@ -65,7 +75,7 @@ function emptyGroup(rat: CellGroupType): CellGroupSpec {
   return { group_type: rat, multi_ue: true, cells: [emptyCell(rat)] };
 }
 
-export function CellTab({ data, onChange }: Props) {
+export function CellTab({ data, onChange, settings, onSettingsChange }: Props) {
   const [activeGroup, setActiveGroup] = useState(0);
   const cur = data.cell_groups[activeGroup];
 
@@ -110,6 +120,14 @@ export function CellTab({ data, onChange }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* RF driver lives at the top of the Cell tab — the cells in the
+          group(s) below all share this radio. Only renders when settings
+          are wired in (UeSimView always passes them; bare-render callers
+          like tests fall back to the previous, RF-less layout). */}
+      {settings && onSettingsChange && (
+        <RfDriverSection settings={settings} onChange={onSettingsChange} />
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
         {/* ── Cell Groups list ── */}
         <Card>
