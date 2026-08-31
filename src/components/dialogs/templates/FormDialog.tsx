@@ -55,8 +55,9 @@ export function FormDialog({
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="px-6">
-          {/* Form body */}
-          <div className="py-5">
+          {/* Form body — scrolls on short viewports so the footer buttons
+              always stay reachable (DialogContent is overflow-hidden) */}
+          <div className="py-5 max-h-[min(62vh,520px)] overflow-y-auto pr-1 -mr-1">
             {children}
 
             {error && (

@@ -27,13 +27,17 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head />
-      <body suppressHydrationWarning>
+      {/* Font classes live on <body> so portaled UI (dialogs, toasts,
+          dropdowns) inherits them — an inner div misses portals, and the
+          globals.css body font-family invalidates when --font-inter is
+          undefined at that level (serif fallback). */}
+      <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
         <ThemeProvider>
           <TooltipProvider>
             <SystemProvider>
               <UserProvider>
                 <AuthProvider>
-                  <div className={`${inter.variable} font-sans antialiased`}>
+                  <div>
                     {children}
                   </div>
                   <Toaster />
