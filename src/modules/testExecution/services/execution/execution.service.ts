@@ -51,13 +51,29 @@ class ExecutionService {
     const steps: ExecutionStep[] = [];
     const modules = this.getExecutionOrder(scenario.topology);
 
+    // Multi-core topologies deploy several cfgs that all run under the OTS
+    // `lte` unit — restarting per file would bounce the whole stack N times
+    // (each restart drops attached UEs). Instead every module defers its
+    // restart and the LAST deployed module triggers the single restart +
+    // port verification.
+    const singleRestart = scenario.topology === 'two-core-callbox';
+    const activeModules = modules.filter(m =>
+      (scenario.moduleConfigs ?? []).some(
+        (c: any) => (c.moduleId ?? c.module) === m && c.enabled !== false && c.configId,
+      ),
+    );
+    const lastModule = activeModules[activeModules.length - 1];
+
     for (const module of modules) {
       const row = (scenario.moduleConfigs ?? []).find(
         (c: any) => (c.moduleId ?? c.module) === module && c.enabled !== false,
       );
       if (!row || !row.configId) continue;
 
-      const moduleConfigs = (allConfigs as any)[module] ?? [];
+      // mme2 is a second instance of the mme daemon — its configs live in
+      // the same `mme` bucket in the configs store.
+      const bucket = module === 'mme2' ? 'mme' : module;
+      const moduleConfigs = (allConfigs as any)[module] ?? (allConfigs as any)[bucket] ?? [];
       const stored = moduleConfigs.find((c: any) => c.id === row.configId);
       if (!stored) {
         steps.push({
@@ -84,8 +100,11 @@ class ExecutionService {
         break;
       }
 
-      const step = await this.deployModule(module, stored.content, sshCreds);
-      step.name = `Deploy ${module} (${stored.name})`;
+      const deferRestart = singleRestart && module !== lastModule;
+      const step = await this.deployModule(module, stored.content, sshCreds, deferRestart);
+      step.name = deferRestart
+        ? `Deploy ${module} (${stored.name}) — restart deferred`
+        : `Deploy ${module} (${stored.name})`;
       steps.push(step);
 
       if (step.status === 'failure') {
@@ -104,7 +123,8 @@ class ExecutionService {
   async deployModule(
     module: string,
     configContent: string,
-    sshCreds: SshCredentials
+    sshCreds: SshCredentials,
+    deferRestart = false,
   ): Promise<ExecutionStep> {
     const step: ExecutionStep = {
       id: `${module}-${Date.now()}`,
@@ -121,6 +141,7 @@ class ExecutionService {
           ...sshCreds,
           module,
           configContent,
+          deferRestart,
         }),
       });
 
@@ -172,6 +193,10 @@ class ExecutionService {
       callbox:  ['mme', 'ims', 'ue_db', 'enb'],
       core:     ['mme', 'ims', 'ue_db'],
       'ue-core':['mme', 'ue_db', 'enb', 'ue'],
+      // Two-core / dual-PLMN callbox (e.g. roaming demos): core 1 (mme.cfg)
+      // + core 2 (mme2.cfg) + shared ue_db + radio. All under OTS, so the
+      // executor defers restarts and bounces `lte` ONCE at the enb step.
+      'two-core-callbox': ['mme', 'mme2', 'ue_db', 'enb'],
     } as Record<string, string[]>)[topology] ?? [];
   }
 }

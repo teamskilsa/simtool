@@ -132,7 +132,7 @@ export class FileConfigStorage implements IConfigStorage {
         'private'
       );
 
-      const modules = ['enb', 'gnb', 'ims', 'mme', 'ue'];
+      const modules = ['enb', 'gnb', 'ims', 'mme', 'ue', 'ue_db'];
 
       for (const module of modules) {
         const modulePath = path.join(baseConfigPath, module);
@@ -215,7 +215,7 @@ export class FileConfigStorage implements IConfigStorage {
       console.log('Attempting to delete config:', id);
 
       // First try to find the file by searching all module directories
-      const modules = ['enb', 'gnb', 'ims', 'mme', 'ue'];
+      const modules = ['enb', 'gnb', 'ims', 'mme', 'ue', 'ue_db'];
       let foundPath = null;
 
       for (const module of modules) {

@@ -36,6 +36,11 @@ const MODULE_MAP: Record<string, ModuleEntry> = {
   enb:   { configPath: '/root/enb/config/enb.cfg',   service: 'lte',    checkPort: 9001, binary: '/root/enb/lteenb', workingDir: '/root/enb' },
   gnb:   { configPath: '/root/enb/config/gnb.cfg',   service: 'lte',    checkPort: 9002, binary: '/root/enb/lteenb', workingDir: '/root/enb' },
   mme:   { configPath: '/root/mme/config/mme.cfg',   service: 'ltemme', checkPort: 9000, binary: '/root/mme/ltemme', workingDir: '/root/mme' },
+  // Second core for multi-core / dual-PLMN setups (e.g. roaming demos):
+  // core 2 lives beside core 1 as mme2.cfg with its own API port 9010.
+  // Verified layout on the two-core callbox: mme.cfg = 127.0.1.100 :9000,
+  // mme2.cfg = 127.0.2.100 :9010, both started by OTS from ots.cfg.
+  mme2:  { configPath: '/root/mme/config/mme2.cfg',  service: 'ltemme', checkPort: 9010, binary: '/root/mme/ltemme', workingDir: '/root/mme' },
   ims:   { configPath: '/root/mme/config/ims.cfg',   service: 'ltemme', checkPort: 9000, binary: '/root/mme/ltemme', workingDir: '/root/mme' },
   ue:    { configPath: '/root/ue/config/ue.cfg',     service: 'lteue',  checkPort: 9002, binary: '/root/ue/lteue', workingDir: '/root/ue' },
   ue_db: { configPath: '/root/mme/config/ue_db.cfg', service: '',       checkPort: 0    },
@@ -474,6 +479,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const {
     host, port = 22, username, password, privateKey, passphrase,
     module, configContent,
+    // When true: validate + write the cfg but skip the service restart and
+    // port probe. Used by multi-config deploys (e.g. two-core: mme.cfg +
+    // mme2.cfg + ue_db + enb.cfg) that end with ONE restart on the final
+    // module instead of bouncing the stack once per file.
+    deferRestart = false,
   } = req.body ?? {};
 
   // ── Request validation. Use 200 + structured error so the client's
@@ -586,10 +596,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? `echo '${pwd.replace(/'/g, "'\\''")}' | sudo -S -p ''`
       : 'sudo';
 
+    // ── Phase 1.2: OTS-aware target resolution ────────────────────────
+    // On OTS-managed boxes every component's cfg path is defined by the
+    // ACTIVE /root/ots/config/ots.cfg (a symlink to the selected profile):
+    //   MME_PATH="/root/mme"  MME_CONFIG_FILE="config/mme-dish.cfg"
+    // Writing to the static default (/root/mme/config/mme.cfg) while the
+    // profile references config/mme-dish.cfg deploys into a file OTS never
+    // reads — the run "succeeds" and changes nothing. So: read the live
+    // <COMP>_CONFIG_FILE for this module and deploy THERE. Non-OTS boxes
+    // (no ots.cfg) keep the static path.
+    let targetCfgPath = mapping.configPath;
+    let targetWorkingDir = mapping.workingDir;
+    const OTS_COMPONENT: Record<string, string> = {
+      enb: 'ENB', gnb: 'ENB', mme: 'MME', mme2: 'MME2', ims: 'IMS', ue: 'UE',
+    };
+    const otsComp = OTS_COMPONENT[module];
+    if (otsComp) {
+      const r = await exec(
+        'resolve-ots',
+        `${sudo} grep -E '^[[:space:]]*${otsComp}_(CONFIG_FILE|PATH)=' /root/ots/config/ots.cfg 2>/dev/null || echo '(not an OTS box)'`,
+      );
+      const cfgM = r.stdout.match(new RegExp(`${otsComp}_CONFIG_FILE="([^"]+)"`));
+      const pathM = r.stdout.match(new RegExp(`${otsComp}_PATH="([^"]+)"`));
+      if (cfgM) {
+        const base = pathM?.[1] ?? path.posix.dirname(path.posix.dirname(mapping.configPath));
+        targetCfgPath = cfgM[1].startsWith('/') ? cfgM[1] : `${base}/${cfgM[1]}`;
+        if (pathM?.[1]) targetWorkingDir = pathM[1];
+        log.push({
+          step: 'resolve-ots',
+          ok: true,
+          stdout: `OTS box — active profile maps ${module} to ${targetCfgPath}`,
+        });
+      }
+    }
+
     // ── Phase 1.5: target dir must exist + be writable (sudo) ─────────
     // Catches the common "wrong path / Amarisoft not installed" case
     // BEFORE we SCP a file we'll have to abandon.
-    const targetDir = path.posix.dirname(mapping.configPath);
+    const targetDir = path.posix.dirname(targetCfgPath);
     const dirCheck = await exec('check-dir', `${sudo} test -d ${q(targetDir)} && echo ok || echo missing`);
     if (dirCheck.stdout.trim() !== 'ok') {
       await fs.unlink(localTmp).catch(() => {});
@@ -639,7 +683,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       //   • </dev/null so the daemon doesn't block on missing TTY.
       //   • Outer hard timeout of 10s wraps the whole bash so even if
       //     lteenb gets stuck on radio init the deploy doesn't stall.
-      const cfgDir = path.posix.dirname(mapping.configPath);
+      const cfgDir = path.posix.dirname(targetCfgPath);
       const validateCfg = `${cfgDir}/.simtool-validate-${Date.now()}.cfg`;
       const valOut = `/tmp/simtool-validate-${Date.now()}.txt`;
       const validateRes = await exec(
@@ -650,7 +694,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           // shadow cfg. If anything fails we don't want the shadow
           // file lingering — `; rm -f` runs unconditionally.
           `cp ${remoteTmp} ${validateCfg} && ` +
-          `cd ${mapping.workingDir} && ` +
+          `cd ${targetWorkingDir} && ` +
           `timeout -s KILL 5s ${mapping.binary} ${validateCfg} </dev/null > ${valOut} 2>&1; ` +
           `RESULT=$?; ` +
           `head -200 ${valOut}; ` +
@@ -726,34 +770,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // ── Phase 3: sudo mv → final path ────────────────────────────────
     const mvRes = await exec(
       'mv',
-      `${sudo} mv ${q(remoteTmp)} ${q(mapping.configPath)} && echo ok || echo fail`,
+      `${sudo} mv ${q(remoteTmp)} ${q(targetCfgPath)} && echo ok || echo fail`,
     );
     if (mvRes.stdout.trim() !== 'ok') {
       const why = mvRes.stderr.trim() || mvRes.stdout.trim() || 'unknown';
       return res.status(200).json({
         copySuccess: false,
-        copyMessage: `Failed to write ${mapping.configPath} — ${why}`,
+        copyMessage: `Failed to write ${targetCfgPath} — ${why}`,
         restartSuccess: false,
         portStatus: false,
         output: TAIL(mvRes.stderr),
-        error: `Failed to write ${mapping.configPath} — ${why}`,
+        error: `Failed to write ${targetCfgPath} — ${why}`,
         phase: 'mv',
         commandLog: log,
       });
     }
 
-    const copyMessage = `Config written to ${mapping.configPath}`;
+    const copyMessage = deferRestart
+      ? `Config written to ${targetCfgPath} (restart deferred)`
+      : `Config written to ${targetCfgPath}`;
 
     // ── Phase 4: restart service ──────────────────────────────────────
     let restartSuccess = true;
     let restartError: string | undefined;
     let output = '';
 
-    if (mapping.service) {
+    if (mapping.service && !deferRestart) {
+      // OTS-managed boxes (the common Amarisoft callbox install) have NO
+      // separate ltemme/lteue units — everything (mme, mme2, ims, enb) is
+      // spawned by the OTS watchdog under the single `lte` unit. So when
+      // the module's own unit doesn't exist, fall back to restarting `lte`.
+      // Only fall back on a MISSING unit (systemctl cat fails), never on a
+      // real restart failure — that error must surface, not be masked by
+      // a stack-wide bounce.
+      const svc = mapping.service;
+      const restartCmd = svc === 'lte'
+        ? `systemctl restart lte 2>&1 || service lte restart 2>&1`
+        : `if systemctl cat ${svc}.service >/dev/null 2>&1; then systemctl restart ${svc} 2>&1; ` +
+          `elif systemctl cat lte.service >/dev/null 2>&1; then echo "(no ${svc} unit — OTS box, restarting lte)"; systemctl restart lte 2>&1; ` +
+          `else service ${svc} restart 2>&1 || service lte restart 2>&1; fi`;
       const restartRes = await exec(
         'restart',
-        // systemctl first; fall back to old `service` if systemd isn't there.
-        `${sudo} systemctl restart ${mapping.service} 2>&1 || ${sudo} service ${mapping.service} restart 2>&1`,
+        `${sudo} bash -c ${q(restartCmd)}`,
       );
       output = TAIL((restartRes.stdout + '\n' + restartRes.stderr).trim());
       restartSuccess = restartRes.code === 0;
@@ -768,7 +826,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // negatives on slower hosts.
     let portStatus = false;
     const PORT_POLL_TRIES = 10;
-    if (mapping.checkPort > 0 && restartSuccess) {
+    if (deferRestart) {
+      // No restart happened, so there is nothing meaningful to probe yet —
+      // the final (non-deferred) module's deploy verifies the stack.
+      portStatus = true;
+    } else if (mapping.checkPort > 0 && restartSuccess) {
       for (let i = 0; i < PORT_POLL_TRIES; i++) {
         const portRes = await exec(
           'port-check',

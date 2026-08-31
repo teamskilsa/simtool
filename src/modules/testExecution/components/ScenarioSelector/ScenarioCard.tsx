@@ -191,9 +191,11 @@ export function ScenarioCard({ scenario, index, onRefresh }: ScenarioCardProps) 
   };
 
   const getConfigName = (moduleId: string, configId: string) => {
-    if (!configs || !configs[moduleId]) return configId;
-    
-    const moduleConfigs = configs[moduleId];
+    // mme2 configs live in the mme bucket (second instance of the same daemon)
+    const bucket = moduleId === 'mme2' ? 'mme' : moduleId;
+    if (!configs || !configs[bucket]) return configId;
+
+    const moduleConfigs = configs[bucket];
     const config = moduleConfigs.find(c => c.id === configId);
     return config?.name || configId;
   };

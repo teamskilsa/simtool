@@ -152,7 +152,9 @@ export function ModuleConfigurator({
                     <SelectContent>
                       <SelectGroup>
                         <SelectLabel>Available Configs</SelectLabel>
-                        {configs[module]?.map(config => (
+                        {/* mme2 = second instance of the mme daemon; its
+                            configs live in the mme bucket */}
+                        {configs[module === 'mme2' ? 'mme' : module]?.map(config => (
                           <SelectItem key={config.id} value={config.id}>
                             {config.name}
                           </SelectItem>

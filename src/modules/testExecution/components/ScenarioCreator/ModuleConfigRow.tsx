@@ -35,7 +35,10 @@ export function ModuleConfigRow({
     systemId: undefined
   };
 
-  const currentConfig = config || defaultConfig;
+  // Merge (not ||): a partially-built row ({configId} only, from the first
+  // dropdown pick) must still default enabled=true — `config || default`
+  // made the checkbox visually untick as soon as a config was chosen.
+  const currentConfig = { ...defaultConfig, ...config };
 
   return (
     <div className={cn(
@@ -52,11 +55,11 @@ export function ModuleConfigRow({
           onCheckedChange={(checked) => onUpdate({ enabled: !!checked })}
           className="border-muted/50"
         />
-        <Label 
+        <Label
           htmlFor={`${module}-enabled`}
           className="font-medium capitalize text-foreground/90"
         >
-          {module}
+          {module === 'mme2' ? 'mme2 (core 2)' : module}
         </Label>
       </div>
 
@@ -80,7 +83,8 @@ export function ModuleConfigRow({
             <SelectValue placeholder={`Select ${module} config`} />
           </SelectTrigger>
           <SelectContent>
-            {configs[module]?.map(config => (
+            {/* mme2 = second instance of the mme daemon — same config bucket */}
+            {configs[module === 'mme2' ? 'mme' : module]?.map(config => (
               <SelectItem key={config.id} value={config.id}>
                 {config.name}
               </SelectItem>

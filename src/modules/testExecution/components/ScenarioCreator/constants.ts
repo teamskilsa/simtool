@@ -9,6 +9,13 @@ export const TOPOLOGY_OPTIONS = [
       optional: ['ims']
     },
     {
+      id: 'two-core-callbox',
+      name: 'Two-Core Callbox',
+      description: 'enb + mme (core 1) + mme2 (core 2) + ue_db — dual-PLMN / multi-core',
+      modules: ['enb', 'mme', 'mme2', 'ue_db'],
+      optional: []
+    },
+    {
       id: 'ue-core',
       name: 'UE + Core Setup',
       description: 'UE + enb/gnb + core',
