@@ -19,6 +19,8 @@ import { Plus } from 'lucide-react';
 import { ScenarioList } from '@/modules/testExecution/components/ScenarioSelector';
 import { CreateScenarioDialog } from '@/modules/testExecution/components/ScenarioCreator/CreateScenarioDialog';
 import { QuickRunPanel } from './components/QuickRun/QuickRunPanel';
+import { ScenarioRunView } from './components/ScenarioRunView';
+import { useScenarioRun } from '@/modules/testExecution/hooks/scenario/useScenarioRun';
 import type { ScenarioConfig } from '@/modules/testExecution/components/ScenarioCreator/types';
 
 export function TestExecutionView() {
@@ -27,6 +29,12 @@ export function TestExecutionView() {
   const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
   const [selectedScenario, setSelectedScenario] = useState<ScenarioConfig | undefined>();
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Run state lives here (not in the table row) so a run can take over the
+  // whole panel and show step-by-step progress.
+  const { activeRun, startRun, clearRun } = useScenarioRun(
+    () => setRefreshKey((p) => p + 1),
+  );
 
   const handleSaveScenario = async (data: ScenarioConfig) => {
     const url = '/api/scenarios';
@@ -52,6 +60,27 @@ export function TestExecutionView() {
   // (it owns its own Edit dialog wired to the same /api/scenarios PUT).
   // This view only owns the *Create* path through the header button — Edit
   // from a row doesn't bubble back here.
+
+  // A run takes over the whole panel: the user asked to "go to a page" that
+  // shows the steps, so the list gets out of the way until they come back.
+  if (activeRun) {
+    return (
+      <Card className="bg-background/60 backdrop-blur-sm border-muted/20">
+        <div className="p-6">
+          <ScenarioRunView
+            scenarioName={activeRun.scenario.name}
+            topology={activeRun.scenario.topology}
+            target={activeRun.target}
+            steps={activeRun.steps}
+            isRunning={activeRun.isRunning}
+            fatalError={activeRun.fatalError}
+            onBack={clearRun}
+            onRetry={() => startRun(activeRun.scenario)}
+          />
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card className="bg-background/60 backdrop-blur-sm border-muted/20">
@@ -99,7 +128,7 @@ export function TestExecutionView() {
               mme + ims + ue_db + enb), pick a config per module, save as
               a scenario, then re-run from this list.
             </p>
-            <ScenarioList refreshTrigger={refreshKey} />
+            <ScenarioList refreshTrigger={refreshKey} onRun={startRun} />
           </TabsContent>
         </Tabs>
       </div>

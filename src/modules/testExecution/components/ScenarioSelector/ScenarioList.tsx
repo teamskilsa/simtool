@@ -32,9 +32,11 @@ interface ScenarioListProps {
    *  parent (e.g. TestExecutionView after a successful Create) refresh
    *  the list without blanking the existing rows. */
   refreshTrigger?: number;
+  /** Hand a Run click up to the page so it can show the progress view. */
+  onRun?: (scenario: any) => void;
 }
 
-export function ScenarioList({ refreshTrigger }: ScenarioListProps) {
+export function ScenarioList({ refreshTrigger, onRun }: ScenarioListProps) {
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [error, setError] = useState<string | null>(null);
   const initialLoadDone = useRef(false);
@@ -108,6 +110,7 @@ export function ScenarioList({ refreshTrigger }: ScenarioListProps) {
                 scenario={scenario}
                 index={index + 1}
                 onRefresh={fetchScenarios}
+                onRun={onRun}
               />
             ))}
           </TableBody>

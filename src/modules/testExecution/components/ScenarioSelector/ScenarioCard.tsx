@@ -39,9 +39,12 @@ interface ScenarioCardProps {
   };
   index: number;
   onRefresh?: () => void;
+  /** When provided, Run hands off to the page-level run view (with live
+   *  step progress) instead of executing inline behind a toast. */
+  onRun?: (scenario: ScenarioCardProps['scenario']) => void;
 }
 
-export function ScenarioCard({ scenario, index, onRefresh }: ScenarioCardProps) {
+export function ScenarioCard({ scenario, index, onRefresh, onRun }: ScenarioCardProps) {
   const { toast } = useToast();
   const { configs } = useConfigs();
   const { systems } = useSystems();
@@ -73,6 +76,14 @@ export function ScenarioCard({ scenario, index, onRefresh }: ScenarioCardProps) 
   };
 
   const handleRun = async () => {
+    // Preferred path: let the page own the run so the user gets the
+    // step-by-step progress view. The inline path below stays for any
+    // caller that doesn't pass onRun.
+    if (onRun) {
+      onRun(scenario);
+      return;
+    }
+
     if (!scenario.id) {
       toast({ title: 'Error', description: 'Invalid scenario configuration', variant: 'destructive' });
       return;

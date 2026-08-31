@@ -1,5 +1,13 @@
 // types/execution.types.ts
-export type ExecutionStatus = 'pending' | 'running' | 'success' | 'failure';
+// 'skipped' = never attempted because an earlier step failed. Distinct
+// from 'pending' so the run view can say "not run" instead of leaving
+// a spinner-less blank next to steps that will never execute.
+export type ExecutionStatus =
+  | 'pending'
+  | 'running'
+  | 'success'
+  | 'failure'
+  | 'skipped';
 
 /** Diagnostic detail entry returned by /api/systems/config-deploy. One per
  *  shell command issued during the deploy (connect / scp / mv / restart /

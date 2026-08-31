@@ -31,7 +31,11 @@ class ExecutionService {
    * @param scenarioId  ID of the scenario to run
    * @param sshCreds    SSH credentials for the target system
    */
-  async executeScenario(scenarioId: string, sshCreds: SshCredentials): Promise<ExecutionStep[]> {
+  async executeScenario(
+    scenarioId: string,
+    sshCreds: SshCredentials,
+    onProgress?: (steps: ExecutionStep[]) => void,
+  ): Promise<ExecutionStep[]> {
     // 1. Fetch scenario.
     const response = await fetch(`/api/scenarios/execute?id=${encodeURIComponent(scenarioId)}`);
     if (!response.ok) {
@@ -47,8 +51,6 @@ class ExecutionService {
       throw new Error('Could not load configs from the configs API');
     }
 
-    // 3. Execute modules in topology order.
-    const steps: ExecutionStep[] = [];
     const modules = this.getExecutionOrder(scenario.topology);
 
     // Multi-core topologies deploy several cfgs that all run under the OTS
@@ -64,6 +66,21 @@ class ExecutionService {
     );
     const lastModule = activeModules[activeModules.length - 1];
 
+    // 3. Build the WHOLE plan up front, so the UI can render every step as
+    //    'pending' the moment Run is clicked instead of having steps pop
+    //    into existence one at a time. Resolution errors (deleted config,
+    //    empty file) are baked into the plan as pre-failed steps.
+    interface PlannedStep {
+      module: string;
+      content?: string;
+      deferRestart: boolean;
+      /** set when the config could not be resolved — step fails without SSH */
+      resolveError?: string;
+    }
+
+    const plan: PlannedStep[] = [];
+    const steps: ExecutionStep[] = [];
+
     for (const module of modules) {
       const row = (scenario.moduleConfigs ?? []).find(
         (c: any) => (c.moduleId ?? c.module) === module && c.enabled !== false,
@@ -75,40 +92,62 @@ class ExecutionService {
       const bucket = module === 'mme2' ? 'mme' : module;
       const moduleConfigs = (allConfigs as any)[module] ?? (allConfigs as any)[bucket] ?? [];
       const stored = moduleConfigs.find((c: any) => c.id === row.configId);
-      if (!stored) {
-        steps.push({
-          id: `${module}-${Date.now()}`,
-          name: `Deploy ${module}`,
-          status: 'failure',
-          startTime: new Date(),
-          endTime: new Date(),
-          duration: 0,
-          error: `Config ${row.configId} for module "${module}" was not found — was it deleted?`,
-        });
-        break;
-      }
-      if (typeof stored.content !== 'string' || stored.content.length === 0) {
-        steps.push({
-          id: `${module}-${Date.now()}`,
-          name: `Deploy ${module}`,
-          status: 'failure',
-          startTime: new Date(),
-          endTime: new Date(),
-          duration: 0,
-          error: `Config "${stored.name}" has empty content`,
-        });
-        break;
-      }
 
       const deferRestart = singleRestart && module !== lastModule;
-      const step = await this.deployModule(module, stored.content, sshCreds, deferRestart);
-      step.name = deferRestart
-        ? `Deploy ${module} (${stored.name}) — restart deferred`
-        : `Deploy ${module} (${stored.name})`;
-      steps.push(step);
+      let resolveError: string | undefined;
+      if (!stored) {
+        resolveError = `Config ${row.configId} for module "${module}" was not found — was it deleted?`;
+      } else if (typeof stored.content !== 'string' || stored.content.length === 0) {
+        resolveError = `Config "${stored.name}" has empty content`;
+      }
 
-      if (step.status === 'failure') {
+      const label = stored?.name ? `${module} (${stored.name})` : module;
+      plan.push({ module, content: stored?.content, deferRestart, resolveError });
+      steps.push({
+        id: `${module}-${scenarioId}-${plan.length}`,
+        name: deferRestart ? `Deploy ${label} — restart deferred` : `Deploy ${label}`,
+        status: 'pending',
+        description: deferRestart
+          ? 'Config is copied now; the service restart is batched into the final step.'
+          : undefined,
+      });
+    }
+
+    onProgress?.([...steps]);
+
+    // 4. Execute in order, emitting after every transition so the caller can
+    //    render progress live rather than only seeing the final array.
+    for (let i = 0; i < plan.length; i++) {
+      const { module, content, deferRestart, resolveError } = plan[i];
+
+      if (resolveError) {
+        steps[i] = {
+          ...steps[i],
+          status: 'failure',
+          error: resolveError,
+          phase: 'resolve-config',
+          startTime: new Date(),
+          endTime: new Date(),
+          duration: 0,
+        };
+      } else {
+        steps[i] = { ...steps[i], status: 'running', startTime: new Date() };
+        onProgress?.([...steps]);
+
+        const result = await this.deployModule(module, content as string, sshCreds, deferRestart);
+        // Keep the planned name/description — deployModule writes a generic one.
+        steps[i] = { ...result, name: steps[i].name, description: steps[i].description };
+      }
+
+      onProgress?.([...steps]);
+
+      if (steps[i].status === 'failure') {
         console.error(`[ExecuteScenario] Module ${module} failed — stopping`);
+        // Everything after a failure never runs — say so explicitly.
+        for (let j = i + 1; j < steps.length; j++) {
+          steps[j] = { ...steps[j], status: 'skipped' };
+        }
+        onProgress?.([...steps]);
         break;
       }
     }
