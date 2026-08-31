@@ -88,6 +88,9 @@ const KNOWN_CELL_KEYS = [
   // these are channel keys but Amarisoft puts them per-cell — strip them out
   // here so they don't become "extra"
   'channel_dl', 'channel_ul',
+  // owned by the Channel section (PerCellChannel); if left in _extra they
+  // resurface as stale duplicates when the channel section changes
+  'antenna', 'ref_signal_power', 'ul_power_attenuation',
 ];
 
 const KNOWN_CELLGROUP_KEYS = [
@@ -540,25 +543,32 @@ const VALID_LEVELS: LogLevel[] = ['none', 'error', 'warn', 'info', 'debug'];
 /**
  * Parse Amarisoft's log_options string:
  *   "all.level=error,all.max_size=0,nas.level=debug,nas.max_size=1"
- * into a structured LayerLogConfig[] keyed by layer.
+ * into a structured LayerLogConfig[] keyed by layer. Tokens the structured
+ * editor doesn't model (other layers like ngap/s1ap, global flags, unknown
+ * fields) are collected into `extra` so they survive a round-trip.
  */
-function parseLogOptions(s: string): LayerLogConfig[] {
+function parseLogOptions(s: string): { layers: LayerLogConfig[]; extra: string[] } {
   const map = new Map<LogLayer, { level: LogLevel; max_size: number }>();
+  const extra: string[] = [];
   // Default for every layer = error/0 if 'all' is set
   const tokens = s.split(',').map(t => t.trim()).filter(Boolean);
   for (const tok of tokens) {
     const mm = tok.match(/^([a-z]+)\.([a-z_]+)\s*=\s*(.+)$/i);
-    if (!mm) continue;
+    if (!mm) { extra.push(tok); continue; }
     const layer = mm[1].toLowerCase() as LogLayer;
-    if (!ALL_LAYERS.includes(layer)) continue;
+    if (!ALL_LAYERS.includes(layer)) { extra.push(tok); continue; }
     const field = mm[2];
     const value = mm[3];
     const cur = map.get(layer) ?? { level: 'error', max_size: 0 };
     if (field === 'level') {
       const lv = value as LogLevel;
       if (VALID_LEVELS.includes(lv)) cur.level = lv;
+      else { extra.push(tok); continue; }
     } else if (field === 'max_size') {
       cur.max_size = num(value, 0);
+    } else {
+      extra.push(tok);
+      continue;
     }
     map.set(layer, cur);
   }
@@ -581,12 +591,12 @@ function parseLogOptions(s: string): LayerLogConfig[] {
     if (b.layer === 'all') return 1;
     return a.layer < b.layer ? -1 : 1;
   });
-  return out;
+  return { layers: out, extra };
 }
 
 function extractSettingsSection(parsed: Record<string, unknown>): SettingsSectionData {
   const logOptStr = str(parsed.log_options, 'all.level=error');
-  const log_layers = parseLogOptions(logOptStr);
+  const { layers: log_layers, extra: logExtra } = parseLogOptions(logOptStr);
   const log_filename = str(parsed.log_filename, '/tmp/ue0.log');
   const com_addr = str(parsed.com_addr, '[::]:9002');
 
@@ -606,6 +616,7 @@ function extractSettingsSection(parsed: Record<string, unknown>): SettingsSectio
 
   const result: SettingsSectionData = {
     log_layers,
+    ...(logExtra.length > 0 ? { log_options_extra: logExtra.join(',') } : {}),
     log_filename,
     com_addr,
     tx_gain: num(parsed.tx_gain, 90),
@@ -652,189 +663,11 @@ export function splitCfgIntoSections(raw: Record<string, unknown>): Materialized
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Reverse direction: MaterializedProfile → raw cfg record
+// NOTE: the old reverse mapper (mergeSectionsIntoCfg) was removed — it was
+// unused and contradicted cfgEmitter (channel keys nested instead of
+// cell-level, UI-only `duration` written verbatim into sim_events, antennas
+// dropped). The one true profile→cfg path is cfgEmitter.emitUeCfg.
 // ────────────────────────────────────────────────────────────────────────────
-//
-// The merge re-attaches per-UE slices (subscriber identity, traffic events,
-// userPlane plumbing, channel mobility) onto the same ue_list[i] entries by
-// matching on ue_id. _extra buckets are spread back in so unknown keys from
-// the source cfg are preserved.
-
-export function mergeSectionsIntoCfg(s: MaterializedProfile): Record<string, unknown> {
-  const cfg: Record<string, unknown> = {};
-
-  // — Settings —
-  if (s.settings.log_layers.length) cfg.log_options = emitLogOptions(s.settings.log_layers);
-  if (s.settings.log_filename) cfg.log_filename = s.settings.log_filename;
-  if (s.settings.com_addr) cfg.com_addr = s.settings.com_addr;
-  if (s.settings.com_auth !== undefined) cfg.com_auth = s.settings.com_auth;
-  if (s.settings.com_password) cfg.com_password = s.settings.com_password;
-  cfg.tx_gain = s.settings.tx_gain;
-  cfg.rx_gain = s.settings.rx_gain;
-  {
-    const rfd: Record<string, unknown> = { name: s.settings.rf_driver.name };
-    if (s.settings.rf_driver.args !== undefined) rfd.args = s.settings.rf_driver.args;
-    if (s.settings.rf_driver.sync !== undefined) rfd.sync = s.settings.rf_driver.sync;
-    if (s.settings.rf_driver.rx_antenna !== undefined) rfd.rx_antenna = s.settings.rf_driver.rx_antenna;
-    if (s.settings.rf_driver.fifo_tx_time !== undefined) rfd.fifo_tx_time = s.settings.rf_driver.fifo_tx_time;
-    if (s.settings.rf_driver.rx_latency !== undefined) rfd.rx_latency = s.settings.rf_driver.rx_latency;
-    cfg.rf_driver = rfd;
-  }
-  if (s.settings.cpu_core_list?.length) cfg.cpu_core_list = s.settings.cpu_core_list;
-  if (s.settings.pdcch_decode_opt !== undefined) cfg.pdcch_decode_opt = s.settings.pdcch_decode_opt;
-
-  // — Channel flags (per-cell channel goes into cell_groups[].cells[]) —
-  cfg.channel_sim = s.channel.channel_sim;
-  cfg.delay_sim = s.channel.delay_sim;
-
-  // — Cell groups (folding per_cell channel back into cells) —
-  cfg.cell_groups = s.cell.cell_groups.map((g, gi) => {
-    const cells = g.cells.map((c, ci) => {
-      const flatIdx = computeFlatCellIndex(s.cell.cell_groups, gi, ci);
-      const profile = s.channel.per_cell.find((p) => p.cell_index === flatIdx);
-      const cellOut: Record<string, unknown> = {
-        rf_port: c.rf_port,
-        bandwidth: c.bandwidth,
-        n_antenna_dl: c.n_antenna_dl,
-        n_antenna_ul: c.n_antenna_ul,
-        ...(c._extra ?? {}),
-      };
-      if (c.dl_earfcn !== undefined) cellOut.dl_earfcn = c.dl_earfcn;
-      if (c.ul_earfcn !== undefined) cellOut.ul_earfcn = c.ul_earfcn;
-      if (c.dl_nr_arfcn !== undefined) cellOut.dl_nr_arfcn = c.dl_nr_arfcn;
-      if (c.ul_carrier_freq_offset !== undefined) cellOut.ul_carrier_freq_offset = c.ul_carrier_freq_offset;
-      if (c.scs !== undefined) cellOut.scs = c.scs;
-      if (c.ssb_pos_bitmap !== undefined) cellOut.ssb_pos_bitmap = c.ssb_pos_bitmap;
-      if (c.tdd_config !== undefined) cellOut.tdd_config = c.tdd_config;
-      if (profile) {
-        const dl: Record<string, unknown> = { type: profile.dl_type };
-        if (profile.doppler_hz !== undefined) dl.doppler = profile.doppler_hz;
-        if (profile.noise_floor_dbm_hz !== undefined) dl.noise_floor = profile.noise_floor_dbm_hz;
-        if (profile.ref_signal_power_dbm !== undefined) dl.ref_signal_power = profile.ref_signal_power_dbm;
-        cellOut.channel_dl = dl;
-        const ul: Record<string, unknown> = { type: profile.ul_type };
-        if (profile.ul_power_attenuation_db !== undefined) ul.power_attenuation = profile.ul_power_attenuation_db;
-        cellOut.channel_ul = ul;
-      }
-      return cellOut;
-    });
-    const grpOut: Record<string, unknown> = {
-      group_type: g.group_type,
-      multi_ue: g.multi_ue,
-      cells,
-      ...(g._extra ?? {}),
-    };
-    if (g.multi_ue_type) grpOut.multi_ue_type = g.multi_ue_type;
-    if (g.cpu_core_list?.length) grpOut.cpu_core_list = g.cpu_core_list;
-    if (g.rel13_5 !== undefined) grpOut.rel13_5 = g.rel13_5;
-    if (g.pdcch_decode_opt !== undefined) grpOut.pdcch_decode_opt = g.pdcch_decode_opt;
-    if (g.pdcch_decode_opt_threshold !== undefined) grpOut.pdcch_decode_opt_threshold = g.pdcch_decode_opt_threshold;
-    return grpOut;
-  });
-
-  if (s.cell.bands?.length) cfg.bands = s.cell.bands;
-
-  // — ue_list = subscriber + traffic + userPlane + channel.mobility —
-  const tplById = new Map(s.traffic.templates.map((t) => [t.id, t]));
-  cfg.ue_list = s.subscriber.ues.map((sub) => {
-    const u: Record<string, unknown> = {
-      ...(sub._extra ?? {}),
-      imsi: sub.imsi,
-      K: sub.K,
-      sim_algo: sub.sim_algo,
-      ue_category: sub.ue_category,
-      as_release: sub.as_release,
-    };
-    if (sub.opc) u.opc = sub.opc;
-    if (sub.amf) u.amf = sub.amf;
-    if (sub.sqn) u.sqn = sub.sqn;
-    if (sub.ext_sim !== undefined) u.ext_sim = sub.ext_sim;
-    if (sub.sim_reader_index !== undefined) u.sim_reader_index = sub.sim_reader_index;
-    if (sub.default_nssai) u.default_nssai = sub.default_nssai;
-
-    if (s.userPlane.mode === 'tun') {
-      if (s.userPlane.tun_setup_script) u.tun_setup_script = s.userPlane.tun_setup_script;
-      if (s.userPlane.tun_interface_name) u.tun_interface_name = s.userPlane.tun_interface_name;
-    } else if (s.userPlane.mode === 'remote') {
-      if (s.userPlane.rue_addr) u.rue_addr = s.userPlane.rue_addr;
-      if (s.userPlane.rue_protocol) u.rue_protocol = s.userPlane.rue_protocol;
-    }
-
-    const assignment = s.traffic.assignments.find((a) => a.ue_id === sub.ue_id);
-    if (assignment) {
-      const tpl = tplById.get(assignment.template_id);
-      if (tpl) u.sim_events = tpl.events.map((e) => emitSimEvent(e));
-    }
-
-    const mob = s.channel.mobility.find((m) => m.ue_id === sub.ue_id);
-    if (mob) {
-      u.position = mob.position;
-      if (mob.speed) u.speed = mob.speed;
-      if (mob.direction) u.direction = mob.direction;
-      if (mob.antenna_type) u.antenna = { type: mob.antenna_type };
-    }
-
-    return u;
-  });
-
-  if (s.userPlane.pdn_list.length) cfg.pdn_list = s.userPlane.pdn_list;
-
-  return cfg;
-}
-
-function emitSimEvent(e: SimEvent): Record<string, unknown> {
-  const out: Record<string, unknown> = { event: e.event, start_time: e.start_time };
-  if (e.duration !== undefined) out.duration = e.duration;
-  if (e.loop_count !== undefined) out.loop_count = e.loop_count;
-  if (e.loop_delay !== undefined) out.loop_delay = e.loop_delay;
-  switch (e.event) {
-    case 'pdn_connect':
-    case 'pdn_disconnect':
-      if (e.apn) out.apn = e.apn;
-      if (e.pdn_type) out.pdn_type = e.pdn_type;
-      break;
-    case 'ext_app':
-      out.prog = e.prog;
-      if (e.args) out.args = e.args;
-      if (e.tag) out.tag = e.tag;
-      break;
-    case 'flood':
-      out.direction = e.direction;
-      out.bitrate = e.bitrate;
-      if (e.packet_size !== undefined) out.packet_size = e.packet_size;
-      break;
-    case 'http':
-      out.url = e.url;
-      if (e.method) out.method = e.method;
-      break;
-    case 'voice':
-      if (e.codec) out.codec = e.codec;
-      break;
-    case 'ping':
-      out.destination = e.destination;
-      if (e.count !== undefined) out.count = e.count;
-      if (e.interval !== undefined) out.interval = e.interval;
-      break;
-    case 'handover':
-      out.target_cell_id = e.target_cell_id;
-      break;
-  }
-  if (e._extra) Object.assign(out, e._extra);
-  return out;
-}
-
-function computeFlatCellIndex(groups: { cells: unknown[] }[], gi: number, ci: number): number {
-  let idx = 0;
-  for (let g = 0; g < gi; g++) idx += groups[g].cells.length;
-  return idx + ci;
-}
-
-function emitLogOptions(opts: LayerLogConfig[]): string {
-  return opts.flatMap((o) => [
-    `${o.layer}.level=${o.level}`,
-    `${o.layer}.max_size=${o.max_size}`,
-  ]).join(',');
-}
 
 // Re-emit lives in cfgEmitter.ts. We export the helpers so the emitter
 // can reuse the parsing direction logic if needed.

@@ -33,6 +33,7 @@ import {
   UeAssignment,
   TrafficTemplate,
   LayerLogConfig,
+  SettingsSectionData,
 } from '../types';
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -298,6 +299,17 @@ function emitUeListEntry(
   return out;
 }
 
+/**
+ * The full log_options string for a settings section — structured layers plus
+ * any preserved passthrough tokens. Shared by emitUeCfg and the Apply dialog's
+ * hot config_set body.
+ */
+export function emitLogOptionsString(settings: SettingsSectionData): string {
+  return settings.log_options_extra
+    ? `${emitLogOptions(settings.log_layers)},${settings.log_options_extra}`
+    : emitLogOptions(settings.log_layers);
+}
+
 function emitLogOptions(layers: LayerLogConfig[]): string {
   // Sorted: 'all' first, others alphabetical
   const sorted = [...layers].sort((a, b) => {
@@ -323,8 +335,9 @@ export function emitUeCfg(profile: MaterializedProfile, options: EmitOptions = {
   // Top-level object
   const top: Record<string, unknown> = {};
 
-  // Settings keys
-  top.log_options = emitLogOptions(settings.log_layers);
+  // Settings keys — re-append tokens the structured editor doesn't model
+  // (ngap/s1ap layers, global flags) so they survive a round-trip.
+  top.log_options = emitLogOptionsString(settings);
   top.log_filename = settings.log_filename;
   top.com_addr = settings.com_addr;
   if (settings.com_auth) top.com_auth = true;
@@ -406,9 +419,12 @@ export function emitUeCfg(profile: MaterializedProfile, options: EmitOptions = {
       : options.header
         ? 'simtool — generated UE simulator configuration'
         : null;
+  // Profile names are user-supplied — a "*/" inside one would terminate the
+  // comment block early and corrupt the emitted cfg.
+  const safeHeader = headerText !== null ? headerText.replace(/\*\//g, '* /') : null;
   const header =
-    headerText !== null
-      ? `/* ${headerText}\n * ${new Date().toISOString()}\n */\n`
+    safeHeader !== null
+      ? `/* ${safeHeader}\n * ${new Date().toISOString()}\n */\n`
       : '';
 
   return header + body + '\n';

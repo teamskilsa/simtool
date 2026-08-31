@@ -54,7 +54,6 @@ export function UeCfgLoaderDialog({ open, onClose, onImported }: Props) {
   const [text, setText] = useState('');
   const [filename, setFilename] = useState('');
   const [profileName, setProfileName] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [enabled, setEnabled] = useState<Record<SectionKey, boolean>>({
     cell: true, subscriber: true, traffic: true,
     userPlane: true, channel: true, settings: true,
@@ -67,7 +66,6 @@ export function UeCfgLoaderDialog({ open, onClose, onImported }: Props) {
       setText('');
       setFilename('');
       setProfileName('');
-      setError(null);
       setEnabled({
         cell: true, subscriber: true, traffic: true,
         userPlane: true, channel: true, settings: true,
@@ -75,8 +73,10 @@ export function UeCfgLoaderDialog({ open, onClose, onImported }: Props) {
     }
   }, [open]);
 
-  const result: LoaderResult | null = useMemo(() => {
-    if (!text.trim()) return null;
+  // Error is derived alongside the result (no setState during render):
+  // empty text → no result, no error; parse failure → error only.
+  const { result, error } = useMemo<{ result: LoaderResult | null; error: string | null }>(() => {
+    if (!text.trim()) return { result: null, error: null };
     try {
       const parsed = parseUeCfg(text);
       const sections = mapToSections(parsed);
@@ -88,25 +88,22 @@ export function UeCfgLoaderDialog({ open, onClose, onImported }: Props) {
           : groupTypes.every(g => g === 'nr') ? 'nr'
           : 'mixed';
       return {
-        parsed,
-        detected: {
-          rat,
-          cell_groups: sections.cell.cell_groups.length,
-          ue_count: sections.subscriber.ues.length,
-          channel_sim: sections.channel.channel_sim,
+        result: {
+          parsed,
+          detected: {
+            rat,
+            cell_groups: sections.cell.cell_groups.length,
+            ue_count: sections.subscriber.ues.length,
+            channel_sim: sections.channel.channel_sim,
+          },
+          sections,
         },
-        sections,
+        error: null,
       };
     } catch (e: any) {
-      setError(e?.message ?? 'Failed to parse ue.cfg');
-      return null;
+      return { result: null, error: e?.message ?? 'Failed to parse ue.cfg' };
     }
   }, [text]);
-
-  // Clear parse error when text changes successfully.
-  useEffect(() => {
-    if (result) setError(null);
-  }, [result]);
 
   const handleFile = async (file: File) => {
     setFilename(file.name);

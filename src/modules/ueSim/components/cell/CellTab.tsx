@@ -184,7 +184,15 @@ export function CellTab({ data, onChange, settings, onSettingsChange }: Props) {
                       value={cur.group_type}
                       onValueChange={v => updateGroup(activeGroup, {
                         group_type: v as CellGroupType,
-                        cells: cur.cells.map(c => ({ ...emptyCell(v as CellGroupType), ...c })),
+                        // New-RAT defaults win; keep only RAT-neutral fields
+                        // (rf_port, antenna counts) so no stale dl_earfcn /
+                        // dl_nr_arfcn / scs / ssb_pos_bitmap leaks into the cfg.
+                        cells: cur.cells.map(c => ({
+                          ...emptyCell(v as CellGroupType),
+                          rf_port: c.rf_port,
+                          n_antenna_dl: c.n_antenna_dl,
+                          n_antenna_ul: c.n_antenna_ul,
+                        })),
                       })}
                     >
                       <SelectTrigger><SelectValue /></SelectTrigger>

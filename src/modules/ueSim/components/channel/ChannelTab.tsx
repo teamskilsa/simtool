@@ -161,7 +161,13 @@ export function ChannelTab({ data, cellData, subscribers, onChange }: Props) {
             extent={data.map_extent_m}
             cells={data.per_cell}
             ues={data.mobility}
-            onCellMove={(idx, x, y) => updatePerCell(idx, { antenna_x: x, antenna_y: y })}
+            onCellMove={(cellIndex, x, y) => {
+              // ChannelMap reports the cell's cell_index, which is NOT the
+              // per_cell array position (imports can produce sparse/reordered
+              // arrays) — resolve it before patching.
+              const i = data.per_cell.findIndex(p => p.cell_index === cellIndex);
+              if (i >= 0) updatePerCell(i, { antenna_x: x, antenna_y: y });
+            }}
             onUeMove={(ueId, x, y) => {
               const cur = data.mobility.find(m => m.ue_id === ueId);
               if (!cur) return;

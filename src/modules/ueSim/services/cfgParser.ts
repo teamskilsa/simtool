@@ -41,10 +41,13 @@ interface DefineMap {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Stage 1 — strip /* */ comments while preserving line numbers
+// Stage 1 — strip // and /* */ comments in ONE string-aware pass, preserving
+// line numbers. A single scanner is essential: comment text often contains
+// apostrophes ("don't"), which must not poison the string state used to
+// decide whether the *other* comment kind starts.
 // ────────────────────────────────────────────────────────────────────────────
 
-function stripBlockComments(src: string): string {
+function stripComments(src: string): string {
   let out = '';
   let i = 0;
   let inString = false;
@@ -52,32 +55,9 @@ function stripBlockComments(src: string): string {
   while (i < src.length) {
     const ch = src[i];
     const nx = src[i + 1];
-    if (!inString && ch === '/' && nx === '*') {
-      // Find closing */
-      const end = src.indexOf('*/', i + 2);
-      if (end < 0) {
-        // Unterminated — drop the rest
-        // Replace with newlines to preserve line numbers
-        const rest = src.slice(i);
-        out += rest.replace(/[^\n]/g, ' ');
-        return out;
-      }
-      // Replace the comment with spaces, preserving newlines
-      const block = src.slice(i, end + 2);
-      out += block.replace(/[^\n]/g, ' ');
-      i = end + 2;
-      continue;
-    }
-    if (!inString && (ch === '"' || ch === "'")) {
-      inString = true;
-      quote = ch;
-      out += ch;
-      i++;
-      continue;
-    }
     if (inString) {
       if (ch === '\\' && i + 1 < src.length) {
-        out += ch + src[i + 1];
+        out += ch + nx;
         i += 2;
         continue;
       }
@@ -89,42 +69,31 @@ function stripBlockComments(src: string): string {
       i++;
       continue;
     }
+    if (ch === '/' && nx === '*') {
+      const end = src.indexOf('*/', i + 2);
+      // Replace the comment with spaces, preserving newlines
+      const block = end < 0 ? src.slice(i) : src.slice(i, end + 2);
+      out += block.replace(/[^\n]/g, ' ');
+      if (end < 0) return out; // unterminated — rest of file was comment
+      i = end + 2;
+      continue;
+    }
+    if (ch === '/' && nx === '/') {
+      // Consume to end of line, keeping the newline itself
+      while (i < src.length && src[i] !== '\n') i++;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inString = true;
+      quote = ch;
+      out += ch;
+      i++;
+      continue;
+    }
     out += ch;
     i++;
   }
   return out;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Stage 2 — strip // line comments (string-aware)
-// ────────────────────────────────────────────────────────────────────────────
-
-function stripLineComments(src: string): string {
-  const lines = src.split('\n');
-  return lines.map(stripLineCommentInLine).join('\n');
-}
-
-function stripLineCommentInLine(line: string): string {
-  let inString = false;
-  let quote = '';
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    const nx = line[i + 1];
-    if (!inString && (ch === '"' || ch === "'")) {
-      inString = true;
-      quote = ch;
-      continue;
-    }
-    if (inString) {
-      if (ch === '\\') { i++; continue; }
-      if (ch === quote) inString = false;
-      continue;
-    }
-    if (ch === '/' && nx === '/') {
-      return line.slice(0, i);
-    }
-  }
-  return line;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -138,9 +107,12 @@ function preprocess(src: string): PreprocessResult {
   const out: string[] = [];
 
   // Stack of include-states for #if/#endif. Top of stack = whether we're
-  // currently emitting lines.
+  // currently emitting lines. takenStack tracks whether any branch of the
+  // current #if/#elif/#else chain has already been taken.
   const ifStack: boolean[] = [true];
+  const takenStack: boolean[] = [true];
   const isEmitting = () => ifStack.every(Boolean);
+  const parentEmitting = () => ifStack.slice(0, -1).every(Boolean);
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
@@ -156,12 +128,48 @@ function preprocess(src: string): PreprocessResult {
       continue;
     }
 
+    // #define NAME — value-less flag define (e.g. `#define TDD`)
+    const flagMatch = trimmed.match(/^#\s*define\s+(\w+)\s*$/);
+    if (flagMatch) {
+      if (isEmitting()) {
+        defines[flagMatch[1]] = '1';
+      }
+      out.push('');
+      continue;
+    }
+
+    // #ifdef NAME / #ifndef NAME
+    const ifdefMatch = trimmed.match(/^#\s*if(n?)def\s+(\w+)\s*$/);
+    if (ifdefMatch) {
+      const defined = defines[ifdefMatch[2]] != null;
+      const truthy = ifdefMatch[1] === 'n' ? !defined : defined;
+      ifStack.push(truthy && isEmitting());
+      takenStack.push(truthy);
+      out.push('');
+      continue;
+    }
+
+    // #elif EXPR — taken only if no earlier branch in this chain was
+    const elifMatch = trimmed.match(/^#\s*elif\s+(.+?)\s*$/);
+    if (elifMatch) {
+      if (ifStack.length > 1) {
+        ifStack.pop();
+        const taken = takenStack.pop()!;
+        const branch = !taken && evalIfExpr(elifMatch[1], defines);
+        ifStack.push(branch && parentEmitting());
+        takenStack.push(taken || branch);
+      }
+      out.push('');
+      continue;
+    }
+
     // #if EXPR — supports `#if NAME` and `#if NAME == VALUE`
     const ifMatch = trimmed.match(/^#\s*if\s+(.+?)\s*$/);
     if (ifMatch) {
       const expr = ifMatch[1];
       const truthy = evalIfExpr(expr, defines);
       ifStack.push(truthy && isEmitting());
+      takenStack.push(truthy);
       out.push('');
       continue;
     }
@@ -169,9 +177,10 @@ function preprocess(src: string): PreprocessResult {
     // #else
     if (/^#\s*else\b/.test(trimmed)) {
       if (ifStack.length > 1) {
-        const cur = ifStack.pop()!;
-        const parent = ifStack.length > 0 ? ifStack[ifStack.length - 1] : true;
-        ifStack.push(!cur && parent);
+        ifStack.pop();
+        const taken = takenStack.pop()!;
+        ifStack.push(!taken && parentEmitting());
+        takenStack.push(true);
       }
       out.push('');
       continue;
@@ -179,7 +188,10 @@ function preprocess(src: string): PreprocessResult {
 
     // #endif
     if (/^#\s*endif\b/.test(trimmed)) {
-      if (ifStack.length > 1) ifStack.pop();
+      if (ifStack.length > 1) {
+        ifStack.pop();
+        takenStack.pop();
+      }
       out.push('');
       continue;
     }
@@ -189,6 +201,16 @@ function preprocess(src: string): PreprocessResult {
     if (incMatch) {
       if (isEmitting()) {
         warnings.push(`Unresolved include: "${incMatch[1]}" — fields from this file will be missing.`);
+      }
+      out.push('');
+      continue;
+    }
+
+    // Any other #-directive: warn and drop the line instead of letting the
+    // raw `#...` text reach the JSON stage (which would hard-fail the parse).
+    if (trimmed.startsWith('#')) {
+      if (isEmitting()) {
+        warnings.push(`Ignored unsupported directive: "${trimmed.slice(0, 60)}"`);
       }
       out.push('');
       continue;
@@ -480,9 +502,8 @@ function parseIdentifier(c: Cursor): string {
 
 export function parseUeCfg(source: string): ParsedUeCfg {
   // Stages 1–3
-  const noBlock = stripBlockComments(source);
-  const noLine = stripLineComments(noBlock);
-  const { text, warnings } = preprocess(noLine);
+  const noComments = stripComments(source);
+  const { text, warnings } = preprocess(noComments);
 
   // The cfg may or may not have a leading { after the #defines. Normalise.
   const trimmed = text.trim();

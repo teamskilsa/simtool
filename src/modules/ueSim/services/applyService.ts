@@ -40,8 +40,8 @@ const HOT_PATH_PREFIXES = [
   'settings.tx_gain',
   'settings.rx_gain',
   'settings.log_layers',
-  'channel.per_cell.', // scalar tweaks while channel_sim already on
-  'channel.mobility.', // ue_move remote API supports live mobility update
+  'channel.per_cell', // scalar tweaks while channel_sim already on
+  'channel.mobility', // ue_move remote API supports live mobility update
   'traffic.templates',
   'traffic.assignments',
   'traffic.server',
@@ -108,6 +108,9 @@ function diffNode(
     }
     return;
   }
+  // com_password is stripped from stored snapshots, so a diff on it is
+  // always spurious — and would print the secret. Never emit it.
+  if (path === 'settings.com_password') return;
   // Leaf — emit
   if (JSON.stringify(before) !== JSON.stringify(after)) {
     out.push({
@@ -157,7 +160,9 @@ export function summarizeDiff(diff: ApplyDiff): Array<{ section: keyof Materiali
   const grouped = new Map<keyof MaterializedProfile, string[]>();
   for (const e of diff.entries) {
     const arr = grouped.get(e.section) ?? [];
-    arr.push(`[${e.kind.toUpperCase()}] ${e.path}: ${formatVal(e.before)} → ${formatVal(e.after)}`);
+    const secret = /password|\.K$/i.test(e.path);
+    const fmt = (v: unknown) => (secret && v !== undefined ? '•••' : formatVal(v));
+    arr.push(`[${e.kind.toUpperCase()}] ${e.path}: ${fmt(e.before)} → ${fmt(e.after)}`);
     grouped.set(e.section, arr);
   }
   return Array.from(grouped.entries()).map(([section, lines]) => ({ section, lines }));

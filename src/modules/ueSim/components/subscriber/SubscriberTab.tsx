@@ -86,7 +86,9 @@ export function SubscriberTab({ data, onChange }: Props) {
   };
 
   const addOne = () => {
-    const lastId = data.ues.length === 0 ? 0 : Math.max(...data.ues.map(u => u.ue_id));
+    // -1 so the first UE gets ue_id 0 — built-in traffic assignments and
+    // default mobility are keyed on ue_id 0.
+    const lastId = data.ues.length === 0 ? -1 : Math.max(...data.ues.map(u => u.ue_id));
     const lastImsi = data.ues.length === 0 ? '001010000000001' : data.ues[data.ues.length - 1].imsi;
     const ue: SubscriberEntry = {
       ue_id: lastId + 1,
@@ -100,7 +102,7 @@ export function SubscriberTab({ data, onChange }: Props) {
   };
 
   const submitBulk = () => {
-    const startId = data.ues.length === 0 ? 1 : Math.max(...data.ues.map(u => u.ue_id)) + 1;
+    const startId = data.ues.length === 0 ? 0 : Math.max(...data.ues.map(u => u.ue_id)) + 1;
     const next: SubscriberEntry[] = [...data.ues];
     let imsi = bulkStartImsi.trim();
     for (let i = 0; i < bulkCount; i++) {

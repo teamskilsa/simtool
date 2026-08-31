@@ -408,9 +408,16 @@ export function TrafficTab({ data, subscribers, onChange }: Props) {
                 />
               </div>
             </div>
-            <Badge variant="outline" className="text-xs">
-              {data.server.kind === 'ltesim_server' ? 'Used in IP-mode = sim' : 'Used by ext_app templates'}
-            </Badge>
+            <div className="space-y-1">
+              <Badge variant="outline" className="text-xs">
+                {data.server.kind === 'ltesim_server' ? 'IP-mode = sim' : 'ext_app templates'}
+              </Badge>
+              <p className="text-[11px] text-muted-foreground">
+                Informational — inferred from the imported cfg. The emitted
+                ue.cfg does not carry this block; to change the traffic target,
+                edit the address in the template&apos;s ext_app args.
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>

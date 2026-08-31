@@ -20,7 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 import type { MaterializedProfile } from '../../types';
 import { diffProfiles, summarizeDiff } from '../../services/applyService';
-import { emitUeCfg } from '../../services/cfgEmitter';
+import { emitUeCfg, emitLogOptionsString } from '../../services/cfgEmitter';
 
 interface Props {
   open: boolean;
@@ -79,19 +79,30 @@ export function ApplyDialog({ open, onClose, baseline, current, profileName }: P
 
   const hotPatch = useMemo(() => {
     if (!current || !diff) return null;
-    // Construct a minimal config_set body covering hot entries. For now we
-    // emit the *whole* settings.tx_gain / rx_gain / log_options pieces
-    // because they're the most-used hot fields. The remaining hot entries
-    // are listed for transparency but not auto-patched (channel and
-    // mobility live in a different message).
+    // Build a config_set body ONLY from fields we can translate to real
+    // Amarisoft Remote API keys (tx_gain / rx_gain are top-level; log
+    // changes are pushed as the complete log_options string). Everything
+    // else hot (per-cell channel, mobility, traffic events) lives in its
+    // own Remote API message and is listed as "apply separately" instead
+    // of being guessed into a nested body the API would reject.
     const hot = diff.entries.filter(e => e.kind === 'hot');
-    const out: Record<string, any> = { message: 'config_set' };
+    if (hot.length === 0) return null;
+    const body: Record<string, any> = { message: 'config_set' };
+    const unmapped: string[] = [];
+    let needLogOptions = false;
+    let mapped = 0;
     for (const e of hot) {
-      // Convert the dotted path into a nested set path. Amarisoft accepts
-      // nested config_set bodies.
-      setNested(out, pathToKeys(e.path), e.after);
+      if (e.path === 'settings.tx_gain') { body.tx_gain = e.after; mapped++; }
+      else if (e.path === 'settings.rx_gain') { body.rx_gain = e.after; mapped++; }
+      else if (e.path.startsWith('settings.log_layers') || e.path === 'settings.log_options_extra') {
+        needLogOptions = true;
+        mapped++;
+      } else {
+        unmapped.push(e.path);
+      }
     }
-    return out;
+    if (needLogOptions) body.log_options = emitLogOptionsString(current.settings);
+    return { body: mapped > 0 ? body : null, unmapped };
   }, [diff, current]);
 
   const fullCfg = useMemo(() => {
@@ -200,13 +211,21 @@ export function ApplyDialog({ open, onClose, baseline, current, profileName }: P
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => hotPatch && copy(JSON.stringify(hotPatch, null, 2), 'json')}
-                  disabled={!hotPatch || !diff.hasHot}
+                  onClick={() => hotPatch?.body && copy(JSON.stringify(hotPatch.body, null, 2), 'json')}
+                  disabled={!hotPatch?.body}
                 >
                   {copied === 'json' ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
                   Copy hot config_set JSON
                 </Button>
               </div>
+
+              {hotPatch && hotPatch.unmapped.length > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  Not included in config_set (use their own Remote API messages,
+                  e.g. <code className="font-mono">ue_move</code> for mobility):{' '}
+                  <span className="font-mono">{hotPatch.unmapped.join(', ')}</span>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -220,22 +239,3 @@ export function ApplyDialog({ open, onClose, baseline, current, profileName }: P
   );
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// Path helpers — convert "settings.tx_gain" into ['settings','tx_gain'] and
-// build a nested object body. Array elements use [n] which we strip out.
-// ──────────────────────────────────────────────────────────────────────────
-
-function pathToKeys(path: string): string[] {
-  // "channel.per_cell[0].dl_type" → ["channel","per_cell","0","dl_type"]
-  return path.split(/[.\[\]]+/).filter(Boolean);
-}
-
-function setNested(obj: Record<string, any>, keys: string[], value: unknown): void {
-  let cur: any = obj;
-  for (let i = 0; i < keys.length - 1; i++) {
-    const k = keys[i];
-    if (cur[k] === undefined || typeof cur[k] !== 'object') cur[k] = {};
-    cur = cur[k];
-  }
-  cur[keys[keys.length - 1]] = value;
-}

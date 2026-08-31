@@ -330,6 +330,12 @@ export interface RfDriverConfig {
 
 export interface SettingsSectionData {
   log_layers: LayerLogConfig[];
+  /**
+   * log_options tokens the structured editor doesn't model (e.g. ngap/s1ap
+   * layers, global flags). Preserved verbatim from import and re-appended on
+   * emit so debugging settings survive a round-trip.
+   */
+  log_options_extra?: string;
   log_filename: string;
   com_addr: string;
   com_auth?: boolean;
