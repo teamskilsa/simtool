@@ -628,6 +628,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           stdout: `OTS box — active profile maps ${module} to ${targetCfgPath}`,
         });
       }
+    } else if (module === 'ue_db') {
+      // ue_db is not an OTS component — it's pulled in via an `include` in the
+      // MME cfg (e.g. dish cores `include "dish-roaming-db.cfg"`). Writing the
+      // static ue_db.cfg would land in a file the cores never read. Resolve
+      // the actual included DB filename from the active MME cfg and deploy
+      // THERE, so a new subscriber DB actually takes effect.
+      const r = await exec(
+        'resolve-ue_db',
+        `${sudo} bash -c 'F=$(grep -oE "MME_CONFIG_FILE=\\"[^\\"]+\\"" /root/ots/config/ots.cfg 2>/dev/null | head -1 | sed -E "s/.*\\"(.*)\\"/\\1/"); ` +
+        `D=/root/mme; [ -n "$F" ] && grep -oE "include[[:space:]]+\\"[^\\"]*(ue_?db|roaming|subscriber)[^\\"]*\\.cfg\\"" "$D/$F" 2>/dev/null | head -1 | sed -E "s/.*\\"(.*)\\"/\\1/"'`,
+      );
+      const inc = r.stdout.trim();
+      if (inc) {
+        targetCfgPath = inc.startsWith('/') ? inc : `/root/mme/${inc.replace(/^config\//, 'config/')}`;
+        if (!inc.includes('/')) targetCfgPath = `/root/mme/config/${inc}`;
+        log.push({
+          step: 'resolve-ue_db',
+          ok: true,
+          stdout: `MME cfg includes subscriber DB "${inc}" — deploying there instead of static ue_db.cfg`,
+        });
+      }
     }
 
     // ── Phase 1.5: target dir must exist + be writable (sudo) ─────────
