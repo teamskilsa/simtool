@@ -2,7 +2,6 @@
 import React from 'react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -12,6 +11,22 @@ import {
 } from "@/components/ui/select";
 import { ModuleConfig } from './types';
 import { cn } from "@/lib/utils";
+
+/** Shared column template so the header and every row line up exactly.
+ *  A fixed first column is essential — sizing it to `auto` made each row's
+ *  inputs start at a different x depending on the module name length. */
+export const MODULE_GRID =
+  'grid grid-cols-1 sm:grid-cols-[minmax(150px,180px)_minmax(0,1fr)_minmax(0,1.3fr)] gap-3 sm:gap-4';
+
+const MODULE_LABELS: Record<string, string> = {
+  enb: 'eNB / gNB',
+  mme: 'MME (core 1)',
+  mme2: 'MME2 (core 2)',
+  ims: 'IMS',
+  ue_db: 'UE database',
+  ue: 'UE',
+  core: 'Core',
+};
 
 interface ModuleConfigRowProps {
   module: string;
@@ -39,52 +54,59 @@ export function ModuleConfigRow({
   // dropdown pick) must still default enabled=true — `config || default`
   // made the checkbox visually untick as soon as a config was chosen.
   const currentConfig = { ...defaultConfig, ...config };
+  const disabled = !currentConfig.enabled;
+  // mme2 = second instance of the mme daemon — same config bucket
+  const options = configs[module === 'mme2' ? 'mme' : module] ?? [];
 
   return (
-    <div className={cn(
-      "grid grid-cols-[auto_1fr_1fr] gap-4 p-6 rounded-lg",
-      "bg-gradient-to-br from-background/40 to-muted/20",
-      "border border-muted/20",
-      "transition-all duration-200",
-      "hover:shadow-md hover:border-muted/30"
-    )}>
-      <div className="flex items-center gap-2">
-        <Checkbox 
+    <div
+      className={cn(
+        MODULE_GRID,
+        'items-center px-4 py-3 border-b border-border/60 last:border-0 transition-colors',
+        disabled ? 'opacity-60' : 'hover:bg-muted/40',
+      )}
+    >
+      <div className="flex items-center gap-2.5 min-w-0">
+        <Checkbox
           id={`${module}-enabled`}
-          checked={currentConfig.enabled} 
+          checked={currentConfig.enabled}
           onCheckedChange={(checked) => onUpdate({ enabled: !!checked })}
-          className="border-muted/50"
         />
-        <Label
+        <label
           htmlFor={`${module}-enabled`}
-          className="font-medium capitalize text-foreground/90"
+          className="text-sm font-medium text-foreground truncate cursor-pointer"
         >
-          {module === 'mme2' ? 'mme2 (core 2)' : module}
-        </Label>
+          {MODULE_LABELS[module] ?? module}
+        </label>
       </div>
 
-      <div className="space-y-2">
-        <Label className="text-sm font-medium text-foreground/90">IP Configuration</Label>
+      {/* Column labels live in the header row, not repeated per module —
+          sm:sr-only keeps them for screen readers and for the stacked
+          mobile layout where the header row is hidden. */}
+      <div className="min-w-0">
+        <span className="text-xs text-muted-foreground sm:sr-only">IP address</span>
         <Input
           value={currentConfig.ipAddress}
           onChange={(e) => onUpdate({ ipAddress: e.target.value })}
-          placeholder="Enter IP address"
-          className="bg-background/50 border-muted/30"
+          placeholder="Inherit from system"
+          disabled={disabled}
+          className="h-9 font-mono text-sm"
+          aria-label={`${module} IP address`}
         />
       </div>
 
-      <div className="space-y-2">
-        <Label className="text-sm font-medium text-foreground/90">Configuration</Label>
+      <div className="min-w-0">
+        <span className="text-xs text-muted-foreground sm:sr-only">Configuration</span>
         <Select
           value={currentConfig.configId}
           onValueChange={(value) => onUpdate({ configId: value })}
+          disabled={disabled}
         >
-          <SelectTrigger className="bg-background/50 border-muted/30">
-            <SelectValue placeholder={`Select ${module} config`} />
+          <SelectTrigger className="h-9" aria-label={`${module} configuration`}>
+            <SelectValue placeholder={options.length ? 'Select config' : 'No configs available'} />
           </SelectTrigger>
           <SelectContent>
-            {/* mme2 = second instance of the mme daemon — same config bucket */}
-            {configs[module === 'mme2' ? 'mme' : module]?.map(config => (
+            {options.map(config => (
               <SelectItem key={config.id} value={config.id}>
                 {config.name}
               </SelectItem>

@@ -4,7 +4,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useToast } from "@/components/ui/use-toast";
 import { ScenarioCreator } from './ScenarioCreator';
 import { ScenarioConfig } from './types';
-import { cn } from "@/lib/utils";
 import { Boxes } from "lucide-react";
 
 interface CreateScenarioDialogProps {
@@ -53,39 +52,29 @@ export function CreateScenarioDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn(
-        "max-w-4xl max-h-[90vh] overflow-y-auto",
-        "bg-background/80 backdrop-blur-sm",
-        "border border-muted/30",
-        "shadow-lg"
-      )}>
-        <DialogHeader className="border-b border-muted/20 pb-4">
-          <div className="flex items-center gap-2">
-            <div className={cn(
-              "p-2 rounded-lg",
-              "bg-gradient-to-br from-blue-500/20 to-indigo-500/20"
-            )}>
-              <Boxes className="w-5 h-5 text-blue-500" />
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-hidden flex flex-col p-0 gap-0">
+        <DialogHeader className="border-b border-border/60 px-6 py-4 space-y-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+              <Boxes className="w-5 h-5 text-primary" />
             </div>
-            <div>
-              <DialogTitle className="text-2xl font-bold bg-gradient-to-br from-blue-500 to-indigo-600 bg-clip-text text-transparent">
+            <div className="min-w-0">
+              <DialogTitle className="text-lg font-semibold text-foreground">
                 {mode === 'create' ? 'Create New Scenario' : 'Edit Scenario'}
               </DialogTitle>
-              <DialogDescription className="text-muted-foreground mt-1">
-                {mode === 'create' 
-                  ? 'Configure a new test scenario with your desired settings'
-                  : 'Modify the existing scenario configuration'
+              <DialogDescription className="text-sm text-muted-foreground">
+                {mode === 'create'
+                  ? 'Pick a topology, then a config for each module.'
+                  : 'Modify the existing scenario configuration.'
                 }
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
-        
-        <div className={cn(
-          "mt-6 p-6 rounded-lg",
-          "bg-gradient-to-br from-background/60 to-muted/30",
-          "border border-muted/20"
-        )}>
+
+        {/* Body scrolls; the header stays put so the dialog never grows
+            taller than the viewport on a 4-module topology. */}
+        <div className="overflow-y-auto px-6 py-5">
           <ScenarioCreator
             initialData={initialData}
             isEditing={mode === 'edit'}

@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useModuleConfig } from './useModuleConfig';
-import { ModuleConfigRow } from './ModuleConfigRow';
+import { ModuleConfigRow, MODULE_GRID } from './ModuleConfigRow';
 import { TOPOLOGY_OPTIONS } from './constants';
 import { useConfigs } from '../../context/ConfigContext/ConfigContext';
 import { useSystems } from '@/modules/systems/hooks/use-systems';
@@ -96,35 +96,38 @@ export function ScenarioCreator({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Basic Info */}
-      <div className={cn(
-        "grid grid-cols-1 md:grid-cols-3 gap-6 p-6 rounded-lg",
-        "bg-gradient-to-br from-background/40 to-muted/20",
-        "border border-muted/20"
-      )}>
-        <div className="space-y-2">
-          <Label className="text-sm font-medium text-foreground/90">Scenario Name</Label>
+    <div className="space-y-5">
+      {/* ─── Basics ─────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium text-muted-foreground">Scenario Name</Label>
           <Input
             value={formState.name}
             onChange={(e) => updateFormState({ name: e.target.value })}
-            placeholder="Enter scenario name"
-            className="bg-background/50 border-muted/30"
+            placeholder="e.g. dish-roaming-demo"
+            className="h-9"
           />
         </div>
-        <div className="space-y-2">
-          <Label className="text-sm font-medium text-foreground/90">Topology</Label>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium text-muted-foreground">Topology</Label>
           <Select
             value={formState.topology}
             onValueChange={(value) => updateFormState({ topology: value })}
           >
-            <SelectTrigger className="bg-background/50 border-muted/30">
-              <SelectValue placeholder="Select topology" />
+            {/* Passing children to SelectValue is deliberate: by default Radix
+                clones the *selected item's* children into the trigger, which
+                dragged the multi-line description in and crushed this column.
+                Show the name here; the description sits below the field. */}
+            <SelectTrigger className="h-9">
+              <SelectValue placeholder="Select topology">
+                {selectedTopology?.name}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {TOPOLOGY_OPTIONS.map(topology => (
                 <SelectItem key={topology.id} value={topology.id}>
-                  <div className="flex flex-col">
+                  <div className="flex flex-col gap-0.5 py-0.5">
                     <span className="font-medium">{topology.name}</span>
                     <span className="text-xs text-muted-foreground">
                       {topology.description}
@@ -135,26 +138,29 @@ export function ScenarioCreator({
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label className="text-sm font-medium text-foreground/90">Target System</Label>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs font-medium text-muted-foreground">Target System</Label>
           {availableSystems.length === 0 ? (
-            <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2">
-              No systems configured. Add one in the <span className="font-medium">Test Systems</span> section.
+            <p className="text-xs text-muted-foreground rounded-md border border-dashed border-border px-3 py-2 leading-snug">
+              No systems yet — add one in <span className="font-medium">Test Systems</span>.
             </p>
           ) : (
             <Select
               value={formState.system?.id}
               onValueChange={handleSystemChange}
             >
-              <SelectTrigger className="bg-background/50 border-muted/30">
-                <SelectValue placeholder="Select system" />
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Select system">
+                  {formState.system?.name}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {availableSystems.map(sys => (
                   <SelectItem key={sys.id} value={sys.id}>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{sys.name}</span>
-                      <Badge variant="outline" className="text-[10px]">{sys.host}</Badge>
+                      <Badge variant="outline" className="text-[10px] font-mono">{sys.host}</Badge>
                     </div>
                   </SelectItem>
                 ))}
@@ -164,9 +170,36 @@ export function ScenarioCreator({
         </div>
       </div>
 
-      {/* Module Configurations */}
+      {/* Topology description as helper text — full width, room to breathe */}
       {selectedTopology && (
-        <div className="space-y-4">
+        <p className="text-xs text-muted-foreground -mt-1">
+          <span className="font-medium text-foreground">{selectedTopology.name}:</span>{' '}
+          {selectedTopology.description}
+        </p>
+      )}
+
+      {/* ─── Modules ────────────────────────────────────────────────── */}
+      {selectedTopology && (
+        <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/60 bg-muted/40">
+            <h3 className="text-sm font-semibold text-foreground">Modules</h3>
+            <span className="text-xs text-muted-foreground">
+              {modules.length} in this topology · deployed in order
+            </span>
+          </div>
+
+          {/* One header row for all modules instead of repeating the two
+              labels inside every card. Hidden on mobile, where each row
+              stacks and carries its own inline labels. */}
+          <div className={cn(
+            MODULE_GRID,
+            'hidden sm:grid px-4 py-2 border-b border-border/60 bg-muted/20',
+          )}>
+            <span className="text-xs font-medium text-muted-foreground">Module</span>
+            <span className="text-xs font-medium text-muted-foreground">IP address</span>
+            <span className="text-xs font-medium text-muted-foreground">Configuration</span>
+          </div>
+
           {modules.map(moduleId => (
             <ModuleConfigRow
               key={moduleId}
@@ -179,23 +212,16 @@ export function ScenarioCreator({
         </div>
       )}
 
-      {/* Submit Button */}
-      <div className="flex justify-end pt-4">
+      {/* ─── Submit ─────────────────────────────────────────────────── */}
+      <div className="flex justify-end gap-2 pt-1">
         <Button
           onClick={handleSave}
           disabled={isSaving || !formState.name || !formState.topology || !formState.system}
-          className={cn(
-            "bg-gradient-to-r from-blue-500 to-indigo-600",
-            "hover:from-blue-600 hover:to-indigo-700",
-            "text-white shadow-lg hover:shadow-xl",
-            "transition-all duration-200",
-            "px-8"
-          )}
         >
-          {isSaving 
-            ? 'Saving...' 
-            : isEditing 
-              ? 'Save Changes' 
+          {isSaving
+            ? 'Saving…'
+            : isEditing
+              ? 'Save Changes'
               : 'Create Scenario'
           }
         </Button>
