@@ -1,7 +1,6 @@
 // components/ScenarioCreator/ScenarioCreator.tsx
 import React, { useEffect, useMemo } from 'react';
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -115,24 +114,20 @@ export function ScenarioCreator({
             value={formState.topology}
             onValueChange={(value) => updateFormState({ topology: value })}
           >
-            {/* Passing children to SelectValue is deliberate: by default Radix
-                clones the *selected item's* children into the trigger, which
-                dragged the multi-line description in and crushed this column.
-                Show the name here; the description sits below the field. */}
+            {/* Only `children` lands in the trigger (Radix clones ItemText);
+                `description` renders outside it, so the long topology blurb
+                stays in the dropdown instead of crushing this column. */}
             <SelectTrigger className="h-9">
-              <SelectValue placeholder="Select topology">
-                {selectedTopology?.name}
-              </SelectValue>
+              <SelectValue placeholder="Select topology" />
             </SelectTrigger>
             <SelectContent>
               {TOPOLOGY_OPTIONS.map(topology => (
-                <SelectItem key={topology.id} value={topology.id}>
-                  <div className="flex flex-col gap-0.5 py-0.5">
-                    <span className="font-medium">{topology.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {topology.description}
-                    </span>
-                  </div>
+                <SelectItem
+                  key={topology.id}
+                  value={topology.id}
+                  description={topology.description}
+                >
+                  {topology.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -151,17 +146,12 @@ export function ScenarioCreator({
               onValueChange={handleSystemChange}
             >
               <SelectTrigger className="h-9">
-                <SelectValue placeholder="Select system">
-                  {formState.system?.name}
-                </SelectValue>
+                <SelectValue placeholder="Select system" />
               </SelectTrigger>
               <SelectContent>
                 {availableSystems.map(sys => (
-                  <SelectItem key={sys.id} value={sys.id}>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{sys.name}</span>
-                      <Badge variant="outline" className="text-[10px] font-mono">{sys.host}</Badge>
-                    </div>
+                  <SelectItem key={sys.id} value={sys.id} description={sys.host}>
+                    {sys.name}
                   </SelectItem>
                 ))}
               </SelectContent>

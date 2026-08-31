@@ -73,25 +73,42 @@ const SelectLabel = React.forwardRef<
 ))
 SelectLabel.displayName = SelectPrimitive.Label.displayName
 
+/**
+ * Radix clones the selected item's <ItemText> content into the trigger.
+ * Anything rendered OUTSIDE ItemText stays in the dropdown only — that is
+ * what `description` is for. Put the short label in `children` (it becomes
+ * the trigger text) and any secondary line in `description`, so a long
+ * description can't be dragged into the trigger and crush the field.
+ *
+ * Do NOT work around this by passing children to <SelectValue>: React then
+ * owns a node Radix is also cloning into, and unmounting races produce
+ * "Failed to execute 'removeChild' on 'Node'".
+ */
 const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & {
+    description?: React.ReactNode
+  }
+>(({ className, children, description, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
       "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      description && "flex-col items-start gap-0.5",
       className
     )}
     {...props}
   >
-    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+    <span className="absolute left-2 top-2 flex h-3.5 w-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
         <Check className="h-4 w-4" />
       </SelectPrimitive.ItemIndicator>
     </span>
 
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    {description && (
+      <span className="text-xs text-muted-foreground">{description}</span>
+    )}
   </SelectPrimitive.Item>
 ))
 SelectItem.displayName = SelectPrimitive.Item.displayName
