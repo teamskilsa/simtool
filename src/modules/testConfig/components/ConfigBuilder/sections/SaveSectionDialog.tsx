@@ -48,7 +48,7 @@ export function SaveSectionDialog({ open, onOpenChange, type, data, onSaved }: S
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Save className="w-4 h-4 text-indigo-600" />
+            <Save className="w-4 h-4 text-primary" />
             Save as Section File
             <Badge variant="secondary">{type.toUpperCase()}</Badge>
           </DialogTitle>
@@ -75,7 +75,7 @@ export function SaveSectionDialog({ open, onOpenChange, type, data, onSaved }: S
             />
           </div>
 
-          <div className="rounded-md bg-indigo-50 border border-indigo-100 p-2.5 text-xs text-indigo-800">
+          <div className="rounded-lg bg-primary/5 border border-primary/15 p-2.5 text-xs text-muted-foreground">
             Saved to browser storage. Available everywhere the {type.toUpperCase()} section appears.
           </div>
         </div>
@@ -85,7 +85,6 @@ export function SaveSectionDialog({ open, onOpenChange, type, data, onSaved }: S
           <Button
             onClick={handleSave}
             disabled={!name.trim()}
-            className="bg-indigo-600 text-white hover:bg-indigo-700"
           >
             Save
           </Button>

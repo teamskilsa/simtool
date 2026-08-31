@@ -64,8 +64,8 @@ export function LoadSectionDialog({ open, onOpenChange, type, onLoad }: LoadSect
         onClick={() => setSelected(sf)}
         className={`w-full text-left p-3 rounded-lg border transition-all ${
           isActive
-            ? 'border-indigo-500 ring-2 ring-indigo-100 bg-indigo-50/50'
-            : 'bg-white border-gray-200 hover:border-indigo-300'
+            ? 'border-primary ring-2 ring-primary/20 bg-primary/5'
+            : 'bg-card border-border/70 hover:border-primary/40'
         }`}
       >
         <div className="flex items-start justify-between gap-2">
@@ -105,7 +105,7 @@ export function LoadSectionDialog({ open, onOpenChange, type, onLoad }: LoadSect
       <DialogContent className="sm:max-w-4xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Package className="w-4 h-4 text-indigo-600" />
+            <Package className="w-4 h-4 text-primary" />
             Load Section File
             <Badge variant="secondary" className="ml-1">{type.toUpperCase()}</Badge>
           </DialogTitle>
@@ -172,7 +172,6 @@ export function LoadSectionDialog({ open, onOpenChange, type, onLoad }: LoadSect
           <Button
             onClick={handleUse}
             disabled={!selected}
-            className="bg-indigo-600 text-white hover:bg-indigo-700"
           >
             Use This Template
           </Button>

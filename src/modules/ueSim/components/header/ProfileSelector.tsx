@@ -93,10 +93,10 @@ export function ProfileSelector({
 
   return (
     <>
-      <div className="flex items-center gap-2 border rounded-md px-3 py-2 bg-background">
+      <div className="flex items-center flex-wrap gap-2 border border-border/70 rounded-xl px-3 py-2 bg-background">
         <FolderOpen className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium">Profile</span>
-        <div className="w-64">
+        <div className="w-44 lg:w-64">
           <Select value={activeId} onValueChange={onSelect}>
             <SelectTrigger className="h-8">
               <SelectValue placeholder="Select profile…" />
@@ -124,7 +124,7 @@ export function ProfileSelector({
           <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
         </Button>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center flex-wrap gap-1">
           <Button size="sm" variant="outline" onClick={onOpenLoader}>
             <Upload className="h-3.5 w-3.5 mr-1" /> Load ue.cfg
           </Button>

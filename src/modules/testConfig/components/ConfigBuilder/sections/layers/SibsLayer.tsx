@@ -58,7 +58,7 @@ export function SibsLayer({ form, onChange }: Props) {
                 type="button"
                 onClick={() => toggleSib(opt.value)}
                 className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${
-                  on ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-200 hover:border-indigo-300'
+                  on ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50'
                 }`}
               >
                 {opt.label}

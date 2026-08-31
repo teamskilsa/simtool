@@ -25,8 +25,8 @@ function AlgoSelector({ label, hint, value, options, onChange }: {
             onClick={() => toggle(algo)}
             className={`px-2.5 py-1 rounded text-xs font-mono border transition-colors ${
               value.includes(algo)
-                ? 'bg-indigo-600 text-white border-indigo-600'
-                : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400'
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background text-muted-foreground border-border hover:border-primary/50'
             }`}
           >
             {algo}

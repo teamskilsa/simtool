@@ -51,7 +51,7 @@ export const DashboardHeader = ({
     <header className={`sticky top-0 z-50 border-b border-white/10 shadow-sm backdrop-blur-md ${chromeBg} bg-opacity-90`}>
       <div className="flex items-center justify-between px-4 py-3">
         {/* Left section */}
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-4 min-w-0 flex-1">
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-2 rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
@@ -60,11 +60,11 @@ export const DashboardHeader = ({
             <Menu className="w-6 h-6 text-white" />
           </button>
 
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
               <Shield className="w-5 h-5 text-white" />
             </div>
-            <div className="text-xl font-semibold text-white">
+            <div className="text-xl font-semibold text-white whitespace-nowrap truncate">
               Network Testing Portal
               <span className="text-xs font-normal ml-2 px-2 py-0.5 rounded-full bg-white/20">
                 Beta
@@ -74,13 +74,13 @@ export const DashboardHeader = ({
         </div>
 
         {/* Right section */}
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-4 shrink-0">
           {/* Search */}
           <div className="relative hidden md:block">
             <input
               type="text"
               placeholder="Search tests, configurations…"
-              className="w-80 pl-10 pr-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/30 focus:outline-none transition-colors"
+              className="w-56 lg:w-80 pl-10 pr-4 py-2 rounded-xl bg-white/10 border border-white/20 text-white placeholder:text-white/60 focus:bg-white/20 focus:border-white/30 focus:outline-none transition-colors"
             />
             <Search className="w-5 h-5 text-white/70 absolute left-3 top-2.5 pointer-events-none" />
           </div>

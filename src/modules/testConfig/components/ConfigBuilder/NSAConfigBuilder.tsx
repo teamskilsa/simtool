@@ -39,11 +39,11 @@ export function NSAConfigBuilder({
   return (
     <div className="space-y-3">
       {/* NSA banner — always visible so user knows this is a dual-RAT config */}
-      <div className="flex items-start gap-2 p-3 rounded-lg border border-purple-200 bg-purple-50/50 text-xs">
-        <Info className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+      <div className="flex items-start gap-2 p-3 rounded-lg border border-purple-500/30 bg-purple-500/10 text-xs">
+        <Info className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
         <div className="flex-1">
-          <p className="font-medium text-purple-900">NSA / EN-DC Configuration</p>
-          <p className="text-purple-700/80">
+          <p className="font-medium text-purple-900 dark:text-purple-200">NSA / EN-DC Configuration</p>
+          <p className="text-purple-700/80 dark:text-purple-300/80">
             Single config with {form.lteForm.cells.length} LTE anchor cell{form.lteForm.cells.length === 1 ? '' : 's'} (band {form.lteForm.band})
             {' '}and {form.nrForm.cells.length} NR secondary cell{form.nrForm.cells.length === 1 ? '' : 's'} (band n{form.nrForm.band}).
             Use the toggle to edit each side.
@@ -52,17 +52,17 @@ export function NSAConfigBuilder({
       </div>
 
       {/* RAT side switcher */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+      <div className="flex gap-1 bg-muted/60 p-1 rounded-xl border border-border/60">
         <button
           onClick={() => setSide('lte')}
           className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            side === 'lte' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-white'
+            side === 'lte' ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground hover:bg-background'
           }`}
         >
           <Wifi className="w-4 h-4" />
           LTE Anchor
           <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${
-            side === 'lte' ? 'bg-white/20 border-white/40 text-white' : 'bg-blue-50 border-blue-200 text-blue-700'
+            side === 'lte' ? 'bg-white/20 border-white/40 text-white' : 'bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-300'
           }`}>
             {form.lteForm.cells.length}
           </Badge>
@@ -70,13 +70,13 @@ export function NSAConfigBuilder({
         <button
           onClick={() => setSide('nr')}
           className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            side === 'nr' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-600 hover:bg-white'
+            side === 'nr' ? 'bg-purple-600 text-white shadow-sm' : 'text-muted-foreground hover:bg-background'
           }`}
         >
           <RadioTower className="w-4 h-4" />
           NR Secondary
           <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${
-            side === 'nr' ? 'bg-white/20 border-white/40 text-white' : 'bg-purple-50 border-purple-200 text-purple-700'
+            side === 'nr' ? 'bg-white/20 border-white/40 text-white' : 'bg-purple-500/10 border-purple-500/30 text-purple-600 dark:text-purple-300'
           }`}>
             {form.nrForm.cells.length}
           </Badge>

@@ -98,14 +98,14 @@ export function LTECellTabs({ form, onChange }: LTECellTabsProps) {
   };
 
   return (
-    <div className="flex items-center gap-1 p-1 bg-indigo-50/40 rounded-lg border border-indigo-100 overflow-x-auto">
-      <span className="text-xs font-semibold uppercase text-indigo-700 px-2 shrink-0">Cells:</span>
+    <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-xl border border-border/70 overflow-x-auto">
+      <span className="text-xs font-semibold uppercase text-primary px-2 shrink-0">Cells:</span>
       <TooltipProvider>
         {cells.map((cell, idx) => {
           const isActive = idx === activeIdx;
           return (
             <div key={idx} className={`flex items-center gap-0.5 rounded-md ${
-              isActive ? 'bg-indigo-600 shadow-sm' : 'bg-white border'
+              isActive ? 'bg-primary shadow-sm' : 'bg-background border border-border/70'
             }`}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -113,11 +113,11 @@ export function LTECellTabs({ form, onChange }: LTECellTabsProps) {
                     onClick={() => switchTo(idx)}
                     onDoubleClick={() => renameCell(idx)}
                     className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap ${
-                      isActive ? 'text-white' : 'text-gray-700 hover:text-indigo-600'
+                      isActive ? 'text-primary-foreground' : 'text-foreground/80 hover:text-primary'
                     }`}
                   >
                     {cell.name}
-                    <span className={`ml-1 text-[10px] ${isActive ? 'text-indigo-200' : 'text-gray-400'}`}>
+                    <span className={`ml-1 text-[10px] ${isActive ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                       B{isActive ? form.band : cell.band}
                     </span>
                   </button>
@@ -128,7 +128,7 @@ export function LTECellTabs({ form, onChange }: LTECellTabsProps) {
                 <button
                   onClick={() => removeCell(idx)}
                   className={`p-1 mr-0.5 rounded hover:bg-red-500 hover:text-white ${
-                    isActive ? 'text-indigo-200' : 'text-gray-400'
+                    isActive ? 'text-primary-foreground/70' : 'text-muted-foreground'
                   }`}
                   title="Remove cell"
                 >
@@ -143,7 +143,7 @@ export function LTECellTabs({ form, onChange }: LTECellTabsProps) {
         size="sm"
         variant="outline"
         onClick={addCell}
-        className="h-7 gap-1 text-xs bg-white hover:bg-indigo-50 hover:border-indigo-300 shrink-0"
+        className="h-7 gap-1 text-xs shrink-0"
       >
         <Plus className="w-3 h-3" /> Add Cell
       </Button>

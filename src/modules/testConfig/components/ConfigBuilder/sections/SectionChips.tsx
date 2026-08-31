@@ -53,9 +53,9 @@ export function SectionChips({ type, currentData, onLoad }: SectionChipsProps) {
   const userFiles = files.filter(f => !f.builtIn);
 
   return (
-    <div className="flex items-center gap-2 flex-wrap p-2 rounded-md bg-indigo-50/50 border border-indigo-100">
-      <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-      <span className="text-xs font-medium text-indigo-900">Section files:</span>
+    <div className="flex items-center gap-2 flex-wrap p-2 rounded-lg bg-muted/40 border border-border/70">
+      <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
+      <span className="text-xs font-medium text-foreground">Section files:</span>
 
       {/* Built-in templates as chips */}
       {builtIns.map(f => (
@@ -63,7 +63,7 @@ export function SectionChips({ type, currentData, onLoad }: SectionChipsProps) {
           key={f.id}
           onClick={() => handleLoad(f.id)}
           title={f.description}
-          className="text-xs px-2 py-0.5 rounded-full bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-colors"
+          className="text-xs px-2 py-0.5 rounded-full bg-background border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
         >
           {f.name}
         </button>
@@ -127,7 +127,6 @@ export function SectionChips({ type, currentData, onLoad }: SectionChipsProps) {
             <Button
               onClick={handleSave}
               disabled={!newName.trim()}
-              className="bg-indigo-600 text-white hover:bg-indigo-700"
             >
               Save
             </Button>

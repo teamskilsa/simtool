@@ -67,21 +67,21 @@ export function SectionHeaderStrip({
 
   return (
     <>
-      <div className="flex items-center gap-2 border rounded-md px-3 py-2 bg-muted/30">
+      <div className="flex items-center flex-wrap gap-2 border border-border/70 rounded-xl px-3 py-2 bg-muted/30">
         <FileText className="h-4 w-4 text-muted-foreground" />
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
           {label}
         </span>
 
-        <div className="w-64">
+        <div className="w-44 lg:w-64">
           <Select value={activeId} onValueChange={onSelect}>
-            <SelectTrigger className="h-8">
+            <SelectTrigger className="h-8 [&>span]:truncate [&>span]:text-left">
               <SelectValue placeholder="Select section…" />
             </SelectTrigger>
             <SelectContent>
               {sections.map(s => (
                 <SelectItem key={s.id} value={s.id}>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 whitespace-nowrap">
                     <span>{s.name}</span>
                     {s.builtIn && (
                       <Badge variant="secondary" className="text-[10px] py-0 px-1">built-in</Badge>
