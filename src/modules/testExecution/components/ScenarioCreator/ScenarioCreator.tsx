@@ -32,7 +32,10 @@ export function ScenarioCreator({
 }: ScenarioCreatorProps) {
   const { configs, refreshConfigs } = useConfigs();
   const { systems: globalSystems } = useSystems();
-  const { formState, updateFormState, updateModuleConfig } = useModuleConfig([]);
+  // initialData drives edit mode — previously it was accepted as a prop and
+  // then dropped on the floor, which is why Edit opened an empty form.
+  const { formState, updateFormState, setTopology, updateModuleConfig, modules } =
+    useModuleConfig(initialData);
 
   // The execution ConfigProvider wraps the dashboard layout and only loads
   // configs once on mount; refresh whenever the user opens the creator so
@@ -43,7 +46,6 @@ export function ScenarioCreator({
   }, []);
 
   const selectedTopology = TOPOLOGY_OPTIONS.find(t => t.id === formState.topology);
-  const modules = selectedTopology?.modules || [];
 
   // Map saved systems (Test Systems section) into the shape the scenario uses.
   //
@@ -62,6 +64,14 @@ export function ScenarioCreator({
     })),
   [globalSystems]);
 
+  // A scenario can outlive the system it points at (system deleted, or the
+  // scenario came from another machine). The Select then matches nothing and
+  // renders blank, which is indistinguishable from "never set" — so say it.
+  const danglingSystem =
+    formState.system?.id && !availableSystems.some(s => s.id === String(formState.system!.id))
+      ? formState.system
+      : null;
+
   const handleSystemChange = (systemId: string) => {
     const sys = availableSystems.find(s => s.id === systemId);
     if (!sys) return;
@@ -74,14 +84,21 @@ export function ScenarioCreator({
   const handleSave = () => {
     if (!onSave) return;
 
-    const moduleConfigsArray = Object.entries(formState.moduleConfigs).map(([moduleId, config]) => ({
-      moduleId,
-      enabled: config.enabled ?? true,
-      configId: config.configId || '',
-      ipAddress: config.ipAddress || '',
-      isCustomIp: config.isCustomIp || false,
-      systemId: config.systemId
-    }));
+    // Emit a row for every module in the topology. Only emitting *touched*
+    // rows used to save scenarios with an empty moduleConfigs list — and
+    // because /api/scenarios PUT shallow-merges, an edit then wiped the
+    // module configs of an otherwise working scenario.
+    const moduleConfigsArray = modules.map((moduleId) => {
+      const config = formState.moduleConfigs[moduleId] ?? {};
+      return {
+        moduleId,
+        enabled: config.enabled ?? true,
+        configId: config.configId || '',
+        ipAddress: config.ipAddress || '',
+        isCustomIp: config.isCustomIp || false,
+        systemId: config.systemId,
+      };
+    });
 
     const saveData = {
       name: formState.name,
@@ -112,7 +129,7 @@ export function ScenarioCreator({
           <Label className="text-xs font-medium text-muted-foreground">Topology</Label>
           <Select
             value={formState.topology}
-            onValueChange={(value) => updateFormState({ topology: value })}
+            onValueChange={setTopology}
           >
             {/* Only `children` lands in the trigger (Radix clones ItemText);
                 `description` renders outside it, so the long topology blurb
@@ -156,6 +173,13 @@ export function ScenarioCreator({
                 ))}
               </SelectContent>
             </Select>
+          )}
+          {danglingSystem && (
+            <p className="text-xs text-amber-600 dark:text-amber-500 leading-snug">
+              Saved system <span className="font-medium">{danglingSystem.name}</span>
+              {danglingSystem.host ? ` (${danglingSystem.host})` : ''} is no longer in
+              Test Systems. Pick a replacement, or the run will fail.
+            </p>
           )}
         </div>
       </div>
