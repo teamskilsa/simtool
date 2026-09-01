@@ -7,10 +7,14 @@ export function useRemoteAPI(config: RemoteAPIConfig) {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const connect = useCallback(async () => {
+  // Returns the live client. Callers that connect and then immediately use
+  // the connection cannot rely on `client`/`connected` state: those are set
+  // via setState and are not visible to the closure that just called
+  // connect(). Returning the instance lets them hold it in a ref instead.
+  const connect = useCallback(async (): Promise<WebSocketClient> => {
     try {
       const wsClient = new WebSocketClient(config);
-      
+
       wsClient.on('connected', () => setConnected(true));
       wsClient.on('disconnected', () => setConnected(false));
       wsClient.on('error', (err: Error) => setError(err));
@@ -18,6 +22,7 @@ export function useRemoteAPI(config: RemoteAPIConfig) {
       await wsClient.connect();
       setClient(wsClient);
       setError(null);
+      return wsClient;
     } catch (err) {
       setError(err as Error);
       throw err;

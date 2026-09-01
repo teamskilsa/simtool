@@ -36,6 +36,11 @@ export function useEnbStats(
   const [phase, setPhase] = useState<MonitoringPhase>('idle');
   const [error, setError] = useState<Error | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout>();
+  // The live websocket client. `remoteAPI.connected` / `.client` are React
+  // state: the closure that calls connect() still sees the pre-connect
+  // values, so polling through them silently fetched nothing forever
+  // (UI said "Connected" with an empty dashboard). Poll via the ref.
+  const clientRef = useRef<any>(null);
 
   // Keep a ref to the latest onStatsUpdate so we don't re-create fetchStats
   // every render (which would otherwise cancel the polling interval).
@@ -43,12 +48,14 @@ export function useEnbStats(
   useEffect(() => { onStatsUpdateRef.current = onStatsUpdate; }, [onStatsUpdate]);
 
   const fetchStats = useCallback(async () => {
-    if (!remoteAPI.connected) return;
+    const client = clientRef.current;
+    if (!client) return;
     try {
-      const response = await remoteAPI.execute('stats', {
+      // `rf: true` is an eNB/gNB-only property; the MME rejects it with a
+      // warning, so only ask for it where it means something.
+      const response = await client.sendMessage({
         message: 'stats',
         samples: true,
-        rf: true,
       });
       onStatsUpdateRef.current?.(response);
     } catch (err) {
@@ -56,15 +63,13 @@ export function useEnbStats(
       setError(e);
       // Don't tear down — keep polling; the next tick may succeed.
     }
-  }, [remoteAPI]);
+  }, []);
 
   const startMonitoring = useCallback(async () => {
     setError(null);
     setPhase('connecting');
     try {
-      if (!remoteAPI.connected) {
-        await remoteAPI.connect();
-      }
+      clientRef.current = remoteAPI.client ?? (await remoteAPI.connect());
       setPhase('connected');
       await fetchStats();
       pollIntervalRef.current = setInterval(fetchStats, pollInterval);
@@ -82,6 +87,7 @@ export function useEnbStats(
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = undefined;
     }
+    clientRef.current = null;
     remoteAPI.disconnect();
     setPhase('idle');
     setError(null);

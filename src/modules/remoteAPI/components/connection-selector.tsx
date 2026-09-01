@@ -85,13 +85,6 @@ export function ConnectionSelector({ themeConfig, onConnectionChange }: Connecti
     return out.sort((a, b) => a.name.localeCompare(b.name));
   }, [systems]);
 
-  // When the user changes module type, snap the port to the default for
-  // that type (they can still override). We avoid touching the IP here —
-  // the IP belongs to the system selection, not the module type.
-  useEffect(() => {
-    setFormData(prev => ({ ...prev, port: DEFAULT_PORTS[prev.type] }));
-  }, [formData.type]);
-
   const handlePickSystem = (id: string) => {
     setSelectedSystemId(id);
     if (!id) return;
@@ -111,6 +104,14 @@ export function ConnectionSelector({ themeConfig, onConnectionChange }: Connecti
 
   const handleChange = (field: keyof ConnectionDetails, value: string) => {
     const newData = { ...formData, [field]: value } as ConnectionDetails;
+    // Changing module type snaps the port to that module's default (the user
+    // can still override it afterwards). This has to happen here rather than
+    // in an effect on formData.type: the effect updated local state only and
+    // never called onConnectionChange, so the field showed 9000 while the
+    // parent still connected on 9001.
+    if (field === 'type') {
+      newData.port = DEFAULT_PORTS[value as ComponentType];
+    }
     setFormData(newData);
     onConnectionChange(newData);
     // If the user manually edits the IP, they're no longer "on" a saved
