@@ -1,5 +1,5 @@
 // route.ts
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { getStorageAdapter } from '@/lib/storage';
 import fs from 'fs/promises';
 import path from 'path';

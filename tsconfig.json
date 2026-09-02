@@ -34,5 +34,17 @@
     ".next/types/**/*.ts",
     "src/types/**/*.d.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    // Dead backup copies kept for reference only — nothing in src/ or pages/
+    // imports them (verified by grep). They fail type-checking (stale relative
+    // imports, duplicated type files), which blocked `next build` entirely.
+    "BU",
+    "**/BU/**",
+    "**/bu/**",
+    "**/*_BU/**",
+    "**/* copy.ts",
+    "**/* copy.tsx",
+    ".claude"
+  ]
 }
