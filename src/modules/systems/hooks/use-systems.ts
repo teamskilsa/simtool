@@ -200,9 +200,10 @@ export function useSystems() {
   };
 
   const refreshAllSystems = async () => {
-    for (const system of systems) {
-      await refreshSystem(system.id);
-    }
+    // Was a sequential for/await: each system costs a ping plus an ssh-test
+    // that routinely takes 4-5s, so N systems meant N x ~5s back to back.
+    // They are independent probes — run them together.
+    await Promise.allSettled(systems.map(system => refreshSystem(system.id)));
   };
 
   const startMonitoring = async (duration: number, interval: number) => {
@@ -215,21 +216,19 @@ export function useSystems() {
     // Additional stop monitoring logic here
   };
 
-  // Load initial data
+  // Load initial data.
+  //
+  // The systems themselves come from localStorage synchronously, so the list
+  // can render immediately. Reachability (ping + ssh-test) is a slow network
+  // probe — previously the page was held behind `loading` until every system
+  // had been probed, which meant staring at a spinner for several seconds
+  // before any row appeared. Now the rows paint at once and each row's
+  // connection badge fills in as its probe returns.
   useEffect(() => {
-    const loadSystems = async () => {
-      setLoading(true);
-      try {
-        // Connect all systems initially
-        await refreshAllSystems();
-      } catch (error) {
-        console.error('Failed to load systems:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadSystems();
+    setLoading(false);
+    void refreshAllSystems().catch(error => {
+      console.error('Failed to refresh system connections:', error);
+    });
   }, []); // Empty dependency array means this runs once on mount
 
   return {
