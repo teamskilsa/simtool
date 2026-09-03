@@ -4,7 +4,17 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/modules/auth/context/auth-context';
 import { Loader2 } from 'lucide-react';
-import { EnbMonitoringDashboard } from '@/modules/statLogs/components/enb/EnbMonitoringDashboard';
+import dynamic from 'next/dynamic';
+
+// recharts (used by the dashboard) touches `self` at module scope, which
+// does not exist in Node — so statically importing it here made the
+// production build fail while prerendering /stats. Loading it client-only
+// keeps the library out of the server render entirely.
+const EnbMonitoringDashboard = dynamic(
+  () => import('@/modules/statLogs/components/enb/EnbMonitoringDashboard')
+    .then(m => m.EnbMonitoringDashboard),
+  { ssr: false },
+);
 
 export default function StatsPage() {
   const { isAuthenticated, isLoading } = useAuth();
