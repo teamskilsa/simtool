@@ -8,6 +8,7 @@
 'use client';
 
 import { Sparkles } from 'lucide-react';
+import { InfoHint } from './InfoHint';
 import { getBandSpec } from './constants';
 import type { NRFormState } from './constants';
 
@@ -79,15 +80,18 @@ export function CellPresets({ form, onChange }: Props) {
   )?.id;
 
   return (
-    <div className="rounded-xl border border-border/70 bg-muted/30 px-4 py-3">
-      <div className="flex items-center gap-1.5 mb-2">
+    <div className="flex items-center flex-wrap gap-2 rounded-xl border border-border/70 bg-muted/30 px-3 py-2">
+      <div className="flex items-center gap-1.5 shrink-0">
         <Sparkles className="w-3.5 h-3.5 text-primary" />
         <span className="text-xs font-semibold text-foreground uppercase tracking-wide">
-          Start from
+          Presets
         </span>
-        <span className="text-xs text-muted-foreground">— then adjust anything below</span>
+        <InfoHint>
+          A one-click starting point — sets band, bandwidth, subcarrier
+          spacing and antennas together. Everything stays editable afterwards.
+        </InfoHint>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1.5">
         {PRESETS.map(p => {
           const active = p.id === activeId;
           return (
@@ -97,7 +101,7 @@ export function CellPresets({ form, onChange }: Props) {
               onClick={() => apply(p)}
               title={p.detail}
               className={
-                'text-left px-3 py-1.5 rounded-lg border text-xs transition-colors '
+                'text-left px-2.5 py-1 rounded-md border text-xs transition-colors '
                 + (active
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'border-border bg-background hover:border-primary/40 hover:bg-muted')

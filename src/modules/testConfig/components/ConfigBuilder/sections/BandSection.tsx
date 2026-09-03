@@ -6,6 +6,7 @@ import {
 } from '@/components/ui/select';
 import { Field } from './Field';
 import { BoxedSection } from '../BoxedSection';
+import { InfoHint } from '../InfoHint';
 import { NR_BANDS, getBandSpec, BANDWIDTH_OPTIONS, SCS_OPTIONS } from '../constants';
 import type { NRFormState } from '../constants';
 
@@ -50,12 +51,12 @@ export function BandSection({ form, onChange }: Props) {
   const fr2Bands = NR_BANDS.filter(b => b.fr === 1);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <BoxedSection
         title="Band & Frequency"
-        subtitle="The band sets the frequency range, duplex mode and default carrier"
+        hint="Choosing a band sets the frequency range, duplex mode and a default carrier, and limits bandwidth and subcarrier spacing to the values that band supports."
       >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* One list of every band, grouped by range. The old UI split bands
               across an FR selector, so the user had to choose FR *before*
               the band and nothing corrected FR if they changed band later. */}
@@ -113,7 +114,7 @@ export function BandSection({ form, onChange }: Props) {
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
           {/* DL NR-ARFCN (DL carrier center) */}
           <Field
             label="DL NR-ARFCN"
@@ -127,11 +128,17 @@ export function BandSection({ form, onChange }: Props) {
               them when matching a UE's expected sync raster. */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-medium">
+              <Label className="text-xs font-medium flex items-center gap-1.5">
                 SSB ARFCN
-                <span className="ml-1.5 text-muted-foreground font-normal">
+                <span className="text-muted-foreground font-normal">
                   ({isFR2 ? 'GSCN, FR2' : 'GSCN'})
                 </span>
+                <InfoHint>
+                  Off → omitted from the config, and Amarisoft picks the SSB
+                  position from band + DL ARFCN. On → emits{' '}
+                  <code className="font-mono">gscn</code> in{' '}
+                  <code className="font-mono">nr_cell_list[]</code>.
+                </InfoHint>
               </Label>
               <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer">
                 <Checkbox
@@ -161,11 +168,6 @@ export function BandSection({ form, onChange }: Props) {
                 onChange('ssbArfcn', raw === '' ? 0 : Number(raw));
               }}
             />
-            <p className="text-[11px] text-muted-foreground">
-              Off → omitted from config (Amarisoft picks the SSB position).
-              On → emits <code className="font-mono">gscn</code> in
-              <code className="font-mono"> nr_cell_list[]</code>.
-            </p>
           </div>
         </div>
       </BoxedSection>

@@ -78,7 +78,7 @@ export function AntennaSection({ form, onChange, bare }: Props) {
     <BoxedSection
       bare={bare}
       title="Antennas & Gain"
-      subtitle="DL/UL antenna counts. TX/RX gain accepts a single value or one value per antenna path (Amarisoft tx_gain / rx_gain array form)."
+      hint="DL/UL antenna counts. TX/RX gain accepts a single value, or one value per antenna path (Amarisoft tx_gain / rx_gain array form)."
       action={
         <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={resetGains} title="Reset gains to defaults for current antenna count">
           <RotateCcw className="w-3 h-3" />

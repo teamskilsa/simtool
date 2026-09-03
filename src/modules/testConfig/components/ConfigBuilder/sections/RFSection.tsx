@@ -40,7 +40,7 @@ export function RFSection({ form, onChange, bare }: Props) {
       <BoxedSection
         bare={bare}
         title="RF Driver"
-        subtitle="Radio frontend selection. Configuration depends on mode."
+        hint="Radio frontend selection. The fields below change with the chosen mode."
         action={
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={resetArgs} title="Reset to defaults for current mode">
             <RotateCcw className="w-3 h-3" />

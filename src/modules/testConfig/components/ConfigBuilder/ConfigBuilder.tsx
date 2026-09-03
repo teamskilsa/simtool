@@ -22,9 +22,8 @@ import {
 } from './sections/layers';
 import { CellTabs } from './CellTabs';
 import { CellPresets } from './CellPresets';
-import { AdvancedSection } from './AdvancedSection';
 import { TddPatternFields } from './sections/TddPatternFields';
-import { DEFAULT_NR_FORM, DEFAULT_NR_FORM as NR_DEFAULTS, type NRFormState } from './constants';
+import { DEFAULT_NR_FORM, type NRFormState } from './constants';
 import type { ReferencedFile } from './cfgParser';
 
 // Main tabs — top level
@@ -34,6 +33,17 @@ const MAIN_TABS = [
   { id: 'mme',    label: 'MME Info',     icon: Server },
   { id: 'log',    label: 'Log Setting',  icon: FileText },
   { id: 'deps',   label: 'Dependencies', icon: Database },
+] as const;
+
+// Sub-tabs inside "Cell". The tab previously stacked every group on one
+// scrolling page; grouping them the same way Layers already does keeps the
+// pane a fixed height and puts each group one click away.
+const CELL_SUB_TABS = [
+  { id: 'essentials', label: 'Essentials', icon: RadioTower },
+  { id: 'tdd',        label: 'TDD',        icon: Gauge },
+  { id: 'antenna',    label: 'Antennas',   icon: Radio },
+  { id: 'rf',         label: 'RF Driver',  icon: Signal },
+  { id: 'channel',    label: 'Channel',    icon: Network },
 ] as const;
 
 // Sub-tabs inside "Layers" (added SSB)
@@ -59,81 +69,53 @@ interface ConfigBuilderProps {
 export function ConfigBuilder({ form, onChange, dependencies = [], availableFiles = [] }: ConfigBuilderProps) {
   const [mainTab, setMainTab] = useState<string>('cell');
   const [layerSubTab, setLayerSubTab] = useState<string>('freq');
+  const [cellSubTab, setCellSubTab] = useState<string>('essentials');
 
   const renderMainContent = () => {
     switch (mainTab) {
       case 'cell': {
-        // Essentials stay open; set-once settings collapse behind summaries.
-        // Flat, this tab was ~27 equally-weighted fields — the density was
-        // the complaint, not the field count itself.
-        const tdd = form.tddPattern;
-        const antennaSummary =
-          `${form.nAntennaDl}x${form.nAntennaUl} · TX ${form.txGain} dB / RX ${form.rxGain} dB`;
-        const rfSummary =
-          form.rfMode === 'sdr' ? `SDR · RX antenna ${form.rxAntenna ?? 'default'}`
-            : form.rfMode === 'ip' ? 'IP (remote radio)'
-              : form.rfMode === 'split' ? 'Split 7.2 (O-RAN fronthaul)'
-                : String(form.rfMode ?? 'not set');
-        const channelSummary = form.channelSim
-          ? `${form.channelType} · noise ${form.noiseLevel} dB`
-          : 'Off — ideal channel';
+        // TDD only applies to TDD bands, so hide the tab entirely on FDD
+        // rather than showing an empty pane.
+        const tabs = CELL_SUB_TABS.filter(t => t.id !== 'tdd' || form.nrTdd === 1);
+        const active = tabs.some(t => t.id === cellSubTab) ? cellSubTab : 'essentials';
 
         return (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <CellTabs form={form} onChange={onChange} />
             <CellPresets form={form} onChange={onChange} />
 
-            {/* ── Essentials ── */}
-            <CellSection form={form} onChange={onChange} />
-            <BandSection form={form} onChange={onChange} />
+            {/* Sub-navigation — same treatment as the Layers tab */}
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-border pb-2">
+              {tabs.map(tab => {
+                const Icon = tab.icon;
+                const isActive = active === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setCellSubTab(tab.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
 
-            {/* ── Set-once ── */}
-            {form.nrTdd === 1 && (
-              <AdvancedSection
-                title="TDD Pattern"
-                summary={`${tdd.period} ms · ${tdd.dlSlots}D/${tdd.ulSlots}U slots · ${tdd.dlSymbols}/${tdd.ulSymbols} symbols`}
-                icon={<Gauge className="w-4 h-4" />}
-                modified={
-                  tdd.period !== NR_DEFAULTS.tddPattern.period
-                  || tdd.dlSlots !== NR_DEFAULTS.tddPattern.dlSlots
-                  || tdd.ulSlots !== NR_DEFAULTS.tddPattern.ulSlots
-                }
-              >
-                <TddPatternFields form={form} onChange={onChange} />
-              </AdvancedSection>
+            {active === 'essentials' && (
+              <div className="space-y-3">
+                <CellSection form={form} onChange={onChange} />
+                <BandSection form={form} onChange={onChange} />
+              </div>
             )}
-
-            <AdvancedSection
-              title="Antennas & Gain"
-              summary={antennaSummary}
-              icon={<Radio className="w-4 h-4" />}
-              modified={
-                form.nAntennaDl !== NR_DEFAULTS.nAntennaDl
-                || form.nAntennaUl !== NR_DEFAULTS.nAntennaUl
-                || form.txGain !== NR_DEFAULTS.txGain
-                || form.rxGain !== NR_DEFAULTS.rxGain
-              }
-            >
-              <AntennaSection form={form} onChange={onChange} bare />
-            </AdvancedSection>
-
-            <AdvancedSection
-              title="RF Driver"
-              summary={rfSummary}
-              icon={<Signal className="w-4 h-4" />}
-              modified={form.rfMode !== NR_DEFAULTS.rfMode}
-            >
-              <RFSection form={form} onChange={onChange} bare />
-            </AdvancedSection>
-
-            <AdvancedSection
-              title="Channel Simulator"
-              summary={channelSummary}
-              icon={<Network className="w-4 h-4" />}
-              modified={!!form.channelSim}
-            >
-              <ChannelSimSection form={form} onChange={onChange} />
-            </AdvancedSection>
+            {active === 'tdd' && <TddPatternFields form={form} onChange={onChange} />}
+            {active === 'antenna' && <AntennaSection form={form} onChange={onChange} />}
+            {active === 'rf' && <RFSection form={form} onChange={onChange} />}
+            {active === 'channel' && <ChannelSimSection form={form} onChange={onChange} />}
           </div>
         );
       }
