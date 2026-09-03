@@ -1,10 +1,25 @@
 // NR Cell — identity + (conditional) TDD pattern. SSB Configuration moved
 // to Layers/SSB; Band, Antenna, RF, Channel Sim render alongside in the
 // merged Cell tab.
+import { Label } from '@/components/ui/label';
 import { Field } from './Field';
 import { SectionToolbar } from './SectionToolbar';
 import { BoxedSection } from '../BoxedSection';
+import { getBandSpec } from '../constants';
 import type { NRFormState } from '../constants';
+
+/** A value the band determines — shown, not asked for. */
+function DerivedField({ label, value, from }: { label: string; value: string; from: string }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium">{label}</Label>
+      <div className="h-9 flex items-center px-3 rounded-md border border-dashed border-border bg-muted/40">
+        <span className="text-sm text-foreground">{value}</span>
+      </div>
+      <p className="text-[11px] text-muted-foreground">set by {from}</p>
+    </div>
+  );
+}
 
 interface Props { form: NRFormState; onChange: (key: string, value: any) => void; }
 
@@ -18,17 +33,30 @@ export function CellSection({ form, onChange }: Props) {
     Object.entries(data).forEach(([k, v]) => onChange(k, v));
   };
 
+  const spec = getBandSpec(form.band);
+  const bandLabel = spec ? `band ${spec.label.split(' ')[0]}` : 'the selected band';
+
   return (
     <div className="space-y-4">
       <SectionToolbar type="cell" currentData={currentCell} onLoad={handleLoad} />
 
-      <BoxedSection title="Identity" subtitle="Cell ID + duplex mode + frequency range">
+      {/* Mode and Frequency Range are properties of the band, not free
+          choices — n78 *is* FR1 TDD. They were editable selects, which let
+          the user emit impossible cells (n78 + FDD) and left them stale
+          when the band changed. Now they read back what the band implies. */}
+      <BoxedSection title="Identity" subtitle="Cell ID — duplex mode and frequency range follow the band">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Cell ID" value={form.cellId} onChange={v => onChange('cellId', v)} type="number" min={0} max={1007} />
-          <Field label="Mode" value={form.nrTdd} onChange={v => onChange('nrTdd', v)} type="select"
-            options={[{ value: 0, label: 'FDD' }, { value: 1, label: 'TDD' }]} />
-          <Field label="Frequency Range" value={form.fr2} onChange={v => onChange('fr2', v)} type="select"
-            options={[{ value: 0, label: 'FR1 (sub-6)' }, { value: 1, label: 'FR2 (mmWave)' }]} />
+          <DerivedField
+            label="Mode"
+            value={form.nrTdd === 1 ? 'TDD' : 'FDD'}
+            from={bandLabel}
+          />
+          <DerivedField
+            label="Frequency Range"
+            value={form.fr2 === 1 ? 'FR2 (mmWave)' : 'FR1 (sub-6)'}
+            from={bandLabel}
+          />
         </div>
       </BoxedSection>
 

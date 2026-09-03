@@ -1,20 +1,53 @@
 // Band and bandwidth options for NR configuration
 
+/**
+ * The band is the single source of truth for a cell's frequency range and
+ * duplex mode — n78 *is* FR1 TDD, n7 *is* FR1 FDD. These used to be three
+ * independent dropdowns, which let the user emit physically impossible
+ * combinations (n78 + FDD, n78 + FR2) and created an ordering trap: the
+ * Frequency Range select gated which bands were listed, so picking a band
+ * first and changing FR afterwards silently left Mode/FR wrong.
+ *
+ * Everything derivable now hangs off this table. `duplex` and `fr` drive
+ * the read-only Mode / Frequency Range display, `defaultArfcn` seeds the
+ * carrier, and `scs` lists the subcarrier spacings 3GPP actually allows
+ * for that band.
+ */
+export interface BandSpec {
+  value: number;
+  label: string;
+  /** 0 = FDD, 1 = TDD — matches NRFormState.nrTdd */
+  duplex: 0 | 1;
+  /** 0 = FR1, 1 = FR2 — matches NRFormState.fr2 */
+  fr: 0 | 1;
+  defaultArfcn: number;
+  /** Subcarrier spacings valid for this band, in kHz. */
+  scs: number[];
+}
+
+export const NR_BANDS: BandSpec[] = [
+  // ── FR1 TDD ──
+  { value: 78,  label: 'n78 (3.5 GHz)',  duplex: 1, fr: 0, defaultArfcn: 632628,  scs: [15, 30, 60] },
+  { value: 77,  label: 'n77 (3.7 GHz)',  duplex: 1, fr: 0, defaultArfcn: 622000,  scs: [15, 30, 60] },
+  { value: 41,  label: 'n41 (2.5 GHz)',  duplex: 1, fr: 0, defaultArfcn: 514056,  scs: [15, 30, 60] },
+  // ── FR1 FDD ──
+  { value: 28,  label: 'n28 (700 MHz)',  duplex: 0, fr: 0, defaultArfcn: 151600,  scs: [15, 30] },
+  { value: 7,   label: 'n7 (2.6 GHz)',   duplex: 0, fr: 0, defaultArfcn: 531000,  scs: [15, 30] },
+  { value: 3,   label: 'n3 (1.8 GHz)',   duplex: 0, fr: 0, defaultArfcn: 368500,  scs: [15, 30] },
+  { value: 1,   label: 'n1 (2.1 GHz)',   duplex: 0, fr: 0, defaultArfcn: 428000,  scs: [15, 30] },
+  // ── FR2 (all TDD) ──
+  { value: 257, label: 'n257 (28 GHz)',  duplex: 1, fr: 1, defaultArfcn: 2079167, scs: [60, 120] },
+  { value: 258, label: 'n258 (26 GHz)',  duplex: 1, fr: 1, defaultArfcn: 2054167, scs: [60, 120] },
+  { value: 260, label: 'n260 (39 GHz)',  duplex: 1, fr: 1, defaultArfcn: 2229167, scs: [60, 120] },
+];
+
+export const getBandSpec = (band: number): BandSpec | undefined =>
+  NR_BANDS.find(b => b.value === band);
+
+/** Retained for callers that still group by frequency range. */
 export const BAND_OPTIONS = {
-  FR1: [
-    { value: 78, label: 'n78 (3.5 GHz)' },
-    { value: 77, label: 'n77 (3.7 GHz)' },
-    { value: 41, label: 'n41 (2.5 GHz)' },
-    { value: 28, label: 'n28 (700 MHz)' },
-    { value: 7, label: 'n7 (2.6 GHz)' },
-    { value: 3, label: 'n3 (1.8 GHz)' },
-    { value: 1, label: 'n1 (2.1 GHz)' },
-  ],
-  FR2: [
-    { value: 257, label: 'n257 (28 GHz)' },
-    { value: 258, label: 'n258 (26 GHz)' },
-    { value: 260, label: 'n260 (39 GHz)' },
-  ],
+  FR1: NR_BANDS.filter(b => b.fr === 0).map(({ value, label }) => ({ value, label })),
+  FR2: NR_BANDS.filter(b => b.fr === 1).map(({ value, label }) => ({ value, label })),
 };
 
 export const BANDWIDTH_OPTIONS = {
@@ -41,11 +74,10 @@ export const SCS_OPTIONS = [
   { value: 120, label: '120 kHz' },
 ];
 
-export const DEFAULT_ARFCN: Record<number, number> = {
-  78: 632628, 77: 622000, 41: 514056, 28: 151600,
-  7: 531000, 3: 368500, 1: 428000,
-  257: 2079167, 258: 2054167, 260: 2229167,
-};
+/** Derived from NR_BANDS so the defaults cannot drift out of sync. */
+export const DEFAULT_ARFCN: Record<number, number> = Object.fromEntries(
+  NR_BANDS.map(b => [b.value, b.defaultArfcn]),
+);
 
 // Default form state for a new NR cell config
 export interface NRFormState {
