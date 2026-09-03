@@ -12,9 +12,9 @@ import { BoxedSection } from '../BoxedSection';
 import type { NRFormState } from '../constants';
 import { defaultGains, defaultRfArgs, gainArrayFromScalar, gainAsScalar } from '../rfDefaults';
 
-interface Props { form: NRFormState; onChange: (key: string, value: any) => void; }
+interface Props { form: NRFormState; onChange: (key: string, value: any) => void; bare?: boolean; }
 
-export function AntennaSection({ form, onChange }: Props) {
+export function AntennaSection({ form, onChange, bare }: Props) {
   const txIsArray = Array.isArray(form.txGain);
   const rxIsArray = Array.isArray(form.rxGain);
 
@@ -76,6 +76,7 @@ export function AntennaSection({ form, onChange }: Props) {
 
   return (
     <BoxedSection
+      bare={bare}
       title="Antennas & Gain"
       subtitle="DL/UL antenna counts. TX/RX gain accepts a single value or one value per antenna path (Amarisoft tx_gain / rx_gain array form)."
       action={

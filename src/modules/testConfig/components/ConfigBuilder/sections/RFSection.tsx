@@ -16,9 +16,9 @@ import { Split72Fields } from './Split72Fields';
 import type { NRFormState } from '../constants';
 import { defaultRfArgs, rfArgsHint, parseRfArgs, setRfArg, type RfMode } from '../rfDefaults';
 
-interface Props { form: NRFormState; onChange: (key: string, value: any) => void; }
+interface Props { form: NRFormState; onChange: (key: string, value: any) => void; bare?: boolean; }
 
-export function RFSection({ form, onChange }: Props) {
+export function RFSection({ form, onChange, bare }: Props) {
   const currentRf = {
     rfMode: form.rfMode, rfArgs: form.rfArgs, rxAntenna: form.rxAntenna,
   };
@@ -38,6 +38,7 @@ export function RFSection({ form, onChange }: Props) {
       <SectionToolbar type="rf" currentData={currentRf} onLoad={handleLoad} />
 
       <BoxedSection
+        bare={bare}
         title="RF Driver"
         subtitle="Radio frontend selection. Configuration depends on mode."
         action={

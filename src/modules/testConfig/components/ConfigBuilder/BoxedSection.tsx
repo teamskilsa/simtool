@@ -10,11 +10,15 @@ interface BoxedSectionProps {
   icon?: ReactNode;
   action?: ReactNode;       // right-side control (e.g. "Add" button)
   noPadding?: boolean;
+  /** Render children only — no box, header or padding. Used when the section
+   *  is nested inside an AdvancedSection, which already supplies all three. */
+  bare?: boolean;
   className?: string;
   children: ReactNode;
 }
 
-export function BoxedSection({ title, subtitle, icon, action, noPadding, className, children }: BoxedSectionProps) {
+export function BoxedSection({ title, subtitle, icon, action, noPadding, bare, className, children }: BoxedSectionProps) {
+  if (bare) return <>{children}</>;
   return (
     <section
       className={cn(

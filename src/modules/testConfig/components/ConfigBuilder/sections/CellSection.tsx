@@ -60,17 +60,6 @@ export function CellSection({ form, onChange }: Props) {
         </div>
       </BoxedSection>
 
-      {form.nrTdd === 1 && (
-        <BoxedSection title="TDD Pattern" subtitle="DL/UL slot and symbol configuration">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <Field label="Period (ms)" value={form.tddPattern.period} onChange={v => onChange('tddPattern', { ...form.tddPattern, period: v })} type="number" step="0.125" />
-            <Field label="DL Slots" value={form.tddPattern.dlSlots} onChange={v => onChange('tddPattern', { ...form.tddPattern, dlSlots: v })} type="number" />
-            <Field label="DL Symbols" value={form.tddPattern.dlSymbols} onChange={v => onChange('tddPattern', { ...form.tddPattern, dlSymbols: v })} type="number" />
-            <Field label="UL Slots" value={form.tddPattern.ulSlots} onChange={v => onChange('tddPattern', { ...form.tddPattern, ulSlots: v })} type="number" />
-            <Field label="UL Symbols" value={form.tddPattern.ulSymbols} onChange={v => onChange('tddPattern', { ...form.tddPattern, ulSymbols: v })} type="number" />
-          </div>
-        </BoxedSection>
-      )}
     </div>
   );
 }

@@ -21,7 +21,10 @@ import {
   FrequentlyUsedLayer, PhyLayer, MacLayer, RlcPdcpLayer, RrcNasLayer, SibsLayer, SSBLayer,
 } from './sections/layers';
 import { CellTabs } from './CellTabs';
-import { DEFAULT_NR_FORM, type NRFormState } from './constants';
+import { CellPresets } from './CellPresets';
+import { AdvancedSection } from './AdvancedSection';
+import { TddPatternFields } from './sections/TddPatternFields';
+import { DEFAULT_NR_FORM, DEFAULT_NR_FORM as NR_DEFAULTS, type NRFormState } from './constants';
 import type { ReferencedFile } from './cfgParser';
 
 // Main tabs — top level
@@ -59,18 +62,81 @@ export function ConfigBuilder({ form, onChange, dependencies = [], availableFile
 
   const renderMainContent = () => {
     switch (mainTab) {
-      case 'cell':
-        // Single merged Cell tab — all per-cell config in one place.
+      case 'cell': {
+        // Essentials stay open; set-once settings collapse behind summaries.
+        // Flat, this tab was ~27 equally-weighted fields — the density was
+        // the complaint, not the field count itself.
+        const tdd = form.tddPattern;
+        const antennaSummary =
+          `${form.nAntennaDl}x${form.nAntennaUl} · TX ${form.txGain} dB / RX ${form.rxGain} dB`;
+        const rfSummary =
+          form.rfMode === 'sdr' ? `SDR · RX antenna ${form.rxAntenna ?? 'default'}`
+            : form.rfMode === 'ip' ? 'IP (remote radio)'
+              : form.rfMode === 'split' ? 'Split 7.2 (O-RAN fronthaul)'
+                : String(form.rfMode ?? 'not set');
+        const channelSummary = form.channelSim
+          ? `${form.channelType} · noise ${form.noiseLevel} dB`
+          : 'Off — ideal channel';
+
         return (
           <div className="space-y-4">
             <CellTabs form={form} onChange={onChange} />
+            <CellPresets form={form} onChange={onChange} />
+
+            {/* ── Essentials ── */}
             <CellSection form={form} onChange={onChange} />
             <BandSection form={form} onChange={onChange} />
-            <AntennaSection form={form} onChange={onChange} />
-            <RFSection form={form} onChange={onChange} />
-            <ChannelSimSection form={form} onChange={onChange} />
+
+            {/* ── Set-once ── */}
+            {form.nrTdd === 1 && (
+              <AdvancedSection
+                title="TDD Pattern"
+                summary={`${tdd.period} ms · ${tdd.dlSlots}D/${tdd.ulSlots}U slots · ${tdd.dlSymbols}/${tdd.ulSymbols} symbols`}
+                icon={<Gauge className="w-4 h-4" />}
+                modified={
+                  tdd.period !== NR_DEFAULTS.tddPattern.period
+                  || tdd.dlSlots !== NR_DEFAULTS.tddPattern.dlSlots
+                  || tdd.ulSlots !== NR_DEFAULTS.tddPattern.ulSlots
+                }
+              >
+                <TddPatternFields form={form} onChange={onChange} />
+              </AdvancedSection>
+            )}
+
+            <AdvancedSection
+              title="Antennas & Gain"
+              summary={antennaSummary}
+              icon={<Radio className="w-4 h-4" />}
+              modified={
+                form.nAntennaDl !== NR_DEFAULTS.nAntennaDl
+                || form.nAntennaUl !== NR_DEFAULTS.nAntennaUl
+                || form.txGain !== NR_DEFAULTS.txGain
+                || form.rxGain !== NR_DEFAULTS.rxGain
+              }
+            >
+              <AntennaSection form={form} onChange={onChange} bare />
+            </AdvancedSection>
+
+            <AdvancedSection
+              title="RF Driver"
+              summary={rfSummary}
+              icon={<Signal className="w-4 h-4" />}
+              modified={form.rfMode !== NR_DEFAULTS.rfMode}
+            >
+              <RFSection form={form} onChange={onChange} bare />
+            </AdvancedSection>
+
+            <AdvancedSection
+              title="Channel Simulator"
+              summary={channelSummary}
+              icon={<Network className="w-4 h-4" />}
+              modified={!!form.channelSim}
+            >
+              <ChannelSimSection form={form} onChange={onChange} />
+            </AdvancedSection>
           </div>
         );
+      }
 
       case 'layers':
         return (
