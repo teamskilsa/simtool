@@ -47,7 +47,7 @@ export function UserManagement() {
       {/* Page header */}
       <div className="flex justify-between items-start">
         <div>
-          <h2 className="text-2xl font-semibold text-foreground">User Management</h2>
+          <h2 className="text-lg font-semibold text-foreground">User Management</h2>
           <p className="text-sm text-muted-foreground mt-1">
             Manage users and their permissions
           </p>

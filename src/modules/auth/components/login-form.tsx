@@ -79,7 +79,7 @@ export function LoginForm() {
           
           <CardHeader className="space-y-2 pt-8 px-6">
             <CardTitle className={cn(
-              "text-2xl font-semibold text-center",
+              "text-lg font-semibold text-center",
               themeConfig.colors.primary[700]
             )}>
               Welcome back

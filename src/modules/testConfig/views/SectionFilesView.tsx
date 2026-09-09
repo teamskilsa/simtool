@@ -98,7 +98,7 @@ export const SectionFilesView: React.FC = () => {
             <FolderTree className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Section Files</h2>
+            <h2 className="text-lg font-semibold tracking-tight">Section Files</h2>
             <p className="text-sm text-muted-foreground">
               Reusable config pieces — load them into any builder section, save your own from the PDN/UE DB/General tabs.
             </p>

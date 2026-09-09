@@ -31,7 +31,7 @@ export function UserProfile() {
             <User className="w-8 h-8 text-white" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">{user.username}</h2>
+            <h2 className="text-lg font-bold text-white">{user.username}</h2>
             <div className="flex items-center space-x-2 mt-1">
               <span className="text-white/70">{user.role}</span>
               {user.team && (

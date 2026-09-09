@@ -60,7 +60,7 @@ export const ResultsView: React.FC = () => {
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Test Results</h1>
+        <h1 className="text-lg font-bold">Test Results</h1>
         <Button onClick={handleExport} disabled={loading || results.length === 0}>
           <Download className="w-4 h-4 mr-2" />
           Export Results

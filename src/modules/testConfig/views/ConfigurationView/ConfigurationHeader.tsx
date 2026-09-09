@@ -42,7 +42,7 @@ export const ConfigurationHeader: React.FC<ConfigurationHeaderProps> = ({
         </div>
         <div>
           <h2 className={cn(
-            "text-2xl font-bold",
+            "text-lg font-bold",
             "bg-clip-text text-transparent",
             theme.gradients.primary
           )}>

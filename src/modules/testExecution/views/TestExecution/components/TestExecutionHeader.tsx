@@ -26,7 +26,7 @@ export function TestExecutionHeader({ onCreateClick }: TestExecutionHeaderProps)
           <Settings className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold">Test Scenarios</h2>
+          <h2 className="text-lg font-bold">Test Scenarios</h2>
           <p className="text-sm text-muted-foreground">
             Create and manage test execution scenarios
           </p>

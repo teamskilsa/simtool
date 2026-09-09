@@ -87,7 +87,7 @@ export function TestExecutionView() {
       <div className="border-b border-muted/20">
         <div className="flex items-center justify-between p-6">
           <div className="space-y-1">
-            <h2 className="text-2xl font-bold">Test Execution</h2>
+            <h2 className="text-lg font-bold">Test Execution</h2>
             <p className="text-sm text-muted-foreground">
               Run a single config, or chain a multi-component scenario.
             </p>

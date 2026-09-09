@@ -47,7 +47,7 @@ export function ScenarioDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto backdrop-blur-sm bg-background/80 border-muted/20">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">
+          <DialogTitle className="text-lg font-bold">
             {mode === 'create' ? 'Create New Scenario' : 'Edit Scenario'}
           </DialogTitle>
         </DialogHeader>

@@ -92,7 +92,7 @@ export function SWManagementView() {
       <div className="flex items-center gap-3">
         <Package className="h-8 w-8 text-indigo-600" />
         <div>
-          <h2 className="text-2xl font-semibold">SW Management</h2>
+          <h2 className="text-lg font-semibold">SW Management</h2>
           <p className="text-sm text-muted-foreground">
             Auto-detect & install Amarisoft software · manage licenses on remote systems
           </p>

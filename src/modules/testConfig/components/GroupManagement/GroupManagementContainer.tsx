@@ -105,7 +105,7 @@ export const GroupManagementContainer: React.FC<GroupManagementProps> = ({
                 <FileJson className="h-6 w-6 text-blue-600" />
               </div>
               <div>
-                <h2 className="text-2xl bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent font-bold">
+                <h2 className="text-lg bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent font-bold">
                   Manage Groups
                 </h2>
                 <p className="text-sm text-muted-foreground">

@@ -292,7 +292,7 @@ export const CreateTestView: React.FC = () => {
             <Radio className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Create Config</h2>
+            <h2 className="text-lg font-semibold tracking-tight">Create Config</h2>
             <p className="text-sm text-muted-foreground">
               Visual Amarisoft config builder
             </p>
