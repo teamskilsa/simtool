@@ -113,7 +113,7 @@ export const ConfigurationEditor: React.FC<ConfigurationEditorProps> = ({
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between px-3 py-2 border-b">
         <div className="flex items-center gap-3">
           {config ? (
             <>

@@ -248,7 +248,7 @@ export function ConfigurationView() {
   return (
     <TooltipProvider>
       <div className={cn(
-        "flex-1 p-6",
+        "flex-1 p-4",
         theme.surfaces.page.background
       )}>
         <ConfigurationHeader
@@ -273,7 +273,7 @@ export function ConfigurationView() {
           </div>
         )}
 
-        <div className="flex gap-6">
+        <div className="flex gap-4">
           <ConfigurationList
             configs={configs}
             selectedConfig={selectedConfig}

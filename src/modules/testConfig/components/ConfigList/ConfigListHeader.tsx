@@ -29,59 +29,42 @@ export const ConfigListHeader: React.FC<ConfigListHeaderProps> = ({
   filterDropdown
 }) => {
   return (
-    <div className="p-4 border-b">
-      <div className="flex items-center gap-2 mb-4">
-        <Input
-          placeholder="Search configurations..."
-          value={searchTerm}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="h-9"
-        />
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onCollapse}
-          className="px-2"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </Button>
-      </div>
+    // One row, not two. The select-all checkbox, search, filter and collapse
+    // all belong to the same job, and "0 selected" is not worth a line of its
+    // own — the count appears only once something is selected.
+    <div className="flex items-center gap-2 px-3 py-2 border-b">
+      <Checkbox
+        checked={isAllSelected}
+        onCheckedChange={onSelectAll}
+        title="Select all"
+      />
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Checkbox
-            checked={isAllSelected}
-            onCheckedChange={onSelectAll}
-          />
-          <span className="text-sm text-muted-foreground">
+      <Input
+        placeholder="Search configurations..."
+        value={searchTerm}
+        onChange={(e) => onSearchChange(e.target.value)}
+        className="h-8 flex-1 min-w-0"
+      />
+
+      {selectedCount > 0 && (
+        <>
+          <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
             {selectedCount} selected
           </span>
-        </div>
+          <Button variant="ghost" size="sm" onClick={onBulkDuplicate} className="h-8 px-2" title="Duplicate selected">
+            <Copy className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onBulkDelete} className="h-8 px-2 text-red-600 hover:text-red-700" title="Delete selected">
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </>
+      )}
 
-        <div className="flex items-center gap-1">
-          {selectedCount > 0 && (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onBulkDuplicate}
-                className="h-8 px-2"
-              >
-                <Copy className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onBulkDelete}
-                className="h-8 px-2 text-red-600 hover:text-red-700"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </>
-          )}
-          {filterDropdown}
-        </div>
-      </div>
+      {filterDropdown}
+
+      <Button variant="ghost" size="sm" onClick={onCollapse} className="h-8 px-2" title="Collapse list">
+        <ChevronLeft className="w-4 h-4" />
+      </Button>
     </div>
   );
 }

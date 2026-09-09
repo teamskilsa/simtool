@@ -16,6 +16,7 @@ import { configActions } from './actions/configActions';
 import { groupActions } from './actions/groupActions';
 import { ConfigItem } from '../../types';
 import { cn } from '@/lib/utils';
+import { TAB_LIST, TAB_TRIGGER, TAB_TRIGGER_ACTIVE, TAB_TRIGGER_IDLE } from '@/components/ui/tab-styles';
 import { classifyAll, RAT_BADGE } from './classifyConfig';
 import type { BuilderConfigType } from '../ConfigBuilder';
 
@@ -146,67 +147,71 @@ export const ConfigurationList: React.FC<ConfigListProps> = ({
         }
       />
 
-      {/* Main / Dependencies tab toggle */}
-      <div className="px-3 pt-2 flex gap-1 border-b">
+      {/* Main / Dependencies tab toggle. Same underline language as every
+          other tab bar in the app, and theme tokens rather than hardcoded
+          indigo/gray, which stayed light-mode colours in dark mode. */}
+      <div className={cn(TAB_LIST, 'px-2 gap-0.5')}>
         <button
           onClick={() => setTab('main')}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors',
-            tab === 'main'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300',
+            TAB_TRIGGER, 'px-2 text-xs',
+            tab === 'main' ? TAB_TRIGGER_ACTIVE : TAB_TRIGGER_IDLE,
           )}
         >
           <FileText className="w-3.5 h-3.5" />
           Configurations
-          <span className="ml-1 text-[10px] opacity-70">({counts.main})</span>
+          <span className="text-[10px] opacity-70">({counts.main})</span>
         </button>
         <button
           onClick={() => setTab('aux')}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors',
-            tab === 'aux'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300',
+            TAB_TRIGGER, 'px-2 text-xs',
+            tab === 'aux' ? TAB_TRIGGER_ACTIVE : TAB_TRIGGER_IDLE,
           )}
         >
           <Database className="w-3.5 h-3.5" />
           Dependencies
-          <span className="ml-1 text-[10px] opacity-70">({counts.aux})</span>
+          <span className="text-[10px] opacity-70">({counts.aux})</span>
         </button>
       </div>
 
-      {/* RAT chips — only on the main tab */}
+      {/* RAT chips — only on the main tab.
+          A filter that can only ever return nothing is not worth a chip, so
+          empty RATs are hidden (they reappear the moment one is imported).
+          That drops the row from two wrapped lines to one on a narrow panel.
+          The active chip keeps its slot if you filter down to zero. */}
       {tab === 'main' && (
-        <div className="px-3 py-2 flex flex-wrap gap-1 border-b bg-muted/20">
-          {(['all', 'nr', 'lte', 'nsa', 'nbiot', 'catm', 'core'] as RatFilter[]).map(r => {
-            const isActive = ratFilter === r;
-            const meta = r === 'all' ? null : RAT_BADGE[r];
-            const label = r === 'all' ? 'All' : meta?.label ?? r;
-            const n = ratCounts[r] ?? 0;
-            return (
-              <button
-                key={r}
-                onClick={() => setRatFilter(r)}
-                className={cn(
-                  'text-[10px] px-2 py-1 rounded-md font-medium border transition-colors',
-                  isActive
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300',
-                )}
-              >
-                {label}
-                <span className={cn('ml-1 text-[9px]', isActive ? 'opacity-80' : 'opacity-60')}>
-                  {n}
-                </span>
-              </button>
-            );
-          })}
+        <div className="px-2 py-1.5 flex flex-wrap gap-1 border-b">
+          {(['all', 'nr', 'lte', 'nsa', 'nbiot', 'catm', 'core'] as RatFilter[])
+            .filter(r => r === 'all' || (ratCounts[r] ?? 0) > 0 || ratFilter === r)
+            .map(r => {
+              const isActive = ratFilter === r;
+              const meta = r === 'all' ? null : RAT_BADGE[r];
+              const label = r === 'all' ? 'All' : meta?.label ?? r;
+              const n = ratCounts[r] ?? 0;
+              return (
+                <button
+                  key={r}
+                  onClick={() => setRatFilter(r)}
+                  className={cn(
+                    'text-[10px] px-2 py-0.5 rounded-md font-medium border transition-colors',
+                    isActive
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:border-primary/40',
+                  )}
+                >
+                  {label}
+                  <span className={cn('ml-1 text-[9px]', isActive ? 'opacity-80' : 'opacity-60')}>
+                    {n}
+                  </span>
+                </button>
+              );
+            })}
         </div>
       )}
 
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-2">
+        <div className="p-2 space-y-1.5">
           {visibleConfigs.length === 0 && (
             <p className="text-xs text-muted-foreground text-center py-6">
               {tab === 'aux'
