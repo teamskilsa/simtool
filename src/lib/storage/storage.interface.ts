@@ -27,26 +27,17 @@ export interface IStorageOperations<T> {
  * Configuration specific storage operations
  */
 export interface IConfigStorage extends IStorageOperations<StoredConfig> {
-  // Version management
-  createVersion(configId: string, version: Omit<ConfigVersion, 'createdAt'>): Promise<StorageResult<ConfigVersion>>;
-  getVersion(configId: string, version: number): Promise<StorageResult<ConfigVersion>>;
-  listVersions(configId: string): Promise<StorageResult<ConfigVersion[]>>;
-  
-  // Module specific operations
-  getByModule(module: ModuleType): Promise<StorageResult<StoredConfig[]>>;
-  
-  // Sharing operations
-  share(configId: string, userId: string, permission: 'read' | 'write'): Promise<StorageResult<void>>;
-  unshare(configId: string, userId: string): Promise<StorageResult<void>>;
-  
-  // Template operations
-  createTemplate(configId: string, name: string): Promise<StorageResult<StoredConfig>>;
-  getTemplates(module: ModuleType): Promise<StorageResult<StoredConfig[]>>;
-  
   // Bulk operations
   bulkCreate(configs: Array<Omit<StoredConfig, 'id' | 'createdAt' | 'updatedAt'>>): Promise<StorageResult<StoredConfig[]>>;
-  bulkUpdate(configs: Array<{ id: string; data: Partial<StoredConfig> }>): Promise<StorageResult<StoredConfig[]>>;
 }
+
+// NOTE: this interface previously also declared createVersion, getVersion,
+// listVersions, getByModule, share, unshare, createTemplate, getTemplates
+// and bulkUpdate. None of them were ever implemented and none had a single
+// call site, so every implementor failed conformance for an API that did
+// not exist. Re-add them alongside a real implementation if versioning or
+// sharing is built.
+
 
 /**
  * User preferences storage operations

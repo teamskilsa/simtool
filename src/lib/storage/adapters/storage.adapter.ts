@@ -5,7 +5,6 @@ import path from 'path';
 import { IStorageAdapter } from '../storage.interface';
 import { StoragePathResolver, StorageConfig } from '../config';
 import { FileConfigStorage, FileSystemStorage, FileUserStorage, FileAutomationStorage } from './file';
-import { MongoClient } from 'mongodb';
 import { FileSystemHelper } from './utils';
 import { StorageResult, IndexEntry } from '../storage.types';
 
@@ -15,38 +14,32 @@ export class StorageAdapter implements IStorageAdapter {
   public readonly preferences: FileUserStorage;
   public readonly automation: FileAutomationStorage;
   private pathResolver: StoragePathResolver;
-  private mongoClient?: MongoClient;
 
   constructor(config: StorageConfig) {
-    if (config.type === 'mongodb' && config.mongoUrl) {
-      this.mongoClient = new MongoClient(config.mongoUrl);
-      const db = this.mongoClient.db('test-configs');
-      
-      // Initialize MongoDB collections
-      this.configs = new FileConfigStorage(db.collection('configs'));
-      this.systems = new FileSystemStorage(db.collection('systems'));
-      this.preferences = new FileUserStorage(db.collection('preferences'));
-      this.automation = new FileAutomationStorage(db.collection('automation'));
-    } else {
-      // Initialize File System storage
-      this.pathResolver = new StoragePathResolver(config);
-      this.configs = new FileConfigStorage(this.pathResolver);
-      this.systems = new FileSystemStorage(this.pathResolver);
-      this.preferences = new FileUserStorage(this.pathResolver);
-      this.automation = new FileAutomationStorage(this.pathResolver);
+    // The mongodb branch here was broken by construction: it passed
+    // `db.collection(...)` into FileConfigStorage and friends, which take a
+    // StoragePathResolver. Nothing in this repo implements Mongo-backed
+    // storage, so setting NEXT_PUBLIC_STORAGE_TYPE=mongodb produced objects
+    // whose every method would fail on the first call. Refuse up front
+    // rather than hand back a broken adapter.
+    if (config.type === 'mongodb') {
+      throw new Error(
+        'Mongo-backed storage is not implemented — the storage classes are '
+        + 'file-only. Unset NEXT_PUBLIC_STORAGE_TYPE (or set it to "file").',
+      );
     }
+
+    this.pathResolver = new StoragePathResolver(config);
+    this.configs = new FileConfigStorage(this.pathResolver);
+    this.systems = new FileSystemStorage(this.pathResolver);
+    this.preferences = new FileUserStorage(this.pathResolver);
+    this.automation = new FileAutomationStorage(this.pathResolver);
   }
 
   async initialize(): Promise<void> {
-    if (this.pathResolver) {
-      // Ensure all required directories exist for file system storage
-      await this.ensureStorageDirectories();
-      // Initialize indexes
-      await this.rebuildIndexes();
-    } else if (this.mongoClient) {
-      // Verify MongoDB connection
-      await this.mongoClient.connect();
-    }
+    // Storage is always file-backed (see the constructor).
+    await this.ensureStorageDirectories();
+    await this.rebuildIndexes();
   }
 
   private async ensureStorageDirectories() {
@@ -65,9 +58,6 @@ export class StorageAdapter implements IStorageAdapter {
   }
 
   async cleanup(): Promise<void> {
-    if (this.mongoClient) {
-      await this.mongoClient.close();
-    }
     if (this.pathResolver) {
       await FileSystemHelper.deleteDir(this.pathResolver.getTempPath());
     }

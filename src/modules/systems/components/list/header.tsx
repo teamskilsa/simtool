@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { AddSystem } from '../add-system';
 import { toast } from "@/components/ui/use-toast";
-import type { System } from '../types';
-import type { ProvisionResult } from '../services/provision';
+import type { System } from '../../types';
+import type { ProvisionResult } from '../../services/provision';
 
 interface SystemsHeaderProps {
   count: number;

@@ -75,6 +75,33 @@ export class FileConfigStorage implements IConfigStorage {
   }
 
 
+  /**
+   * Create many configs in one call. Declared on IConfigStorage and called
+   * from storage.service.ts, but never implemented — those call sites threw
+   * "bulkCreate is not a function". Sequential on purpose: create() writes
+   * to the index, and concurrent writers would clobber each other.
+   */
+  async bulkCreate(
+    configs: Array<Omit<StoredConfig, 'id' | 'createdAt' | 'updatedAt'>>,
+  ): Promise<StorageResult<StoredConfig[]>> {
+    const created: StoredConfig[] = [];
+    for (const cfg of configs) {
+      const result = await this.create(cfg);
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          error: {
+            code: 'BULK_CREATE_FAILED',
+            message: `bulkCreate failed on "${cfg.name}"`,
+            details: result.error,
+          },
+        };
+      }
+      created.push(result.data);
+    }
+    return { success: true, data: created };
+  }
+
   async get(id: string): Promise<StorageResult<StoredConfig>> {
     try {
       if (this.collection) {

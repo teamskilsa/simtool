@@ -70,6 +70,14 @@ export interface StoredConfig extends BaseEntity {
   name: string;
   module: ModuleType;
   content: string;
+  /** Destination path on the target system, e.g. /root/enb/config/enb.cfg.
+   *  Written by /api/configs and by the file storage layer; it was missing
+   *  from this type even though both set it. */
+  path?: string;
+  /** Byte length of `content`, recorded at write time. */
+  size?: number;
+  /** True for configs pulled from a system rather than authored here. */
+  isServerConfig?: boolean;
   metadata: ConfigMetadata;
   versions: ConfigVersion[];
   sharing: {
