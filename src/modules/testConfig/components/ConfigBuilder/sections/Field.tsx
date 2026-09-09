@@ -12,9 +12,33 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import React from 'react';
+
+/** Shared label cell for inline mode — fixed width so every control in a
+ *  row starts at the same x regardless of label length. */
+function InlineLabel({ label, required, hint }: { label: string; required?: boolean; hint?: React.ReactNode }) {
+  return (
+    <Label className="text-xs text-muted-foreground w-[104px] shrink-0 leading-tight flex items-center gap-1">
+      <span>
+        {label}
+        {required && <span className="text-destructive ml-0.5">*</span>}
+      </span>
+      {hint}
+    </Label>
+  );
+}
 
 interface FieldProps {
   label: string;
+  /** Label sits to the LEFT of the control instead of above it. This is what
+   *  the Simnovator UI does and it roughly halves the height of a row, which
+   *  is the single biggest density win — stacked labels doubled the vertical
+   *  cost of every field. */
+  inline?: boolean;
+  /** Marks the field required, shown as the same red asterisk Simnovator uses. */
+  required?: boolean;
+  /** Extra content rendered next to the label (e.g. an InfoHint icon). */
+  hint?: React.ReactNode;
   value: any;
   onChange: (value: any) => void;
   type?: 'text' | 'number' | 'select' | 'checkbox';
@@ -41,7 +65,7 @@ function rangeError(value: any, min?: number, max?: number): string | null {
   return null;
 }
 
-export function Field({ label, value, onChange, type = 'text', options, min, max, step, disabled, placeholder }: FieldProps) {
+export function Field({ label, value, onChange, type = 'text', options, min, max, step, disabled, placeholder, inline, required, hint }: FieldProps) {
   if (type === 'checkbox') {
     return (
       <label className="flex items-center gap-2 cursor-pointer">
@@ -52,6 +76,23 @@ export function Field({ label, value, onChange, type = 'text', options, min, max
   }
 
   if (type === 'select' && options) {
+    if (inline) {
+      return (
+        <div className="flex items-center gap-2">
+          <InlineLabel label={label} required={required} hint={hint} />
+          <Select
+            value={String(value)}
+            onValueChange={v => onChange(options.find(o => String(o.value) === v)?.value ?? v)}
+            disabled={disabled}
+          >
+            <SelectTrigger className="h-8 text-sm flex-1 min-w-0"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {options.map(o => <SelectItem key={String(o.value)} value={String(o.value)}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      );
+    }
     return (
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">{label}</Label>
@@ -73,6 +114,26 @@ export function Field({ label, value, onChange, type = 'text', options, min, max
     if (max !== undefined) return `≤ ${max}`;
     return null;
   })();
+
+  if (inline) {
+    return (
+      <div className="flex items-center gap-2">
+        <InlineLabel label={label} required={required} hint={hint} />
+        <div className="flex-1 min-w-0">
+          <Input
+            className={cn('h-8 text-sm', err && 'border-destructive focus-visible:ring-destructive/40')}
+            type={type}
+            value={value ?? ''}
+            onChange={e => onChange(type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value)}
+            min={min} max={max} step={step} disabled={disabled}
+            placeholder={placeholder ?? (showRangeHint && rangeHint ? rangeHint : undefined)}
+            aria-invalid={!!err}
+            title={err ? `${label}: ${err}` : undefined}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-1">

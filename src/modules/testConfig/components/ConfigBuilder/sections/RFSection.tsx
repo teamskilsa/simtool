@@ -48,8 +48,8 @@ export function RFSection({ form, onChange, bare }: Props) {
           </Button>
         }
       >
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Field
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5">
+          <Field inline
             label="RF Mode"
             value={form.rfMode}
             onChange={(v: RfMode) => handleModeChange(v)}
@@ -61,7 +61,7 @@ export function RFSection({ form, onChange, bare }: Props) {
             ]}
           />
           {form.rfMode === 'sdr' && (
-            <Field
+            <Field inline
               label="RX Antenna"
               value={form.rxAntenna}
               onChange={v => onChange('rxAntenna', v)}
@@ -75,7 +75,7 @@ export function RFSection({ form, onChange, bare }: Props) {
         <div className="mt-4">
           {form.rfMode === 'sdr' && (
             <>
-              <Field
+              <Field inline
                 label="Device Path (rf_driver.args)"
                 value={form.rfArgs}
                 onChange={v => onChange('rfArgs', v)}
@@ -91,14 +91,14 @@ export function RFSection({ form, onChange, bare }: Props) {
 
           {form.rfMode === 'ip' && (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <Field
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5">
+                <Field inline
                   label="TX Address"
                   value={parseRfArgs(form.rfArgs).tx_addr || ''}
                   onChange={v => onChange('rfArgs', setRfArg(form.rfArgs, 'tx_addr', v))}
                   placeholder="tcp://127.0.0.1:2000"
                 />
-                <Field
+                <Field inline
                   label="RX Address"
                   value={parseRfArgs(form.rfArgs).rx_addr || ''}
                   onChange={v => onChange('rfArgs', setRfArg(form.rfArgs, 'rx_addr', v))}
@@ -109,8 +109,8 @@ export function RFSection({ form, onChange, bare }: Props) {
                   rf_driver.use_tcp and rf_driver.multi_thread in the
                   emitted cfg. UDP + single-thread (0/0) is the default
                   that worked end-to-end on the user's callbox. */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-                <Field
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5 mt-4">
+                <Field inline
                   label="Transport (rf_driver.use_tcp)"
                   value={parseRfArgs(form.rfArgs).use_tcp ?? '0'}
                   onChange={v => onChange('rfArgs', setRfArg(form.rfArgs, 'use_tcp', v))}
@@ -120,7 +120,7 @@ export function RFSection({ form, onChange, bare }: Props) {
                     { value: '1', label: 'TCP (use_tcp=1) — peer must be listening first' },
                   ]}
                 />
-                <Field
+                <Field inline
                   label="Threading (rf_driver.multi_thread)"
                   value={parseRfArgs(form.rfArgs).multi_thread ?? '0'}
                   onChange={v => onChange('rfArgs', setRfArg(form.rfArgs, 'multi_thread', v))}

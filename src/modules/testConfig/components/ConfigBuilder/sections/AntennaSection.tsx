@@ -86,15 +86,15 @@ export function AntennaSection({ form, onChange, bare }: Props) {
         </Button>
       }
     >
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Field
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5">
+        <Field inline
           label="Downlink Antennas"
           value={form.nAntennaDl}
           onChange={v => handleAntennaCountChange('nAntennaDl', v)}
           type="select"
           options={[{ value: 1, label: '1 (SISO)' }, { value: 2, label: '2 (2x2 MIMO)' }, { value: 4, label: '4 (4x4 MIMO)' }, { value: 8, label: '8 (8x8 MIMO)' }]}
         />
-        <Field
+        <Field inline
           label="Uplink Antennas"
           value={form.nAntennaUl}
           onChange={v => handleAntennaCountChange('nAntennaUl', v)}
@@ -105,7 +105,7 @@ export function AntennaSection({ form, onChange, bare }: Props) {
 
       {/* Per-antenna toggle */}
       <div className="mt-4 flex items-center gap-3 px-1">
-        <Field
+        <Field inline
           label="Per-antenna gain"
           value={isPerAntenna}
           onChange={v => togglePerAntenna(!!v)}
@@ -120,9 +120,9 @@ export function AntennaSection({ form, onChange, bare }: Props) {
 
       {/* Single-value form */}
       {!isPerAntenna && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-          <Field label="TX Gain (dB)" value={form.txGain as number} onChange={v => onChange('txGain', v)} type="number" min={0} max={120} />
-          <Field label="RX Gain (dB)" value={form.rxGain as number} onChange={v => onChange('rxGain', v)} type="number" min={0} max={80} />
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5 mt-3">
+          <Field inline label="TX Gain (dB)" value={form.txGain as number} onChange={v => onChange('txGain', v)} type="number" min={0} max={120} />
+          <Field inline label="RX Gain (dB)" value={form.rxGain as number} onChange={v => onChange('rxGain', v)} type="number" min={0} max={80} />
         </div>
       )}
 
@@ -133,7 +133,7 @@ export function AntennaSection({ form, onChange, bare }: Props) {
             <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">TX Gain (dB) — per DL antenna</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {Array.from({ length: form.nAntennaDl }).map((_, i) => (
-                <Field
+                <Field inline
                   key={`tx-${i}`}
                   label={`Ant ${i}`}
                   value={(form.txGain as number[])[i] ?? 90}
@@ -147,7 +147,7 @@ export function AntennaSection({ form, onChange, bare }: Props) {
             <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">RX Gain (dB) — per UL antenna</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {Array.from({ length: form.nAntennaUl }).map((_, i) => (
-                <Field
+                <Field inline
                   key={`rx-${i}`}
                   label={`Ant ${i}`}
                   value={(form.rxGain as number[])[i] ?? 60}
