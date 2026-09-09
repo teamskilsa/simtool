@@ -86,7 +86,7 @@ export function AntennaSection({ form, onChange, bare }: Props) {
         </Button>
       }
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Field
           label="Downlink Antennas"
           value={form.nAntennaDl}
@@ -120,7 +120,7 @@ export function AntennaSection({ form, onChange, bare }: Props) {
 
       {/* Single-value form */}
       {!isPerAntenna && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
           <Field label="TX Gain (dB)" value={form.txGain as number} onChange={v => onChange('txGain', v)} type="number" min={0} max={120} />
           <Field label="RX Gain (dB)" value={form.rxGain as number} onChange={v => onChange('rxGain', v)} type="number" min={0} max={80} />
         </div>

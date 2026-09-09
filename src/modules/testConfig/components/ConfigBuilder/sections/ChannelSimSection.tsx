@@ -11,7 +11,7 @@ export function ChannelSimSection({ form, onChange }: Props) {
       {form.channelSim && (
         <>
           <h4 className="text-xs font-semibold uppercase text-muted-foreground">Channel Model</h4>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Field label="Channel Type" value={form.channelType} onChange={v => onChange('channelType', v)} type="select"
               options={[
                 { value: 'AWGN', label: 'AWGN' },

@@ -12,8 +12,9 @@ import {
   Zap, Gauge, Network, MessageSquare, Radio, Signal, Database, Info,
 } from 'lucide-react';
 import {
-  CellSection, BandSection, RFSection, ChannelSimSection, LogSection,
+  RFSection, ChannelSimSection, LogSection,
 } from './sections';
+import { CellEssentials } from './sections/CellEssentials';
 import { AntennaSection } from './sections/AntennaSection';
 import { MmeInfoSection } from './sections/MmeInfoSection';
 import { DependenciesSection } from './sections/DependenciesSection';
@@ -107,10 +108,7 @@ export function ConfigBuilder({ form, onChange, dependencies = [], availableFile
             </div>
 
             {active === 'essentials' && (
-              <div className="space-y-3">
-                <CellSection form={form} onChange={onChange} />
-                <BandSection form={form} onChange={onChange} />
-              </div>
+              <CellEssentials form={form} onChange={onChange} />
             )}
             {active === 'tdd' && <TddPatternFields form={form} onChange={onChange} />}
             {active === 'antenna' && <AntennaSection form={form} onChange={onChange} />}
