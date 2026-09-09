@@ -20,6 +20,7 @@ import {
 import { Field } from './Field';
 import { SectionToolbar } from './SectionToolbar';
 import { InfoHint } from '../InfoHint';
+import { BoxedSection, FIELD_GRID } from '../BoxedSection';
 import { NR_BANDS, getBandSpec, BANDWIDTH_OPTIONS, SCS_OPTIONS } from '../constants';
 import type { NRFormState } from '../constants';
 
@@ -30,7 +31,7 @@ interface Props { form: NRFormState; onChange: (key: string, value: any) => void
 function Derived({ label, value, from }: { label: string; value: string; from: string }) {
   return (
     <div className="flex items-center gap-2">
-      <Label className="text-xs text-muted-foreground w-[104px] shrink-0 leading-tight flex items-center gap-1">
+      <Label className="text-xs text-muted-foreground w-[116px] shrink-0 leading-tight flex items-center gap-1">
         {label}
         <InfoHint>Set by {from}. Change the band to change it.</InfoHint>
       </Label>
@@ -79,20 +80,12 @@ export function CellEssentials({ form, onChange }: Props) {
   };
 
   return (
-    <div className="space-y-3">
-      {/* Toolbar rides the group heading rather than taking its own strip */}
-      <div className="flex items-center justify-between gap-3 border-b border-border pb-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-          Cell
-          <InfoHint>
-            Duplex mode and frequency range follow the band — n78 is FR1 TDD.
-            Bandwidth and subcarrier spacing are limited to what the band allows.
-          </InfoHint>
-        </h3>
-        <SectionToolbar type="cell" currentData={currentCell} onLoad={handleLoad} />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5">
+    <BoxedSection
+      title="Cell"
+      hint="Duplex mode and frequency range follow the band — n78 is FR1 TDD. Bandwidth and subcarrier spacing are limited to what the band allows."
+      action={<SectionToolbar type="cell" currentData={currentCell} onLoad={handleLoad} />}
+    >
+      <div className={FIELD_GRID}>
         <Field
           label="Cell ID" required inline
           value={form.cellId} onChange={v => onChange('cellId', v)}
@@ -100,7 +93,7 @@ export function CellEssentials({ form, onChange }: Props) {
         />
 
         <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground w-[104px] shrink-0 leading-tight">
+          <Label className="text-xs text-muted-foreground w-[116px] shrink-0 leading-tight">
             Band<span className="text-destructive ml-0.5">*</span>
           </Label>
           <Select value={String(form.band)} onValueChange={v => handleBandChange(Number(v))}>
@@ -153,7 +146,7 @@ export function CellEssentials({ form, onChange }: Props) {
         />
 
         <div className="flex items-center gap-2">
-          <Label className="text-xs text-muted-foreground w-[104px] shrink-0 leading-tight flex items-center gap-1">
+          <Label className="text-xs text-muted-foreground w-[116px] shrink-0 leading-tight flex items-center gap-1">
             SSB ARFCN
             <InfoHint>
               Off → omitted, and Amarisoft derives the SSB position from band +
@@ -181,6 +174,6 @@ export function CellEssentials({ form, onChange }: Props) {
           </div>
         </div>
       </div>
-    </div>
+    </BoxedSection>
   );
 }

@@ -1,6 +1,14 @@
-// Themed form-group wrapper (TestMatrix-style). Header + padded content on a
-// theme-aware card. Colors come from the design tokens so the box follows the
-// active theme color and dark mode.
+// Form-group wrapper.
+//
+// This used to render a bordered, shadowed card with a filled header strip.
+// With ~50 of them, nested inside sub-tabs inside tabs, the builder was three
+// levels of chrome deep before you reached a field — the "too many subboxes"
+// problem. A group needs to be *legible*, not *contained*: a small uppercase
+// heading over a hairline rule separates one group from the next just as well
+// as a box, at a fraction of the vertical cost and with no nesting illusion.
+//
+// `boxed` brings the old card back for the rare case that genuinely holds a
+// list rather than a field grid (see DependenciesSection).
 import { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { InfoHint } from './InfoHint';
@@ -13,40 +21,77 @@ interface BoxedSectionProps {
   icon?: ReactNode;
   action?: ReactNode;       // right-side control (e.g. "Add" button)
   noPadding?: boolean;
-  /** Render children only — no box, header or padding. Used when the section
-   *  is nested inside an AdvancedSection, which already supplies all three. */
+  /** Render children only — no heading at all. Used when the parent already
+   *  supplies one (e.g. a section nested in an AdvancedSection). */
   bare?: boolean;
+  /** Opt back in to the bordered-card treatment. */
+  boxed?: boolean;
   className?: string;
   children: ReactNode;
 }
 
-export function BoxedSection({ title, subtitle, icon, action, hint, noPadding, bare, className, children }: BoxedSectionProps) {
-  if (bare) return <>{children}</>;
+/** The one heading style in the builder: small, uppercase, muted, on a rule.
+ *  Any group anywhere — Cell, Layers, MME, LTE — looks like this. */
+export function GroupHeading({
+  title, subtitle, hint, icon, action,
+}: Pick<BoxedSectionProps, 'title' | 'subtitle' | 'hint' | 'icon' | 'action'>) {
   return (
-    <section
-      className={cn(
-        'rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden transition-colors',
-        className,
-      )}
-    >
-      {(title || action) && (
-        <header className="flex items-center justify-between px-3 py-2 border-b border-border/60 bg-muted/40">
-          <div className="flex items-center gap-2 min-w-0">
-            {icon && <div className="text-primary shrink-0">{icon}</div>}
-            <div className="min-w-0">
-              {title && (
-                <h3 className="text-sm font-semibold text-foreground truncate flex items-center gap-1.5">
-                  {title}
-                  {hint && <InfoHint>{hint}</InfoHint>}
-                </h3>
-              )}
-              {subtitle && <p className="text-xs text-muted-foreground truncate">{subtitle}</p>}
+    <div className="flex items-center justify-between gap-3 border-b border-border pb-2">
+      <div className="flex items-center gap-1.5 min-w-0">
+        {icon && <span className="text-muted-foreground shrink-0">{icon}</span>}
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground truncate">
+          {title}
+        </h3>
+        {hint && <InfoHint>{hint}</InfoHint>}
+        {/* Subtitles were a second line under every card title, which is a lot
+            of prose for "RACH timers and windows". Behind the same info icon. */}
+        {!hint && subtitle && <InfoHint>{subtitle}</InfoHint>}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  );
+}
+
+export function BoxedSection({
+  title, subtitle, icon, action, hint, noPadding, bare, boxed, className, children,
+}: BoxedSectionProps) {
+  if (bare) return <>{children}</>;
+
+  if (boxed) {
+    return (
+      <section className={cn('rounded-lg border border-border bg-card overflow-hidden', className)}>
+        {(title || action) && (
+          <header className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/40">
+            <div className="flex items-center gap-1.5 min-w-0">
+              {icon && <span className="text-muted-foreground shrink-0">{icon}</span>}
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground truncate">
+                {title}
+              </h3>
+              {hint && <InfoHint>{hint}</InfoHint>}
             </div>
-          </div>
-          {action && <div className="shrink-0">{action}</div>}
-        </header>
+            {action && <div className="shrink-0">{action}</div>}
+          </header>
+        )}
+        <div className={noPadding ? '' : 'p-3'}>{children}</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className={cn('space-y-2.5', className)}>
+      {(title || action) && (
+        <GroupHeading
+          title={title} subtitle={subtitle} hint={hint} icon={icon} action={action}
+        />
       )}
-      <div className={noPadding ? '' : 'p-3'}>{children}</div>
+      {children}
     </section>
   );
 }
+
+
+/** The one field grid in the builder. Four columns of inline label+control on
+ *  a wide screen, two on a laptop, one on a phone. Every group uses it, so a
+ *  field lands in the same place whichever tab you are on. */
+export const FIELD_GRID =
+  'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5';

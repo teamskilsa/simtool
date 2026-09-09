@@ -179,7 +179,7 @@ export const DashboardSidebar = ({
           <Shield className="w-5 h-5 text-white" />
         </div>
         {isSidebarOpen && (
-          <span className="text-lg font-semibold text-white truncate">SimTool</span>
+          <span className="text-base font-semibold text-white truncate">SimTool</span>
         )}
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -224,7 +224,7 @@ export const DashboardSidebar = ({
                   }
                 }}
                 className={`
-                  flex items-center w-full px-3 py-2 rounded-xl
+                  flex items-center gap-3 w-full px-3 py-2 rounded-xl
                   transition-all group relative
                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40
                   ${isSectionActive(item.id) ? 'bg-white/20' : 'hover:bg-white/10'}
@@ -237,7 +237,7 @@ export const DashboardSidebar = ({
                   `}
                 >
                   <item.icon
-                    className={`w-4 h-4 text-white ${isSectionActive(item.id) ? 'opacity-100' : 'opacity-70'}`}
+                    className={`w-4 h-4 ${isSectionActive(item.id) ? 'text-white' : 'text-white/70'}`}
                   />
                 </div>
 
@@ -245,8 +245,8 @@ export const DashboardSidebar = ({
                   <>
                     <span
                       className={`
-                        ml-3 text-sm font-medium text-white truncate
-                        ${isSectionActive(item.id) ? 'opacity-100' : 'opacity-70'}
+                        text-sm font-medium truncate
+                        ${isSectionActive(item.id) ? 'text-white' : 'text-white/70'}
                       `}
                     >
                       {item.label}
@@ -282,7 +282,7 @@ export const DashboardSidebar = ({
                       key={sub.id}
                       onClick={() => setActiveSection(sub.id)}
                       className={`
-                        flex items-center w-full px-3 py-2 text-sm rounded-lg transition-colors
+                        flex items-center gap-3 w-full px-3 py-2 text-sm font-medium rounded-lg transition-colors
                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40
                         ${isSubItemActive(sub.id)
                           ? 'bg-white/20 text-white'
@@ -290,7 +290,7 @@ export const DashboardSidebar = ({
                       `}
                     >
                       <sub.icon
-                        className={`w-4 h-4 mr-3 ${isSubItemActive(sub.id) ? 'text-white' : 'text-white/70'}`}
+                        className={`w-4 h-4 ${isSubItemActive(sub.id) ? 'text-white' : 'text-white/70'}`}
                       />
                       {sub.label}
                     </button>

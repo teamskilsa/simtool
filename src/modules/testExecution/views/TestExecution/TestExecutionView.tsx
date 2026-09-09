@@ -113,7 +113,7 @@ export function TestExecutionView() {
           onValueChange={(v) => setActiveTab(v as 'quick' | 'scenarios')}
           className="w-full"
         >
-          <TabsList className="bg-muted/50">
+          <TabsList>
             <TabsTrigger value="quick">Quick Run</TabsTrigger>
             <TabsTrigger value="scenarios">Scenarios</TabsTrigger>
           </TabsList>

@@ -7,7 +7,7 @@
 // adjust from there.
 'use client';
 
-import { Sparkles } from 'lucide-react';
+
 import { InfoHint } from './InfoHint';
 import { getBandSpec } from './constants';
 import type { NRFormState } from './constants';
@@ -80,10 +80,9 @@ export function CellPresets({ form, onChange }: Props) {
   )?.id;
 
   return (
-    <div className="flex items-center flex-wrap gap-2 rounded-xl border border-border/70 bg-muted/30 px-3 py-2">
+    <div className="flex items-center flex-wrap gap-2">
       <div className="flex items-center gap-1.5 shrink-0">
-        <Sparkles className="w-3.5 h-3.5 text-primary" />
-        <span className="text-xs font-semibold text-foreground uppercase tracking-wide">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
           Presets
         </span>
         <InfoHint>

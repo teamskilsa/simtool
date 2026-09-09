@@ -1,6 +1,7 @@
 // Core Config Builder — TestMatrix-style: main tabs with underline style.
 //   General  |  PDN List  |  UE Database  |  Logging
 import { useState } from 'react';
+import { TAB_LIST, TAB_TRIGGER, TAB_TRIGGER_ACTIVE, TAB_TRIGGER_IDLE, TAB_ICON } from '@/components/ui/tab-styles';
 import { Shield, Globe, Smartphone, FileText } from 'lucide-react';
 import { PDNSection } from './sections/PDNSection';
 import { UeDbSection } from './sections/UeDbSection';
@@ -71,8 +72,8 @@ export function CoreConfigBuilder({ form, onChange }: CoreConfigBuilderProps) {
   return (
     <div className="space-y-4">
       {/* Main tabs — underline style */}
-      <div className="border-b border-border">
-        <nav className="flex flex-wrap -mb-px gap-1">
+      <div>
+        <nav className={TAB_LIST}>
           {TABS.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -80,13 +81,9 @@ export function CoreConfigBuilder({ form, onChange }: CoreConfigBuilderProps) {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-                  isActive
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                }`}
+                className={`${TAB_TRIGGER} ${isActive ? TAB_TRIGGER_ACTIVE : TAB_TRIGGER_IDLE}`}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className={TAB_ICON} />
                 {tab.label}
               </button>
             );

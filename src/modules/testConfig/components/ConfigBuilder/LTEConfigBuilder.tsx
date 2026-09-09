@@ -4,9 +4,11 @@
 //   BoxedSections grouped vertically — no sub-tabs.
 //   Layers tab: Frequently Used / MAC / Power / Security
 import { useState } from 'react';
+import { TAB_LIST, TAB_TRIGGER, TAB_TRIGGER_ACTIVE, TAB_TRIGGER_IDLE, TAB_ICON } from '@/components/ui/tab-styles';
+
 import {
   RadioTower, FileText, Layers, Server, Database,
-  Zap, Gauge, Antenna, Lock, Info,
+  Antenna, Info,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Field } from './sections/Field';
@@ -262,20 +264,11 @@ const MAIN_TABS = [
   { id: 'deps',   label: 'Dependencies', icon: Database },
 ] as const;
 
-// Sub-tabs inside "Layers"
-const LAYER_SUB_TABS = [
-  { id: 'freq',     label: 'Frequently Used', icon: Zap },
-  { id: 'mac',      label: 'MAC',             icon: Gauge },
-  { id: 'power',    label: 'Power Control',   icon: Antenna },
-  { id: 'security', label: 'Security',        icon: Lock },
-] as const;
-
 export function LTEConfigBuilder({
   form, onChange, ratMode,
   dependencies = [], availableFiles = [],
 }: LTEConfigBuilderProps) {
   const [mainTab, setMainTab] = useState<string>('cell');
-  const [layerSubTab, setLayerSubTab] = useState<string>('freq');
 
   const renderMainContent = () => {
     switch (mainTab) {
@@ -284,7 +277,7 @@ export function LTEConfigBuilder({
         // RF Driver (mode-conditional), optional IoT specifics (NB-IoT / CAT-M).
         // Multi-cell strip only meaningful for plain LTE (CA), hidden for IoT.
         return (
-          <div className="space-y-4">
+          <div className="space-y-6">
             {ratMode === 'lte' && <LTECellTabs form={form} onChange={onChange} />}
             <CellSection form={form} onChange={onChange} />
             <BandSection form={form} onChange={onChange} ratMode={ratMode} />
@@ -298,44 +291,23 @@ export function LTEConfigBuilder({
 
       case 'layers':
         return (
-          <div className="space-y-4">
-            <div className="flex items-start gap-2 p-3 rounded-md border border-blue-200 bg-blue-50/40 text-xs text-blue-900">
-              <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-blue-600" />
+          <div className="space-y-6">
+            <div className="flex items-start gap-2 p-2.5 rounded-md border border-border bg-muted/40 text-xs text-muted-foreground">
+              <Info className={`${TAB_ICON} shrink-0 mt-px text-muted-foreground/70`} />
               <div>
-                <span className="font-medium">Shared via cell_default.</span> Layer
-                fields (HARQ, scheduler, SIBs, security algos, ...) are emitted under
-                <code className="font-mono">cell_default</code> so every cell in this
-                eNB inherits them. Amarisoft also allows per-cell overrides inside
+                <span className="font-medium text-foreground">Shared via cell_default.</span>{' '}
+                Everything on this page is emitted under{' '}
+                <code className="font-mono">cell_default</code>, so every cell in this eNB
+                inherits it. Amarisoft also allows per-cell overrides inside{' '}
                 <code className="font-mono">cell_list[i]</code> — that's a future
                 enhancement; today these are config-wide.
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {LAYER_SUB_TABS.map(tab => {
-                const Icon = tab.icon;
-                const isActive = layerSubTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setLayerSubTab(tab.id)}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-            <div>
-              {layerSubTab === 'freq'     && <FrequentlyUsedLte form={form} onChange={onChange} />}
-              {layerSubTab === 'mac'      && <MacLte form={form} onChange={onChange} />}
-              {layerSubTab === 'power'    && <PowerLte form={form} onChange={onChange} />}
-              {layerSubTab === 'security' && <SecurityLte form={form} onChange={onChange} />}
-            </div>
+
+            <FrequentlyUsedLte form={form} onChange={onChange} />
+            <MacLte form={form} onChange={onChange} />
+            <PowerLte form={form} onChange={onChange} />
+            <SecurityLte form={form} onChange={onChange} />
           </div>
         );
 
@@ -355,29 +327,22 @@ export function LTEConfigBuilder({
 
   return (
     <div className="space-y-4">
-      {/* Main tab bar — TestMatrix-style underline (matches NR builder) */}
-      <div className="border-b border-border">
-        <nav className="flex flex-wrap -mb-px gap-1">
-          {MAIN_TABS.map(tab => {
-            const Icon = tab.icon;
-            const isActive = mainTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setMainTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-                  isActive
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+      <nav className={TAB_LIST}>
+        {MAIN_TABS.map(tab => {
+          const Icon = tab.icon;
+          const isActive = mainTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setMainTab(tab.id)}
+              className={`${TAB_TRIGGER} ${isActive ? TAB_TRIGGER_ACTIVE : TAB_TRIGGER_IDLE}`}
+            >
+              <Icon className={TAB_ICON} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </nav>
 
       <div>{renderMainContent()}</div>
     </div>

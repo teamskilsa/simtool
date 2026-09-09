@@ -100,17 +100,17 @@ export function SWManagementView() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-fit grid-cols-4">
-          <TabsTrigger value="install" className="flex items-center gap-2 px-6">
+        <TabsList>
+          <TabsTrigger value="install">
             <Download className="h-4 w-4" /> Install
           </TabsTrigger>
-          <TabsTrigger value="license" className="flex items-center gap-2 px-6">
+          <TabsTrigger value="license">
             <Key className="h-4 w-4" /> Licenses
           </TabsTrigger>
-          <TabsTrigger value="poll-license" className="flex items-center gap-2 px-6">
+          <TabsTrigger value="poll-license">
             <Server className="h-4 w-4" /> Poll License Server
           </TabsTrigger>
-          <TabsTrigger value="services" className="flex items-center gap-2 px-6">
+          <TabsTrigger value="services">
             <Activity className="h-4 w-4" /> Services
           </TabsTrigger>
         </TabsList>

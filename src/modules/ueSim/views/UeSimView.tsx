@@ -263,7 +263,7 @@ export function UeSimView() {
       />
 
       <Tabs value={activeTab} onValueChange={v => setActiveTab(v as TabKey)}>
-        <TabsList className="grid grid-cols-6 w-full">
+        <TabsList>
           <TabsTrigger value="cell">Cell</TabsTrigger>
           <TabsTrigger value="subscriber">Subscriber</TabsTrigger>
           <TabsTrigger value="traffic">Traffic</TabsTrigger>

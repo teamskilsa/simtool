@@ -99,8 +99,12 @@ export function CellTabs({ form, onChange }: CellTabsProps) {
   };
 
   return (
-    <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-xl border border-border/70 overflow-x-auto">
-      <span className="text-xs font-semibold uppercase text-primary px-2 shrink-0">Cells:</span>
+    // A row, not a card. Every other group on the page is a heading over a
+    // rule; a bordered pill-tray here read as a different kind of thing.
+    <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground shrink-0">
+        Cells
+      </span>
       <TooltipProvider>
         {cells.map((cell, idx) => {
           const isActive = idx === activeIdx;

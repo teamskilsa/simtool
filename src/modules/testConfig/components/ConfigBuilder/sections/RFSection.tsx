@@ -8,6 +8,7 @@
 // rfArgs is the source-of-truth in form state; for Split mode the structured
 // fields read/write specific keys via parseRfArgs/setRfArg helpers.
 import { Field } from './Field';
+import { InfoHint } from '../InfoHint';
 import { Button } from '@/components/ui/button';
 import { RotateCcw } from 'lucide-react';
 import { SectionToolbar } from './SectionToolbar';
@@ -35,17 +36,18 @@ export function RFSection({ form, onChange, bare }: Props) {
 
   return (
     <div className="space-y-4">
-      <SectionToolbar type="rf" currentData={currentRf} onLoad={handleLoad} />
-
       <BoxedSection
         bare={bare}
         title="RF Driver"
         hint="Radio frontend selection. The fields below change with the chosen mode."
         action={
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={resetArgs} title="Reset to defaults for current mode">
-            <RotateCcw className="w-3 h-3" />
-            Reset
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={resetArgs} title="Reset to defaults for current mode">
+              <RotateCcw className="w-3 h-3" />
+              Reset
+            </Button>
+            <SectionToolbar type="rf" currentData={currentRf} onLoad={handleLoad} />
+          </div>
         }
       >
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5">
@@ -74,15 +76,13 @@ export function RFSection({ form, onChange, bare }: Props) {
         {/* Mode-specific body */}
         <div className="mt-4">
           {form.rfMode === 'sdr' && (
-            <>
-              <Field inline
-                label="Device Path (rf_driver.args)"
-                value={form.rfArgs}
-                onChange={v => onChange('rfArgs', v)}
-                placeholder={defaultRfArgs('sdr', form.nAntennaDl)}
-              />
-              <p className="text-[11px] text-muted-foreground mt-1.5">{rfArgsHint('sdr')}</p>
-            </>
+            <Field inline
+              label="Device Path"
+              hint={<InfoHint>Emitted as <code className="font-mono">rf_driver.args</code>. {rfArgsHint('sdr')}</InfoHint>}
+              value={form.rfArgs}
+              onChange={v => onChange('rfArgs', v)}
+              placeholder={defaultRfArgs('sdr', form.nAntennaDl)}
+            />
           )}
 
           {form.rfMode === 'split' && (

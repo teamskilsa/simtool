@@ -1,19 +1,17 @@
-// Visual gNB/eNB config builder — TestMatrix-style layout:
-//   Main tabs:  Cell  |  Layers  |  MME Info  |  Log Setting  |  Dependencies
+// Visual gNB config builder.
 //
-// "Cell" is now a single merged tab with all per-cell config grouped in
-// BoxedSections (no sub-tabs). Conditional sections (TDD pattern, FR-specific
-// band options) appear when relevant. Multi-cell strip lives at the top.
+// ONE level of tabs. There used to be three: main tabs, then sub-tabs inside
+// "Cell" (5) and "Layers" (7), then a bordered card around each group inside
+// those. Finding a field meant remembering which of ~14 panes it was hiding
+// in, and nothing on screen told you where you were.
 //
-// SSB Configuration moved to Layers/SSB so the Cell tab stays focused.
+// Now every tab is a flat, scrollable page of groups. A group is a heading on
+// a rule (see BoxedSection) over one FIELD_GRID, so the whole builder is two
+// levels deep: pick a tab, scan for a heading. Nothing is more than one click
+// and one scroll away, and Ctrl-F finds any field on the page.
 import { useState } from 'react';
-import {
-  RadioTower, Layers, Server, FileText,
-  Zap, Gauge, Network, MessageSquare, Radio, Signal, Database, Info,
-} from 'lucide-react';
-import {
-  RFSection, ChannelSimSection, LogSection,
-} from './sections';
+import { RadioTower, Layers, Server, FileText, Database, Info } from 'lucide-react';
+import { RFSection, ChannelSimSection, LogSection } from './sections';
 import { CellEssentials } from './sections/CellEssentials';
 import { AntennaSection } from './sections/AntennaSection';
 import { MmeInfoSection } from './sections/MmeInfoSection';
@@ -24,38 +22,16 @@ import {
 import { CellTabs } from './CellTabs';
 import { CellPresets } from './CellPresets';
 import { TddPatternFields } from './sections/TddPatternFields';
+import { TAB_LIST, TAB_TRIGGER, TAB_TRIGGER_ACTIVE, TAB_TRIGGER_IDLE, TAB_ICON } from '@/components/ui/tab-styles';
 import { DEFAULT_NR_FORM, type NRFormState } from './constants';
 import type { ReferencedFile } from './cfgParser';
 
-// Main tabs — top level
 const MAIN_TABS = [
   { id: 'cell',   label: 'Cell',         icon: RadioTower },
   { id: 'layers', label: 'Layers',       icon: Layers },
   { id: 'mme',    label: 'MME Info',     icon: Server },
   { id: 'log',    label: 'Log Setting',  icon: FileText },
   { id: 'deps',   label: 'Dependencies', icon: Database },
-] as const;
-
-// Sub-tabs inside "Cell". The tab previously stacked every group on one
-// scrolling page; grouping them the same way Layers already does keeps the
-// pane a fixed height and puts each group one click away.
-const CELL_SUB_TABS = [
-  { id: 'essentials', label: 'Essentials', icon: RadioTower },
-  { id: 'tdd',        label: 'TDD',        icon: Gauge },
-  { id: 'antenna',    label: 'Antennas',   icon: Radio },
-  { id: 'rf',         label: 'RF Driver',  icon: Signal },
-  { id: 'channel',    label: 'Channel',    icon: Network },
-] as const;
-
-// Sub-tabs inside "Layers" (added SSB)
-const LAYER_SUB_TABS = [
-  { id: 'freq',    label: 'Frequently Used', icon: Zap },
-  { id: 'ssb',     label: 'SSB',             icon: Radio },
-  { id: 'rrcnas',  label: 'RRC & NAS',       icon: MessageSquare },
-  { id: 'rlcpdcp', label: 'RLC & PDCP',      icon: Network },
-  { id: 'mac',     label: 'MAC',             icon: Gauge },
-  { id: 'phy',     label: 'PHY',             icon: Radio },
-  { id: 'sibs',    label: 'SIBs',            icon: Signal },
 ] as const;
 
 interface ConfigBuilderProps {
@@ -69,102 +45,46 @@ interface ConfigBuilderProps {
 
 export function ConfigBuilder({ form, onChange, dependencies = [], availableFiles = [] }: ConfigBuilderProps) {
   const [mainTab, setMainTab] = useState<string>('cell');
-  const [layerSubTab, setLayerSubTab] = useState<string>('freq');
-  const [cellSubTab, setCellSubTab] = useState<string>('essentials');
 
   const renderMainContent = () => {
     switch (mainTab) {
-      case 'cell': {
-        // TDD only applies to TDD bands, so hide the tab entirely on FDD
-        // rather than showing an empty pane.
-        const tabs = CELL_SUB_TABS.filter(t => t.id !== 'tdd' || form.nrTdd === 1);
-        const active = tabs.some(t => t.id === cellSubTab) ? cellSubTab : 'essentials';
-
+      case 'cell':
         return (
-          <div className="space-y-3">
+          <div className="space-y-6">
             <CellTabs form={form} onChange={onChange} />
             <CellPresets form={form} onChange={onChange} />
-
-            {/* Sub-navigation — same treatment as the Layers tab */}
-            <div className="flex flex-wrap items-center gap-1.5 border-b border-border pb-2">
-              {tabs.map(tab => {
-                const Icon = tab.icon;
-                const isActive = active === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setCellSubTab(tab.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                      isActive
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60'
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {active === 'essentials' && (
-              <CellEssentials form={form} onChange={onChange} />
-            )}
-            {active === 'tdd' && <TddPatternFields form={form} onChange={onChange} />}
-            {active === 'antenna' && <AntennaSection form={form} onChange={onChange} />}
-            {active === 'rf' && <RFSection form={form} onChange={onChange} />}
-            {active === 'channel' && <ChannelSimSection form={form} onChange={onChange} />}
+            <CellEssentials form={form} onChange={onChange} />
+            {/* TDD only applies to TDD bands — omitted entirely on FDD rather
+                than shown as an inert pane. */}
+            {form.nrTdd === 1 && <TddPatternFields form={form} onChange={onChange} />}
+            <AntennaSection form={form} onChange={onChange} />
+            <RFSection form={form} onChange={onChange} />
+            <ChannelSimSection form={form} onChange={onChange} />
           </div>
         );
-      }
 
       case 'layers':
         return (
-          <div className="space-y-4">
-            <div className="flex items-start gap-2 p-3 rounded-lg border border-blue-500/30 bg-blue-500/10 text-xs text-blue-900 dark:text-blue-200">
-              <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-blue-500" />
+          <div className="space-y-6">
+            <div className="flex items-start gap-2 p-2.5 rounded-md border border-border bg-muted/40 text-xs text-muted-foreground">
+              <Info className={`${TAB_ICON} shrink-0 mt-px text-muted-foreground/70`} />
               <div>
-                <span className="font-medium">Shared via nr_cell_default.</span> Layer
-                fields (HARQ, scheduler, SIBs, RLC/PDCP timers, security algos, ...) are
-                emitted under <code className="font-mono">nr_cell_default</code> so every
-                cell in the gNB inherits them. Amarisoft also allows per-cell overrides
-                inside <code className="font-mono">nr_cell_list[i]</code> — that's a future
+                <span className="font-medium text-foreground">Shared via nr_cell_default.</span>{' '}
+                Everything on this page is emitted under{' '}
+                <code className="font-mono">nr_cell_default</code>, so every cell in the
+                gNB inherits it. Amarisoft also allows per-cell overrides inside{' '}
+                <code className="font-mono">nr_cell_list[i]</code> — that's a future
                 enhancement; today these are config-wide.
               </div>
             </div>
 
-            {/* Sub-navigation */}
-            <div className="flex flex-wrap items-center gap-2">
-              {LAYER_SUB_TABS.map(tab => {
-                const Icon = tab.icon;
-                const isActive = layerSubTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setLayerSubTab(tab.id)}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Layer content */}
-            <div>
-              {layerSubTab === 'freq'    && <FrequentlyUsedLayer form={form} onChange={onChange} />}
-              {layerSubTab === 'ssb'     && <SSBLayer form={form} onChange={onChange} />}
-              {layerSubTab === 'rrcnas'  && <RrcNasLayer form={form} onChange={onChange} />}
-              {layerSubTab === 'rlcpdcp' && <RlcPdcpLayer form={form} onChange={onChange} />}
-              {layerSubTab === 'mac'     && <MacLayer form={form} onChange={onChange} />}
-              {layerSubTab === 'phy'     && <PhyLayer form={form} onChange={onChange} />}
-              {layerSubTab === 'sibs'    && <SibsLayer form={form} onChange={onChange} />}
-            </div>
+            <FrequentlyUsedLayer form={form} onChange={onChange} />
+            <SSBLayer form={form} onChange={onChange} />
+            <RrcNasLayer form={form} onChange={onChange} />
+            <RlcPdcpLayer form={form} onChange={onChange} />
+            <MacLayer form={form} onChange={onChange} />
+            <PhyLayer form={form} onChange={onChange} />
+            <SibsLayer form={form} onChange={onChange} />
           </div>
         );
 
@@ -184,31 +104,23 @@ export function ConfigBuilder({ form, onChange, dependencies = [], availableFile
 
   return (
     <div className="space-y-4">
-      {/* Main tab bar — TestMatrix-style underline style */}
-      <div className="border-b border-border">
-        <nav className="flex flex-wrap -mb-px gap-1">
-          {MAIN_TABS.map(tab => {
-            const Icon = tab.icon;
-            const isActive = mainTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setMainTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-                  isActive
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+      <nav className={TAB_LIST}>
+        {MAIN_TABS.map(tab => {
+          const Icon = tab.icon;
+          const isActive = mainTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setMainTab(tab.id)}
+              className={`${TAB_TRIGGER} ${isActive ? TAB_TRIGGER_ACTIVE : TAB_TRIGGER_IDLE}`}
+            >
+              <Icon className={TAB_ICON} />
+              {tab.label}
+            </button>
+          );
+        })}
+      </nav>
 
-      {/* Active main content */}
       <div>{renderMainContent()}</div>
     </div>
   );

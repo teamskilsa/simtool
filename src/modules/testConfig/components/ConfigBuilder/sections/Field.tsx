@@ -18,7 +18,7 @@ import React from 'react';
  *  row starts at the same x regardless of label length. */
 function InlineLabel({ label, required, hint }: { label: string; required?: boolean; hint?: React.ReactNode }) {
   return (
-    <Label className="text-xs text-muted-foreground w-[104px] shrink-0 leading-tight flex items-center gap-1">
+    <Label className="text-xs text-muted-foreground w-[116px] shrink-0 leading-tight flex items-center gap-1">
       <span>
         {label}
         {required && <span className="text-destructive ml-0.5">*</span>}
@@ -30,10 +30,11 @@ function InlineLabel({ label, required, hint }: { label: string; required?: bool
 
 interface FieldProps {
   label: string;
-  /** Label sits to the LEFT of the control instead of above it. This is what
-   *  the Simnovator UI does and it roughly halves the height of a row, which
-   *  is the single biggest density win — stacked labels doubled the vertical
-   *  cost of every field. */
+  /** Label sits to the LEFT of the control. This is what the Simnovator UI
+   *  does and it roughly halves the height of a row, which is the single
+   *  biggest density win — stacked labels doubled the vertical cost of every
+   *  field. It is the DEFAULT; pass `inline={false}` for the stacked form,
+   *  which only suits a full-width control that needs the horizontal room. */
   inline?: boolean;
   /** Marks the field required, shown as the same red asterisk Simnovator uses. */
   required?: boolean;
@@ -65,12 +66,12 @@ function rangeError(value: any, min?: number, max?: number): string | null {
   return null;
 }
 
-export function Field({ label, value, onChange, type = 'text', options, min, max, step, disabled, placeholder, inline, required, hint }: FieldProps) {
+export function Field({ label, value, onChange, type = 'text', options, min, max, step, disabled, placeholder, inline = true, required, hint }: FieldProps) {
   if (type === 'checkbox') {
     return (
-      <label className="flex items-center gap-2 cursor-pointer">
+      <label className="flex items-center gap-2 h-8 cursor-pointer">
         <Checkbox checked={Boolean(value)} onCheckedChange={onChange} disabled={disabled} />
-        <span className="text-sm">{label}</span>
+        <span className="text-xs text-muted-foreground leading-tight">{label}</span>
       </label>
     );
   }
@@ -130,6 +131,7 @@ export function Field({ label, value, onChange, type = 'text', options, min, max
             aria-invalid={!!err}
             title={err ? `${label}: ${err}` : undefined}
           />
+          {err && <p className="text-[11px] text-destructive mt-0.5">{err}</p>}
         </div>
       </div>
     );

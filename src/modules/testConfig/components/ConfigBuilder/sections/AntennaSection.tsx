@@ -6,6 +6,7 @@
 // SDR rf_driver.args switches between dev0 and dev0+dev1 at the 4-antenna
 // threshold automatically.
 import { Field } from './Field';
+import { InfoHint } from '../InfoHint';
 import { Button } from '@/components/ui/button';
 import { RotateCcw } from 'lucide-react';
 import { BoxedSection } from '../BoxedSection';
@@ -104,18 +105,18 @@ export function AntennaSection({ form, onChange, bare }: Props) {
       </div>
 
       {/* Per-antenna toggle */}
-      <div className="mt-4 flex items-center gap-3 px-1">
+      <div className="mt-3 flex items-center gap-1.5">
         <Field inline
           label="Per-antenna gain"
           value={isPerAntenna}
           onChange={v => togglePerAntenna(!!v)}
           type="checkbox"
         />
-        <p className="text-[11px] text-muted-foreground -mt-0.5">
+        <InfoHint>
           {isPerAntenna
-            ? 'Each antenna path has its own gain (emits as array).'
-            : 'Same gain applied to every antenna path (emits as scalar).'}
-        </p>
+            ? 'Each antenna path has its own gain (emits as an array).'
+            : 'One gain applied to every antenna path (emits as a scalar).'}
+        </InfoHint>
       </div>
 
       {/* Single-value form */}
