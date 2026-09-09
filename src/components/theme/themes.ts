@@ -5,6 +5,16 @@ import { palette, commonColors, glassOpacities } from './utils/palette';
 import { baseComponents } from './utils/base-components';
 
 export type ThemeVariant = 'indigo' | 'rose' | 'amber' | 'emerald' | 'sky' | 'teal';
+
+/**
+ * `palette` mixes full colour scales (gray, indigo, ...) with flat strings
+ * (white, background, online, ...). `keyof typeof palette` therefore admits
+ * keys that have no [900] step, which is why indexing palette[primary][900]
+ * did not type-check. This selects only the keys whose value is a scale.
+ */
+type PaletteScaleKey = {
+  [K in keyof typeof palette]: typeof palette[K] extends { 900: string } ? K : never
+}[keyof typeof palette];
 export type ThemeGroup = 'primary' | 'secondary' | 'accent';
 
 export const themeGroups: Record<ThemeGroup, ThemeVariant[]> = {
@@ -47,12 +57,8 @@ export const themeMetadata = {
 } as const;
 
 type ColorVariant = {
-  primary: keyof typeof palette;
-  /** Decorative label only — never used to index `palette`, so it is not
-   *  constrained to palette keys. Typing it as `keyof typeof palette`
-   *  rejected the accents the themes below actually declare (violet, pink,
-   *  orange, blue, cyan, green), for no benefit. */
-  accent: string;
+  primary: PaletteScaleKey;
+  accent: PaletteScaleKey;
   name: string;
 };
 
@@ -147,6 +153,16 @@ function createTheme(variant: ColorVariant): ThemeConfig {
         foreground: palette[primary][900],
         border: palette[primary][200],
         overlay: commonColors.overlay.light
+      },
+      // Surfaces.input is required by the type but was never emitted, so
+      // every theme object was structurally incomplete.
+      input: {
+        background: commonColors.white,
+        border: palette[primary][200],
+        text: palette[primary][900],
+        placeholder: palette.gray[400],
+        focus: palette[primary][500],
+        hover: palette[primary][300]
       }
     },
     components: {
