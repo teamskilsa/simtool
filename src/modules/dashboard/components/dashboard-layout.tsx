@@ -7,7 +7,6 @@ import { useUser } from '@/modules/users/context/user-context';
 import { useTheme } from '@/components/theme/context/theme-context';
 import { themes } from '@/components/theme/themes';
 import { useState, useEffect } from 'react';
-import { DashboardHeader } from './dashboard-header';
 import { DashboardSidebar } from './dashboard-sidebar';
 import { DashboardContent } from './dashboard-content';
 
@@ -57,23 +56,17 @@ export const DashboardLayout = () => {
         }}
       />
 
-      {/* Content */}
+      {/* Content. The top header bar is gone — the sidebar carries the
+          brand, search, theme and account controls it used to hold. */}
       <div className="relative z-10">
-        <DashboardHeader
-          user={user}
-          isSidebarOpen={isSidebarOpen}
-          setIsSidebarOpen={handleSidebarToggle}
-          handleLogout={handleLogout}
-          themeConfig={themeConfig}
-          setActiveSection={setActiveSection}
-        />
-
         <div className="flex">
           <DashboardSidebar
             isSidebarOpen={isSidebarOpen}
+            setIsSidebarOpen={handleSidebarToggle}
             activeSection={activeSection}
             setActiveSection={setActiveSection}
             themeConfig={themeConfig}
+            handleLogout={handleLogout}
           />
 
           <DashboardContent

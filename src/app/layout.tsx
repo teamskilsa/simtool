@@ -15,7 +15,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Network Testing Portal",
+  title: "SimTool",
   description: "Network Testing and Configuration Portal",
 };
 

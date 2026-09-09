@@ -106,7 +106,7 @@ export function LoginForm() {
         "text-sm",
         themeConfig.colors.primary[700]
       )}>
-        Network Testing Portal © 2024
+        SimTool © 2026
       </div>
     </div>
   );
