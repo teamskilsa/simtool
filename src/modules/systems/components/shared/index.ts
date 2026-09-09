@@ -1,4 +1,4 @@
-/ modules/systems/components/shared/index.ts
+// modules/systems/components/shared/index.ts
 export * from './SystemDialog';
 export * from './SystemForm';
 export * from './FormField';

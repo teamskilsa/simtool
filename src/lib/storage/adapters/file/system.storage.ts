@@ -1,5 +1,6 @@
 // src/lib/storage/adapters/file/system.storage.ts
 
+import path from 'path';
 import { ISystemStorage } from '../../storage.interface';
 import { StoragePathResolver } from '../../config';
 import { 

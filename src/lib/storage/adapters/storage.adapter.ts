@@ -1,11 +1,13 @@
 // src/lib/storage/adapters/storage.adapter.ts
 
+import fs from 'fs/promises';
+import path from 'path';
 import { IStorageAdapter } from '../storage.interface';
 import { StoragePathResolver, StorageConfig } from '../config';
 import { FileConfigStorage, FileSystemStorage, FileUserStorage, FileAutomationStorage } from './file';
 import { MongoClient } from 'mongodb';
 import { FileSystemHelper } from './utils';
-import { StorageResult } from '../storage.types';
+import { StorageResult, IndexEntry } from '../storage.types';
 
 export class StorageAdapter implements IStorageAdapter {
   public readonly configs: FileConfigStorage;

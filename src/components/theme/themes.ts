@@ -48,7 +48,11 @@ export const themeMetadata = {
 
 type ColorVariant = {
   primary: keyof typeof palette;
-  accent: keyof typeof palette;
+  /** Decorative label only — never used to index `palette`, so it is not
+   *  constrained to palette keys. Typing it as `keyof typeof palette`
+   *  rejected the accents the themes below actually declare (violet, pink,
+   *  orange, blue, cyan, green), for no benefit. */
+  accent: string;
   name: string;
 };
 

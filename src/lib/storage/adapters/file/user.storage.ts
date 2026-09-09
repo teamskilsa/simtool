@@ -1,5 +1,6 @@
 // src/lib/storage/adapters/file/user.storage.ts
 
+import path from 'path';
 import { IUserPreferencesStorage } from '../../storage.interface';
 import { StoragePathResolver } from '../../config';
 import { 
