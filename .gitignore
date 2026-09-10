@@ -32,3 +32,6 @@ data/qa/
 
 # QA: pulled production configs (contain AMF addresses + licence tags)
 scripts/qa/*.cfg
+
+# Local Claude Code tooling (preview launch config, worktrees)
+.claude/
