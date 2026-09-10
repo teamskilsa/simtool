@@ -3,7 +3,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ConfigContext } from './ConfigContext';
 import { ConfigItem } from '../types';
 import { configStore } from '../store';
-import { testConfigService } from '../services';
 import { useUser } from '@/modules/users/context/user-context';
 
 import { configsService } from '../services/configs.service';
@@ -54,9 +53,11 @@ export const ConfigProvider: React.FC<ConfigProviderProps> = ({ children }) => {
       // Save to local storage
       configStore.saveConfig(user.id, newConfig);
 
-      // If it's not a local copy of server config, also save to server
+      // If it's not a local copy of a server config, also persist it through
+      // the config API. testConfigService only reads configs off boxes over
+      // SSH and has no saveConfig, so this used to throw on every save.
       if (!config.isServerConfig) {
-        await testConfigService.saveConfig(newConfig);
+        await configsService.importConfig(newConfig, user.id);
       }
 
       // Update configs state

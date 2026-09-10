@@ -88,10 +88,13 @@ export function EditUserDialog({ user, open, onOpenChange }: EditUserDialogProps
   const onSubmit = async (data: EditUserForm) => {
     try {
       setIsSubmitting(true);
+      // The form carries password: '' whenever it is left blank, and spreading
+      // `data` wrote that empty string over the stored password, so editing a
+      // user's name locked them out. Send a password only when one was typed.
+      const { password, ...profile } = data;
       await updateUser(user.id, {
-        ...data,
-        // Only include password if it was changed
-        ...(data.password ? { password: data.password } : {}),
+        ...profile,
+        ...(password ? { password } : {}),
       });
       onOpenChange(false);
     } catch (error) {

@@ -10,7 +10,7 @@ interface GroupTreeProps {
   selectedGroupId: string | null;
 }
 
-export const GroupTree = React.memo(({ groups, selectedGroupId }) => {
+export const GroupTree = React.memo(({ groups, selectedGroupId }: GroupTreeProps) => {
   const setSelectedGroup = useGroupStore(state => state.setSelectedGroup);
 
   const handleSelect = useCallback((id: string) => {

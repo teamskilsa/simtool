@@ -12,7 +12,8 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 interface ImportModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onImport: (configs: ConfigItem[]) => Promise<void>;  // Now accepts array of configs
+    /** Called once for each selected config. */
+    onImport: (config: ConfigItem) => Promise<void>;
 }
 
 export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport }) => {

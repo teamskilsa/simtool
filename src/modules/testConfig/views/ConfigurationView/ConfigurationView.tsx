@@ -33,15 +33,13 @@ export function ConfigurationView() {
   const [isGroupManagementOpen, setIsGroupManagementOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const { 
-    groups, 
-    createGroup, 
-    deleteGroup, 
-    renameGroup, 
-    moveGroup,
-    addConfigToGroup,
-    selectedGroupId,
-    selectGroup
+  // renameGroup, moveGroup and selectGroup used to be destructured here too.
+  // None exist on the group store, so the group UI was handed undefined
+  // handlers; assigning a config to a group is done inside ConfigurationList.
+  const {
+    groups,
+    createGroup,
+    deleteGroup,
   } = useGroupStore();
 
   const loadConfigs = useCallback(async () => {
@@ -206,26 +204,25 @@ export function ConfigurationView() {
     }
   };
 
-  const handleAddToGroup = useCallback(async (configId: string, groupId: string) => {
+
+  // ConfigurationEditor's Save hands the edited config to onChange and has no
+  // other way to persist it. Nothing was passed, so Save threw
+  // "onChange is not a function" and the edit was lost.
+  const handleConfigChange = async (updated: ConfigItem) => {
+    if (!user?.id) return;
     try {
-      await addConfigToGroup(configId, groupId);
-      setConfigs(prev => prev.map(config => 
-        config.id === configId 
-          ? { ...config, group: groupId }
-          : config
-      ));
-      toast({
-        title: "Success",
-        description: "Added to group successfully",
-      });
+      await configsService.importConfig(updated, user.id);
+      await loadConfigs();
+      setSelectedConfig(updated);
+      toast({ title: "Saved", description: `${updated.name} saved` });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to add to group",
+        description: error instanceof Error ? error.message : 'Failed to save configuration',
         variant: "destructive"
       });
     }
-  }, [addConfigToGroup, toast]);
+  };
 
   const handleGroupCreate = async (name: string, userId: string, parentId?: string) => {
     try {
@@ -281,14 +278,11 @@ export function ConfigurationView() {
             onConfigsChange={setConfigs}
             onDelete={handleDelete}
             loading={loading}
-            onAddToGroup={handleAddToGroup}
-            selectedGroupId={selectedGroupId}
-            onGroupSelect={selectGroup}
           />
           
           <ConfigurationEditor
             config={selectedConfig}
-            readOnly={isImportModalOpen}
+            onChange={handleConfigChange}
           />
         </div>
 

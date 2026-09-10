@@ -4,7 +4,7 @@ import { FormDialog } from '@/components/dialogs/templates/FormDialog';
 import { SystemForm } from './SystemForm';
 import { useDialog } from '@/components/dialogs/hooks/use-dialog';
 import { toast } from '@/components/ui/use-toast';
-import type { System } from '../../types';
+import type { System, SystemType } from '../../types';
 import { provisionSystem, type ProvisionResult } from '../../services/provision';
 
 interface SystemDialogProps {
@@ -89,9 +89,12 @@ export function SystemDialog({ mode, system, open, onOpenChange, onSubmit, onPro
 
         // Save the system immediately (with provisionStatus='provisioning' for add mode).
         // This way, if provisioning fails, the system is still saved and the user can retry later.
+        // validateForm() has already required a type to be picked, so the
+        // form's string is one of the SystemType values by this point.
+        const typed = { ...formData, type: formData.type as SystemType };
         const dataToSave: Partial<System> = mode === 'add'
-          ? { ...formData, provisionStatus: 'provisioning' }
-          : formData;
+          ? { ...typed, provisionStatus: 'provisioning' }
+          : typed;
 
         const saved = await onSubmit(mode, system?.id, dataToSave);
 

@@ -10,10 +10,20 @@ export interface ModuleConfig {
   isCollapsed?: boolean;
 }
 
+/** The system a scenario targets, as stored in scenarios.json. */
+export interface ScenarioSystem {
+  id: string;
+  name: string;
+  host: string;
+  port: string;
+}
+
 export interface ScenarioConfig {
+  /** Set once the scenario has been saved; absent while creating. */
+  id?: string;
   name: string;
   topology: string;
-  system: SystemConfig;
+  system: ScenarioSystem;
   useCommonIp: boolean;
   ipConfig: {
     common?: string;
@@ -31,7 +41,7 @@ export interface SystemOption {
 export interface ScenarioFormState {
   name: string;
   topology: string;
-  system?: SystemConfig;
+  system?: ScenarioSystem;
   useCommonIp: boolean;
   ipConfig: {
     common?: string;

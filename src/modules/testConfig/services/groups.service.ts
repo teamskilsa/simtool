@@ -5,7 +5,7 @@ import { ConfigItem } from '../types/testConfig.types';
 export class GroupService {
   private readonly baseUrl = '/api/groups';
 
-  async createGroup(data: { name: string, description?: string }, userId: string): Promise<Group> {
+  async createGroup(data: { name: string, description?: string, parentId?: string | null }, userId: string): Promise<Group> {
     console.log('Creating group:', { data, userId });
     
     const response = await fetch(this.baseUrl, {

@@ -3,6 +3,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useTheme } from '@/components/theme/context/theme-context';
+import { themes, type ThemeVariant } from '@/components/theme/themes';
 import type { User, UserPreferences } from '../types';
 
 interface UserContextType {
@@ -74,8 +75,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('user_data', JSON.stringify(updatedUser));
 
       // Update theme if changed
-      if (preferences.theme) {
-        setTheme(preferences.theme);
+      // Preferences keep the theme as a plain string; apply only names that are
+      // real theme variants, so a stale value cannot select a missing theme.
+      if (preferences.theme && preferences.theme in themes) {
+        setTheme(preferences.theme as ThemeVariant);
         localStorage.setItem('selected_theme', preferences.theme);
       }
 

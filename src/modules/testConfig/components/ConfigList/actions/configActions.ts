@@ -25,11 +25,11 @@ export const configActions = {
   handleDelete: async (
     configId: string,
     onDelete: (id: string) => void,
-    setSelectedConfigs: (configs: Set<string>) => void
+    setSelectedConfigs: (update: Set<string> | ((prev: Set<string>) => Set<string>)) => void
   ) => {
     onDelete(configId);
     setSelectedConfigs(prev => {
-      const next = new Set(prev);
+      const next = new Set<string>(prev);
       next.delete(configId);
       return next;
     });
@@ -38,7 +38,7 @@ export const configActions = {
   handleBulkDelete: async (
     selectedConfigs: Set<string>,
     onDelete: (id: string) => void,
-    setSelectedConfigs: (configs: Set<string>) => void
+    setSelectedConfigs: (update: Set<string> | ((prev: Set<string>) => Set<string>)) => void
   ) => {
     for (const id of selectedConfigs) {
       await configActions.handleDelete(id, onDelete, setSelectedConfigs);
@@ -82,7 +82,7 @@ export const configActions = {
     configs: ConfigItem[],
     userId: string,
     loadConfigs: () => Promise<void>,
-    setSelectedConfigs: (configs: Set<string>) => void,
+    setSelectedConfigs: (update: Set<string> | ((prev: Set<string>) => Set<string>)) => void,
   ): Promise<number> => {
     // Snapshot the names taken so collisions are detected across the batch
     let taken = new Set(configs.map(c => c.name.toLowerCase()));

@@ -6,7 +6,8 @@ interface ConfigContextType {
     configs: ConfigItem[];
     selectedConfig: ConfigItem | null;
     setSelectedConfig: (config: ConfigItem | null) => void;
-    saveConfig: (config: ConfigItem) => Promise<void>;
+    /** Resolves with the config as saved (a server config gets a local copy with a new id). */
+    saveConfig: (config: ConfigItem) => Promise<ConfigItem>;
     deleteConfig: (configId: string) => Promise<void>;
     loadConfigs: () => Promise<void>;  // Add this
 }

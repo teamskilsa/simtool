@@ -250,17 +250,25 @@ export type DialogStyles = {
 export interface ThemeConfig {
   name: string;
   colors: SemanticColors;
-  typography: Typography;  
+  // createTheme() has never emitted typography or shadows and nothing reads
+  // them; they stay in the type as optional extension points.
+  typography?: Typography;
   status: StatusColors;
   surfaces: Surfaces;
   components: ComponentStyles;
   effects: Effects;
-  shadows: Shadows;
+  shadows?: Shadows;
   gradients: {
     primary: string;
     secondary: string;
     accent: string;
     background: string;
+    // Emitted by createTheme() and read by the login card header, but missing
+    // from the type.
+    glass?: string;
+    header?: string;
+    card?: string;
+    sidebar?: string;
   };
   dialogs: DialogStyles;
   darkMode?: {
@@ -268,6 +276,7 @@ export interface ThemeConfig {
     surfaces: Partial<Surfaces>;
     effects: Partial<Effects>;
     dialogs?: Partial<DialogStyles>;
+    gradients?: Partial<ThemeConfig['gradients']>;
   };
 }
 

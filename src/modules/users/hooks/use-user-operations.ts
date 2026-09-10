@@ -1,6 +1,6 @@
 // modules/users/hooks/use-user-operations.ts
 import { useState, useEffect } from 'react';
-import type { User } from '../types';
+import type { User, UserPreferences } from '../types';
 import { userUtils } from '@/modules/auth/lib/auth-utils';
 
 export function useUserOperations() {
@@ -44,10 +44,23 @@ export function useUserOperations() {
     }
   };
 
-  const updateUser = async (userId: string, updates: Partial<User>) => {
+  // Edit User sends a partial preferences object (only notifications) and,
+  // when it was changed, a new password.
+  const updateUser = async (
+    userId: string,
+    updates: Omit<Partial<User>, 'preferences'> & { preferences?: Partial<UserPreferences>; password?: string },
+  ) => {
     try {
+      // Merge preferences instead of replacing them: the edit form carries only
+      // notifications, and the shallow update wiped the user's theme, sidebar
+      // and visibility preferences on every save.
+      const existing = userUtils.getStoredUsers().find(u => u.id === userId);
+      const { preferences, ...rest } = updates;
       userUtils.updateUser(userId, {
-        ...updates,
+        ...rest,
+        ...(preferences && existing
+          ? { preferences: { ...existing.preferences, ...preferences } }
+          : {}),
         updatedAt: new Date().toISOString(),
       });
       await loadUsers();

@@ -1,5 +1,5 @@
 // services/scenario/scenario.service.ts
-import { ScenarioConfig } from '../../types/scenario.types';
+import type { ScenarioConfig } from '../../components/ScenarioCreator/types';
 
 class ScenarioService {
   private readonly baseUrl = '/api/scenarios';

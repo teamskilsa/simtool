@@ -16,7 +16,7 @@ class ConfigurationService {
       const allConfigs: StoredConfig[] = await response.json();
 
       const groupedConfigs: Record<ModuleType, StoredConfig[]> = {
-        enb: [], gnb: [], mme: [], ims: [], ue_db: [],
+        enb: [], gnb: [], mme: [], ims: [], ue_db: [], ue: [],
       };
       for (const config of allConfigs) {
         if (config.module in groupedConfigs) {

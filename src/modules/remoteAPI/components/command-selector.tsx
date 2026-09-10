@@ -9,8 +9,13 @@ interface CommandSelectorProps {
   onCommandSelect: (command: string) => void;
 }
 
-// Define basic command categories
-const COMMAND_CATEGORIES = {
+interface CommandOption { label: string; value: string }
+interface CommandCategory { name: string; commands: readonly CommandOption[] }
+
+// Presets exist for ENB and UE only. Typing this as a partial record makes the
+// other component types (MME, IMS, MBMS) an empty list instead of an untyped
+// undefined lookup.
+const COMMAND_CATEGORIES: Partial<Record<CommandSelectorProps['componentType'], readonly CommandCategory[]>> = {
   'ENB': [
     {
       name: 'Configuration',
@@ -86,7 +91,7 @@ const COMMAND_CATEGORIES = {
       ]
     }
   ]
-} as const;
+};
 
 export function CommandSelector({ componentType, themeConfig, onCommandSelect }: CommandSelectorProps) {
   const [category, setCategory] = useState('');

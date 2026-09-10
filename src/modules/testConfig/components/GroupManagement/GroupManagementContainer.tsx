@@ -183,7 +183,7 @@ export const GroupManagementContainer: React.FC<GroupManagementProps> = ({
             )}>
               <ScrollArea className="h-full">
                 <div className="p-8">
-                  <GroupDetails group={selectedGroup} />
+                  <GroupDetails group={selectedGroup ?? null} />
                 </div>
               </ScrollArea>
             </div>

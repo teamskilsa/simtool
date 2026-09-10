@@ -45,6 +45,7 @@ import type { StoredConfig } from '@/lib/storage/storage.types';
 const MODULE_LABEL: Record<ModuleType, string> = {
   enb:   'eNB',
   gnb:   'gNB',
+  ue:    'UE',
   mme:   'MME',
   ims:   'IMS',
   ue_db: 'UE-DB',

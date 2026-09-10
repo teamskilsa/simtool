@@ -1,6 +1,7 @@
 // modules/auth/lib/auth-utils.ts
 import { z } from 'zod';
 import type { LoginCredentials, User } from '../types';
+import type { User as AppUser } from '@/modules/users/types';
 
 export const loginSchema = z.object({
   username: z.string().min(1, 'Username is required'),
@@ -9,8 +10,22 @@ export const loginSchema = z.object({
 
 const USERS_STORAGE_KEY = 'stored_users';
 
+/** A user record as kept in localStorage: the app user plus its (mock-auth)
+ *  password. The auth `User` type only has id/username/role, so these records
+ *  — which also carry preferences and timestamps — fit nowhere they were used,
+ *  and the user management screens could not load them as their own type. */
+export type StoredUser = AppUser & { password?: string };
+
+/** The session user never needs the password. Keep it out of auth state and
+ *  out of the `user_data` copy the auth context writes to localStorage. */
+function withoutPassword(stored: StoredUser): User {
+  const { password, ...user } = stored;
+  void password;
+  return user;
+}
+
 // Default admin user configuration
-export const DEFAULT_ADMIN: User = {
+export const DEFAULT_ADMIN: StoredUser = {
   id: 'admin',
   username: 'admin',
   password: 'admin123', // Default password is admin123
@@ -56,12 +71,12 @@ export const mockAuthService = {
         credentials.password === 'admin123') {
       // Always use DEFAULT_ADMIN for admin login
       console.log('Admin login successful'); // Debug log
-      return { user: DEFAULT_ADMIN };
+      return { user: withoutPassword(DEFAULT_ADMIN) };
     }
 
     // Get stored users
     const storedUsersJson = typeof window !== 'undefined' ? localStorage.getItem(USERS_STORAGE_KEY) : null;
-    const storedUsers: User[] = storedUsersJson ? JSON.parse(storedUsersJson) : [];
+    const storedUsers: StoredUser[] = storedUsersJson ? JSON.parse(storedUsersJson) : [];
 
     console.log('Stored users:', storedUsers); // Debug log
 
@@ -80,31 +95,31 @@ export const mockAuthService = {
       throw new Error('Invalid password');
     }
 
-    console.log('Login successful:', user); // Debug log
-    return { user };
+    console.log('Login successful:', user.username); // Debug log
+    return { user: withoutPassword(user) };
   }
 };
 
 // Add users utility functions
 export const userUtils = {
-  getStoredUsers: (): User[] => {
+  getStoredUsers: (): StoredUser[] => {
     if (typeof window === 'undefined') return [];
     const storedUsersJson = localStorage.getItem(USERS_STORAGE_KEY);
     return storedUsersJson ? JSON.parse(storedUsersJson) : [];
   },
 
-  updateStoredUsers: (users: User[]): void => {
+  updateStoredUsers: (users: StoredUser[]): void => {
     if (typeof window === 'undefined') return;
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
   },
 
-  addUser: (user: User): void => {
+  addUser: (user: StoredUser): void => {
     const users = userUtils.getStoredUsers();
     users.push(user);
     userUtils.updateStoredUsers(users);
   },
 
-  updateUser: (userId: string, updates: Partial<User>): void => {
+  updateUser: (userId: string, updates: Partial<StoredUser>): void => {
     const users = userUtils.getStoredUsers();
     const index = users.findIndex(u => u.id === userId);
     if (index !== -1) {

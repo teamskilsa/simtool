@@ -133,11 +133,7 @@ export async function GET(request: Request) {
       }
 
       const storageAdapter = getStorageAdapter();
-      const result = await storageAdapter.configs.list({
-          sharing: {
-              ownerId: userId
-          }
-      });
+      const result = await storageAdapter.configs.list({ userId });
 
       if (!result.success) {
           throw new Error(result.error?.message || 'Failed to fetch configurations');

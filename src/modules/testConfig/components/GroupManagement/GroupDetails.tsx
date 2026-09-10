@@ -25,7 +25,7 @@ interface GroupDetailsProps {
   group: Group | null;
 }
 
-export const GroupDetails = React.memo(({ group }) => {
+export const GroupDetails = React.memo(({ group }: GroupDetailsProps) => {
   const { 
     updateGroup, 
     deleteGroup, 

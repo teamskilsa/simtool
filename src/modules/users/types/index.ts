@@ -26,3 +26,9 @@ export interface ConfigVisibility {
   teamId?: string;
   allowedUsers?: string[];
 }
+
+/** Filters for the user management list. */
+export interface UserFilters {
+  role?: User['role'];
+  search: string;
+}

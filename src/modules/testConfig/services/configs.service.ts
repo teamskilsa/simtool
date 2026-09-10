@@ -1,4 +1,5 @@
 // src/modules/testConfig/services/configs.service.ts
+import type { ConfigItem } from '../types';
 import { useToast } from '@/components/ui/use-toast';
 
 class ConfigsService {
@@ -18,7 +19,12 @@ class ConfigsService {
     return configs;
   }
 
-  async importConfig(config: ConfigItem, userId: string): Promise<ConfigItem> {
+  // Only these fields are sent. Callers importing a dropped file or builder
+  // output have no createdBy/createdAt yet and should not have to invent them.
+  async importConfig(
+    config: Pick<ConfigItem, 'name' | 'module' | 'content'> & Partial<ConfigItem>,
+    userId: string,
+  ): Promise<ConfigItem> {
     // Log the incoming config
     console.log('ImportConfig - Received config:', {
       id: config.id,

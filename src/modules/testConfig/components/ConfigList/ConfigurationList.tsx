@@ -275,22 +275,12 @@ export const ConfigurationList: React.FC<ConfigListProps> = ({
           setIsAssignToGroupOpen(false);
           setSelectedForGroup(null);
         }}
-        configId={selectedForGroup}
+        configId={selectedForGroup ?? ''}
         userId={user?.id || ''}
-        onAssign={async (groupId) => {
-          if (selectedForGroup && user?.id) {
-            const success = await groupActions.addConfigToGroup(
-              user.id,
-              groupId,
-              selectedForGroup,
-              loadConfigs
-            );
-            if (success) {
-              setIsAssignToGroupOpen(false);
-              setSelectedForGroup(null);
-            }
-          }
-        }}
+        // The dialog performs the assignment itself. The onAssign handler that
+        // used to be passed here was not a prop it accepts, so it never ran
+        // and the list was never refreshed afterwards.
+        onAssigned={() => { void loadConfigs(); }}
       />
     </div>
   );

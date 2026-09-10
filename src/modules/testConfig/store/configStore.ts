@@ -1,5 +1,8 @@
 // src/modules/testConfig/store/configStore.ts
-import { ConfigItem, StoredConfig } from '../types';
+import { ConfigItem } from '../types';
+
+/** A config as persisted in localStorage: the item plus its owner. */
+type StoredConfig = ConfigItem & { userId: string };
 
 export class ConfigStore {
     private readonly STORAGE_KEY = 'test-matrix-configs';
@@ -29,6 +32,14 @@ export class ConfigStore {
         }
 
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(allConfigs));
+    }
+
+    /** Replace every config belonging to one user. ConfigProvider's
+     *  deleteConfig called this, but it did not exist, so deleting threw. */
+    saveConfigs(userId: string, configs: ConfigItem[]): void {
+        const others = this.getAllConfigs().filter(c => c.userId !== userId);
+        const mine: StoredConfig[] = configs.map(config => ({ ...config, userId }));
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify([...others, ...mine]));
     }
 
     private getAllConfigs(): StoredConfig[] {

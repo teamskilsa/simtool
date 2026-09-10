@@ -199,7 +199,8 @@ function createTheme(variant: ColorVariant): ThemeConfig {
         itemHighlighted: `bg-${primary}-50 text-${primary}-900`
       },
       badge: {
-        ...baseComponents.badge,
+        // baseComponents has no badge entry; this spread was undefined.
+        base: 'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors',
         variants: {
           default: `border-transparent bg-${primary}-600 text-white`,
           secondary: `border-transparent bg-${primary}-100 text-${primary}-700`,
@@ -216,7 +217,8 @@ function createTheme(variant: ColorVariant): ThemeConfig {
         item: `flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-${primary}-50 transition-colors`,
         itemActive: `bg-${primary}-50 text-${primary}-700 font-medium`,
         subItem: `flex items-center gap-2 rounded-lg px-3 py-2 pl-10 hover:bg-${primary}-50 transition-colors`,
-        subItemActive: `bg-${primary}-50 text-${primary}-700 font-medium`
+        subItemActive: `bg-${primary}-50 text-${primary}-700 font-medium`,
+        itemIcon: 'h-4 w-4'
       }
     },
     effects: {

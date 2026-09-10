@@ -2,6 +2,12 @@
 import { useRef, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 
+interface SSHTerminalOutputProps {
+  loading: boolean;
+  /** Terminal lines; lines starting with "$" are echoed commands. */
+  output: string[];
+}
+
 export function SSHTerminalOutput({ loading, output }: SSHTerminalOutputProps) {
   const outputRef = useRef<HTMLDivElement>(null);
 

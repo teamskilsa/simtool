@@ -17,13 +17,16 @@ interface AssignToGroupDialogProps {
   onClose: () => void;
   configId: string;
   userId: string;
+  /** Called after a successful assignment, so the caller can refresh. */
+  onAssigned?: (groupId: string) => void;
 }
 
 export const AssignToGroupDialog: React.FC<AssignToGroupDialogProps> = ({ 
   isOpen, 
   onClose,
   configId,
-  userId
+  userId,
+  onAssigned,
 }) => {
   const { groups, loadGroups, addConfigToGroup } = useGroupStore();
   const { toast } = useToast();
@@ -47,6 +50,7 @@ export const AssignToGroupDialog: React.FC<AssignToGroupDialogProps> = ({
         title: "Success",
         description: "Configuration added to group"
       });
+      onAssigned?.(selectedGroupId);
       onClose();
     } catch (error) {
       console.error('Failed to add to group:', error);

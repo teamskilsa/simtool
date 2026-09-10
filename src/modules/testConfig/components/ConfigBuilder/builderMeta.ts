@@ -8,7 +8,7 @@
 const BUILDER_MARKER = '@builder:';
 
 export interface BuilderMeta {
-  type: 'nr' | 'lte' | 'nbiot' | 'catm' | 'core';
+  type: 'nr' | 'lte' | 'nbiot' | 'catm' | 'core' | 'nsa';
   form: Record<string, any>;
 }
 

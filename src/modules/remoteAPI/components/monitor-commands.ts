@@ -273,7 +273,9 @@ export const UE_MONITOR_COMMANDS: MonitorCommandSection[] = [
 ];
 
 // Helper function remains the same
-export const getMonitorCommands = (componentType: 'ENB' | 'MME' | 'UE'): MonitorCommandSection[] => {
+// Accepts any component type: IMS and MBMS have no monitor presets and fall
+// through to the empty default, which the screen monitor already handles.
+export const getMonitorCommands = (componentType: string): MonitorCommandSection[] => {
     switch (componentType) {
         case 'ENB':
             return ENB_MONITOR_COMMANDS;

@@ -35,7 +35,7 @@ export function TopologySelector({ selected, onSelect }: TopologySelectorProps) 
             {topology.modules.map(module => (
               <Badge 
                 key={module} 
-                variant={topology.optional?.includes(module) ? "outline" : "secondary"}
+                variant={(topology.optional as readonly string[] | undefined)?.includes(module) ? "outline" : "secondary"}
               >
                 {module}
               </Badge>
