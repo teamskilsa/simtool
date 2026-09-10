@@ -14,6 +14,7 @@ Run with `npx tsx scripts/qa/<script>.ts` from the repo root.
 | `qa-cell-switch.ts` | regression: the GSCN must not follow you when you switch cell tabs |
 | `qa-cellname.ts` | regression: custom cell names survive re-import |
 | `qa-nsa-names.ts` | regression: the LTE mapper must read `cell_list`, not `nr_cell_list` |
+| `qa-root-fields.ts` | regression: license_server, en_dc_support and rf_ports survive for NR and LTE, including port keys with no builder field |
 | `qa-vs-live.ts` | compares against a real production `enb.cfg` (see below) |
 
 ## qa-vs-live.ts
@@ -36,8 +37,6 @@ missing `license_server` line.
   `config-validate` API route does that (`lteenb -c <tmp>`, no daemon
   restart), but it contends for the SDR, so it is unsafe on a shared box
   that has a live eNB running. Run it when the callbox is free.
-- `en_dc_support` and `rf_ports` are covered for NR. The LTE form does not
-  model them, so an eNB cfg carrying either still loses it on re-save.
 
 ## Fixed by this harness
 
@@ -46,4 +45,4 @@ missing `license_server` line.
 - The SSB GSCN followed you between cell tabs — set on Cell 1, it moved to
   Cell 2 (`qa-cell-switch.ts` now asserts the fix).
 - Custom cell names were relabelled `Cell 1..N` on re-import.
-- `en_dc_support` and `rf_ports` were dropped from any config that had them.
+- `en_dc_support` and `rf_ports` were dropped from any config that had them. Now kept for both NR and LTE; rf_ports keys the builder has no field for survive through `extra`.

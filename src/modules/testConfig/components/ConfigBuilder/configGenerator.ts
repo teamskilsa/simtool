@@ -4,24 +4,7 @@
 import type { NRFormState } from './constants';
 import { formatGain } from './rfDefaults';
 import { licenseServerBlock } from './licenseBlock';
-
-/** en_dc_support / rf_ports — both omitted unless they carry something, so a
- *  config that never had them keeps the byte-for-byte output it had before. */
-function enDcLine(form: NRFormState): string {
-  return form.enDcSupport ? '\n  en_dc_support: true,\n' : '';
-}
-
-function rfPortsBlock(form: NRFormState): string {
-  const ports = form.rfPorts ?? [];
-  if (ports.length === 0) return '';
-  const entries = ports.map(p => {
-    const lines: string[] = [];
-    if (p?.dlFreq !== null && p?.dlFreq !== undefined) lines.push(`      rf_dl_freq: ${p.dlFreq}, /* MHz */`);
-    if (p?.ulFreq !== null && p?.ulFreq !== undefined) lines.push(`      rf_ul_freq: ${p.ulFreq}, /* MHz */`);
-    return lines.length ? `    {\n${lines.join('\n')}\n    }` : '    {}';
-  }).join(',\n');
-  return `\n  rf_ports: [\n${entries},\n  ],\n`;
-}
+import { enDcSupportLine, rfPortsBlock } from './rootBlocks';
 
 /**
  * Format PLMN string as MCC (3-digit) + MNC (2- or 3-digit, zero-padded).
@@ -245,7 +228,7 @@ export function generateNRConfig(form: NRFormState): string {
   gnb_id: ${form.gnbId},
 
   /* list of LTE cells (none for NR SA) */
-${enDcLine(form)}${rfPortsBlock(form)}  cell_list: [],
+${enDcSupportLine(form.enDcSupport)}${rfPortsBlock(form.rfPorts)}  cell_list: [],
 
   nr_cell_list: [
 ${cellListBlock}

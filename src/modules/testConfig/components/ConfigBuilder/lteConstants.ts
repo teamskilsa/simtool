@@ -1,3 +1,4 @@
+import type { RfPortEntry } from './constants';
 // LTE / NB-IoT / CAT-M1 configuration constants
 
 export const LTE_BAND_OPTIONS = [
@@ -116,6 +117,11 @@ export interface LTEFormState {
    *  Empty server_addr → the line is omitted entirely, which is the right
    *  behaviour for a box that licences some other way. */
   licenseServer: { serverAddr: string; tag: string };
+  /** enb.cfg root: en_dc_support — LTE anchor of an EN-DC pair. Only emitted when true. */
+  enDcSupport: boolean;
+  /** enb.cfg root: rf_ports[]. Empty → key omitted (the builder's behaviour
+   *  before this existed); an imported array is kept verbatim. */
+  rfPorts: RfPortEntry[];
   // ── Cell identity ────────────────────────────────────────────────────────────
   // enb.cfg: cell_list[].cell_id
   cellId: number;
@@ -262,6 +268,8 @@ export interface LTEFormState {
 
 export const DEFAULT_LTE_FORM: LTEFormState = {
   licenseServer: { serverAddr: '', tag: '' },
+  enDcSupport: false,
+  rfPorts: [],
   // Cell identity
   cellId: 1,
   pci: 0,

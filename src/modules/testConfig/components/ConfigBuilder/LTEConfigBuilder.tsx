@@ -21,6 +21,7 @@ import { LogSection } from './sections/LogSection';
 import { MmeInfoSectionLte } from './sections/MmeInfoSectionLte';
 import { DependenciesSection } from './sections/DependenciesSection';
 import { AntennaSectionLte } from './sections/AntennaSectionLte';
+import { RfPortsGroup } from './sections/RfPortsGroup';
 import { Split72Fields } from './sections/Split72Fields';
 import {
   FrequentlyUsedLte, MacLte, PowerLte, SecurityLte,
@@ -283,6 +284,13 @@ export function LTEConfigBuilder({
             <BandSection form={form} onChange={onChange} ratMode={ratMode} />
             <AntennaSectionLte form={form} onChange={onChange} />
             <RFSection form={form} onChange={onChange} />
+            <RfPortsGroup
+              ports={form.rfPorts ?? []}
+              cellNames={(form.cells ?? []).map(c => c.name)}
+              showEmpty={false}
+              hint="enb.cfg root: rf_ports[]. Shown because the imported config declares RF ports; they are written back as they were. Blank frequencies emit as {}."
+              onChange={ports => onChange('rfPorts', ports)}
+            />
             {(ratMode === 'nbiot' || ratMode === 'catm') && (
               <IoTSection form={form} onChange={onChange} ratMode={ratMode} />
             )}

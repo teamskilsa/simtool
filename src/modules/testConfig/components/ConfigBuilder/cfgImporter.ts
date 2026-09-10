@@ -7,7 +7,7 @@
 import {
   DEFAULT_NR_FORM, DEFAULT_LAYERS, makeDefaultCell,
   type NRFormState, type LayersConfig, type NRCellEntry,
-  type PdnEntry, type UeDbEntry,
+  type PdnEntry, type UeDbEntry, type RfPortEntry,
 } from './constants';
 import {
   DEFAULT_LTE_FORM, DEFAULT_LTE_EARFCN, makeDefaultLteCell,
@@ -79,14 +79,27 @@ function extractCellNames(text: string, listKey: string): (string | null)[] {
 }
 
 /** rf_ports[] kept verbatim (empty entries included) so a re-save reproduces
- *  what the source file had. */
-function readRfPorts(ast: any): { dlFreq: number | null; ulFreq: number | null }[] {
+ *  what the source file had. Primitive keys we have no field for are kept in
+ *  `extra`; nested ones cannot be, so they are reported as a warning rather
+ *  than dropped silently. */
+function readRfPorts(ast: any, warnings: string[] = []): RfPortEntry[] {
   const ports = ast?.rf_ports;
   if (!Array.isArray(ports)) return [];
-  return ports.map((p: any) => ({
-    dlFreq: p && typeof p.rf_dl_freq === 'number' ? p.rf_dl_freq : null,
-    ulFreq: p && typeof p.rf_ul_freq === 'number' ? p.rf_ul_freq : null,
-  }));
+  return ports.map((p: any, i: number) => {
+    const extra: Record<string, string | number | boolean> = {};
+    if (p && typeof p === 'object') {
+      for (const [k, v] of Object.entries(p)) {
+        if (k === 'rf_dl_freq' || k === 'rf_ul_freq') continue;
+        if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') extra[k] = v;
+        else warnings.push(`rf_ports[${i}].${k} is a nested value the builder cannot keep; it will be dropped on save.`);
+      }
+    }
+    return {
+      dlFreq: p && typeof p.rf_dl_freq === 'number' ? p.rf_dl_freq : null,
+      ulFreq: p && typeof p.rf_ul_freq === 'number' ? p.rf_ul_freq : null,
+      ...(Object.keys(extra).length ? { extra } : {}),
+    };
+  });
 }
 
 // ─── Type detection ─────────────────────────────────────────────────────────
@@ -303,7 +316,7 @@ function astToNRForm(ast: Record<string, any>, warnings: string[], text = ''): N
     noiseLevel:       DEFAULT_NR_FORM.noiseLevel,
     licenseServer:    readLicense(ast),
     enDcSupport:      bool(ast.en_dc_support, false),
-    rfPorts:          readRfPorts(ast),
+    rfPorts:          readRfPorts(ast, warnings),
     logFilename:      str(ast.log_filename, DEFAULT_NR_FORM.logFilename),
     logLevel:         logOpts.level,
     logLayers:        logOpts.layers,
@@ -500,6 +513,8 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[], text = ''): 
     catMCeMode:           (str(cv(cell0, 'ce_mode'), 'A') as 'A' | 'B'),
     catMRepetitions:      num(cv(cell0, 'max_repetitions'), DEFAULT_LTE_FORM.catMRepetitions),
     licenseServer:        readLicense(ast),
+    enDcSupport:          bool(ast.en_dc_support, false),
+    rfPorts:              readRfPorts(ast, warnings),
     logFilename:          str(ast.log_filename, DEFAULT_LTE_FORM.logFilename),
     logLevel:             logOpts.level,
     logLayers:            logOpts.layers,

@@ -254,6 +254,9 @@ export interface RfPortEntry {
   /** MHz, FR2 external frequency translator. null → not emitted. */
   dlFreq: number | null;
   ulFreq: number | null;
+  /** Primitive keys from an imported port that the builder has no field for
+   *  (e.g. a per-port sample rate). Written back verbatim on generate. */
+  extra?: Record<string, string | number | boolean>;
 }
 
 export interface NRCellEntry {

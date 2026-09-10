@@ -3,6 +3,7 @@ import type { LTEFormState, LTECellEntry } from './lteConstants';
 import { LTE_TDD_BANDS, makeDefaultLteCell } from './lteConstants';
 import { formatGain } from './rfDefaults';
 import { licenseServerBlock } from './licenseBlock';
+import { enDcSupportLine, rfPortsBlock } from './rootBlocks';
 
 /**
  * For the 'ip' rf_driver, derive per-port { dst, src } pairs that match the
@@ -376,7 +377,7 @@ ${portLines}
   gtp_addr: "${form.gtpAddr}",
   // enb.cfg: enb_id
   enb_id: ${form.enbId},
-
+${enDcSupportLine(form.enDcSupport)}${rfPortsBlock(form.rfPorts)}
 ${cellDefaultBlock}
 
   cell_list: [
