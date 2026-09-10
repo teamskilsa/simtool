@@ -26,54 +26,14 @@ interface StorageMetadata {
 export class ConfigStorageService {
   private readonly storageAdapter = getStorageAdapter();
 
-  async importConfigs(userId: string, configs: ConfigItem[]): Promise<void> {
-      try {
-          const configsToStore = configs.map(config => ({
-              name: config.name,
-              module: config.module,
-              content: config.content,
-              metadata: {
-                  version: 1,
-                  tags: ['imported'],
-                  isTemplate: false,
-                  visibility: 'private',
-                  path: config.path || '',
-                  checksum: '',
-                  description: ''
-              },
-              sharing: {
-                  ownerId: userId,
-                  sharedWith: []
-              },
-              status: 'active',
-              createdBy: {
-                  id: userId,
-                  username: 'system'
-              },
-              updatedBy: {
-                  id: userId,
-                  username: 'system'
-              }
-          }));
-
-          const result = await this.storageAdapter.configs.bulkCreate(configsToStore);
-
-          if (!result.success) {
-              throw new Error(result.error?.message || 'Failed to import configurations');
-          }
-
-          logger.info(`Imported ${configs.length} configurations for user ${userId}`);
-      } catch (error) {
-          logger.error('Failed to import configs:', error);
-          throw new Error('Failed to import configurations');
-      }
-  }
   // Convert ConfigItem to StoredConfig format
   private toStoredConfig(config: ConfigItem, userId: string): Omit<StoredConfig, 'id' | 'createdAt' | 'updatedAt'> {
     return {
       name: config.name,
       module: config.module,
-      content: config.content,
+      // ConfigItem.content is optional (list views omit it). Writing
+      // `undefined` to disk produced a file containing the text "undefined".
+      content: config.content ?? '',
       metadata: {
         version: 1,
         tags: [],
@@ -117,30 +77,28 @@ export class ConfigStorageService {
 
   async getConfigs(userId: string): Promise<ConfigItem[]> {
     try {
-      const result = await this.storageAdapter.configs.list({
-        userId: userId
-      });
+      const result = await this.storageAdapter.configs.list({ userId });
 
       if (!result.success) {
         throw new Error(result.error?.message || 'Failed to fetch configurations');
       }
 
-      return result.data.map(config => this.toConfigItem(config));
+      return (result.data ?? []).map(config => this.toConfigItem(config));
     } catch (error) {
       logger.error('Failed to get configs:', error);
       return [];
     }
   }
 
+  // There were two importConfigs() implementations in this class. In a class
+  // body the later one silently wins, so the first (which built its own
+  // objects and omitted `versions`) was dead code. This is the one that ran.
   async importConfigs(userId: string, configs: ConfigItem[]): Promise<void> {
     try {
-      const configsToStore = configs.map(config => ({
-        ...this.toStoredConfig(config, userId),
-        metadata: {
-          ...this.toStoredConfig(config, userId).metadata,
-          tags: ['imported']
-        }
-      }));
+      const configsToStore = configs.map(config => {
+        const stored = this.toStoredConfig(config, userId);
+        return { ...stored, metadata: { ...stored.metadata, tags: ['imported'] } };
+      });
 
       const result = await this.storageAdapter.configs.bulkCreate(configsToStore);
 
@@ -158,7 +116,7 @@ export class ConfigStorageService {
   async saveConfig(userId: string, config: ConfigItem): Promise<void> {
     try {
       const storedConfig = this.toStoredConfig(config, userId);
-      
+
       if (config.id) {
         // Update existing config
         const result = await this.storageAdapter.configs.update(config.id, storedConfig);
@@ -183,7 +141,7 @@ export class ConfigStorageService {
   async deleteConfig(userId: string, configId: string): Promise<void> {
     try {
       const result = await this.storageAdapter.configs.delete(configId);
-      
+
       if (!result.success) {
         throw new Error(result.error?.message || 'Failed to delete configuration');
       }
@@ -197,16 +155,13 @@ export class ConfigStorageService {
 
   async getConfigsByModule(userId: string, module: ModuleType): Promise<ConfigItem[]> {
     try {
-      const result = await this.storageAdapter.configs.list({
-        userId: userId,
-        module: module
-      });
+      const result = await this.storageAdapter.configs.list({ userId, module });
 
       if (!result.success) {
         throw new Error(result.error?.message || 'Failed to fetch configurations');
       }
 
-      return result.data.map(config => this.toConfigItem(config));
+      return (result.data ?? []).map(config => this.toConfigItem(config));
     } catch (error) {
       logger.error('Failed to get configs by module:', error);
       return [];
@@ -216,8 +171,8 @@ export class ConfigStorageService {
   async getStorageStats(userId: string): Promise<StorageMetadata['directories']> {
     try {
       const configs = await this.getConfigs(userId);
-      
-      const directories = {
+
+      return {
         [STORAGE_DIRECTORIES.IMPORTED]: {
           count: configs.filter(c => c.isImported).length,
           lastUpdated: new Date().toISOString()
@@ -231,8 +186,6 @@ export class ConfigStorageService {
           lastUpdated: new Date().toISOString()
         }
       };
-
-      return directories;
     } catch (error) {
       logger.error('Failed to get storage stats:', error);
       throw new Error('Failed to get storage statistics');

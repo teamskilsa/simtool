@@ -8,6 +8,17 @@ import { FileConfigStorage, FileSystemStorage, FileUserStorage, FileAutomationSt
 import { FileSystemHelper } from './utils';
 import { StorageResult, IndexEntry } from '../storage.types';
 
+/** The fields the index rebuilders read out of each stored JSON document. */
+interface IndexableDoc {
+  id: string;
+  name?: string;
+  status?: string;
+  module?: string;
+  updatedAt: string;
+  metadata?: { version?: number };
+  schedule?: { lastRun?: string };
+}
+
 export class StorageAdapter implements IStorageAdapter {
   public readonly configs: FileConfigStorage;
   public readonly systems: FileSystemStorage;
@@ -48,7 +59,9 @@ export class StorageAdapter implements IStorageAdapter {
       this.pathResolver.getSystemsPath(),
       this.pathResolver.getPublicPath(),
       this.pathResolver.getAutomationPath(),
-      this.pathResolver.getIndexPath(''),
+      // Was getIndexPath(''), which resolved to a file called ".json" inside
+      // the index directory and created that as a directory.
+      this.pathResolver.getIndexesPath(),
       this.pathResolver.getTempPath()
     ];
 
@@ -81,18 +94,18 @@ export class StorageAdapter implements IStorageAdapter {
       ]);
     }
   }
-  
+
   async backup(backupPath: string): Promise<StorageResult<string>> {
     try {
       const backupId = FileSystemHelper.generateId();
       const backupDir = path.join(backupPath, backupId);
-      
+
       // Create backup directory
       await FileSystemHelper.ensureDir(backupDir);
-      
+
       // Copy all data
       await this.copyDirectory(this.pathResolver.getBasePath(), backupDir);
-      
+
       // Create backup metadata
       const metadata = {
         id: backupId,
@@ -103,10 +116,10 @@ export class StorageAdapter implements IStorageAdapter {
         path.join(backupDir, 'backup-metadata.json'),
         metadata
       );
-      
-      return FileSystemHelper.createStorageResult(true, backupDir);
+
+      return FileSystemHelper.createStorageResult<string>(true, backupDir);
     } catch (error) {
-      return FileSystemHelper.createStorageResult(false, undefined, error as Error);
+      return FileSystemHelper.createStorageResult<string>(false, undefined, error as Error);
     }
   }
 
@@ -125,16 +138,16 @@ export class StorageAdapter implements IStorageAdapter {
 
       // Clear current data
       await this.cleanup();
-      
+
       // Restore from backup
       await this.copyDirectory(backupPath, this.pathResolver.getBasePath());
-      
+
       // Reinitialize
       await this.initialize();
-      
-      return FileSystemHelper.createStorageResult(true);
+
+      return FileSystemHelper.createStorageResult<void>(true);
     } catch (error) {
-      return FileSystemHelper.createStorageResult(false, undefined, error as Error);
+      return FileSystemHelper.createStorageResult<void>(false, undefined, error as Error);
     }
   }
 
@@ -157,12 +170,12 @@ export class StorageAdapter implements IStorageAdapter {
   private async rebuildConfigIndex(): Promise<void> {
     const indexEntries: IndexEntry[] = [];
     const usersPath = this.pathResolver.getUsersPath();
-    
+
     // Index user configurations
     const users = await FileSystemHelper.listFiles(usersPath);
     for (const userId of users) {
       const userConfigPath = path.join(usersPath, userId, 'configs');
-      
+
       // Index private configs
       const privateConfigs = await this.indexConfigDirectory(
         path.join(userConfigPath, 'private'),
@@ -170,7 +183,7 @@ export class StorageAdapter implements IStorageAdapter {
         'private'
       );
       indexEntries.push(...privateConfigs);
-      
+
       // Index shared configs
       const sharedConfigs = await this.indexConfigDirectory(
         path.join(userConfigPath, 'shared'),
@@ -179,7 +192,7 @@ export class StorageAdapter implements IStorageAdapter {
       );
       indexEntries.push(...sharedConfigs);
     }
-    
+
     // Index public configurations
     const publicConfigs = await this.indexConfigDirectory(
       this.pathResolver.getPublicPath(),
@@ -203,7 +216,7 @@ export class StorageAdapter implements IStorageAdapter {
     for (const systemFile of systems) {
       if (systemFile.endsWith('.json')) {
         const systemPath = path.join(systemsPath, systemFile);
-        const system = await FileSystemHelper.readJSON(systemPath);
+        const system = await FileSystemHelper.readJSON<IndexableDoc>(systemPath);
         indexEntries.push({
           id: system.id,
           type: 'system',
@@ -232,7 +245,7 @@ export class StorageAdapter implements IStorageAdapter {
     for (const suiteFile of suites) {
       if (suiteFile.endsWith('.json')) {
         const suitePath = path.join(automationPath, suiteFile);
-        const suite = await FileSystemHelper.readJSON(suitePath);
+        const suite = await FileSystemHelper.readJSON<IndexableDoc>(suitePath);
         indexEntries.push({
           id: suite.id,
           type: 'suite',
@@ -264,7 +277,7 @@ export class StorageAdapter implements IStorageAdapter {
     for (const file of files) {
       if (file.endsWith('.json')) {
         const configPath = path.join(dirPath, file);
-        const config = await FileSystemHelper.readJSON(configPath);
+        const config = await FileSystemHelper.readJSON<IndexableDoc>(configPath);
         indexEntries.push({
           id: config.id,
           type: 'config',
@@ -272,7 +285,7 @@ export class StorageAdapter implements IStorageAdapter {
           metadata: {
             name: config.name,
             module: config.module,
-            version: config.metadata.version,
+            version: config.metadata?.version,
             visibility,
             userId
           },

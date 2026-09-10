@@ -24,6 +24,18 @@ export class FileSystemHelper {
     return JSON.parse(content);
   }
 
+  /** True if the path exists. StorageAdapter.restore() and the config store
+   *  both called this, but it was never defined — restore() threw
+   *  "fileExists is not a function" on its first line. */
+  static async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   static async deleteFile(filePath: string): Promise<void> {
     try {
       await fs.unlink(filePath);
@@ -62,17 +74,22 @@ export class FileSystemHelper {
     return crypto.createHash('sha256').update(content).digest('hex');
   }
 
+  /**
+   * Success no longer requires a truthy `data`. It used to, so every void
+   * operation — restore() is one — came back as a failure with no error
+   * attached, even when it had worked.
+   */
   static createStorageResult<T>(success: boolean, data?: T, error?: Error): StorageResult<T> {
-    if (success && data) {
+    if (success) {
       return { success: true, data };
     }
     return {
       success: false,
-      error: error ? {
+      error: {
         code: 'STORAGE_ERROR',
-        message: error.message,
-        details: error.stack
-      } : undefined
+        message: error?.message ?? 'Storage operation failed',
+        details: error?.stack,
+      },
     };
   }
 }

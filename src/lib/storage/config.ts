@@ -107,6 +107,21 @@ export class StoragePathResolver {
   }
 
   /**
+   * Get a single user's directory. FileUserStorage called this, but only
+   * getUsersPath existed, so every preferences read and write threw.
+   */
+  getUserPath(userId: string): string {
+    return joinPath(this.paths.users, userId);
+  }
+
+  /**
+   * Get the directory that holds the index files.
+   */
+  getIndexesPath(): string {
+    return this.paths.indexes;
+  }
+
+  /**
    * Get systems path
    */
   getSystemsPath(): string {
@@ -137,7 +152,7 @@ export class StoragePathResolver {
   /**
    * Get index path
    */
-  getIndexPath(indexType: 'configs' | 'users' | 'systems'): string {
+  getIndexPath(indexType: 'configs' | 'users' | 'systems' | 'automation'): string {
     return joinPath(this.paths.indexes, `${indexType}.json`);
   }
 

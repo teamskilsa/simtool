@@ -1,67 +1,60 @@
 // src/lib/storage/adapters/file/user.storage.ts
+//
+// One preferences.json per user, at data/users/<userId>/preferences.json.
 
 import path from 'path';
 import { IUserPreferencesStorage } from '../../storage.interface';
 import { StoragePathResolver } from '../../config';
-import { 
-  UserPreferences, 
-  StorageQuery, 
-  StorageResult 
+import {
+  UserPreferences,
+  StorageQuery,
+  StorageResult
 } from '../../storage.types';
 import { FileSystemHelper } from '../utils';
 
+const DEFAULT_CUSTOMIZATION: UserPreferences['customization'] = {
+  editorFontSize: 14,
+  editorTheme: 'default',
+  showLineNumbers: true,
+};
+
+function fail<T>(code: string, error: unknown, fallback: string): StorageResult<T> {
+  return {
+    success: false,
+    error: { code, message: error instanceof Error ? error.message : fallback },
+  };
+}
+
 export class FileUserStorage implements IUserPreferencesStorage {
-  private pathResolver: StoragePathResolver;
-  
-  constructor(pathResolver: StoragePathResolver) {
-    this.pathResolver = pathResolver;
-  }
+  constructor(private readonly pathResolver: StoragePathResolver) {}
 
   async create(data: Omit<UserPreferences, 'id' | 'createdAt' | 'updatedAt'>): Promise<StorageResult<UserPreferences>> {
     try {
-      const id = FileSystemHelper.generateId();
       const now = new Date();
       const preferences: UserPreferences = {
         ...data,
-        id,
+        id: FileSystemHelper.generateId(),
         createdAt: now,
         updatedAt: now,
-        customization: {
-          editorFontSize: 14,
-          editorTheme: 'default',
-          showLineNumbers: true,
-          ...data.customization
-        }
+        // Defaults first, then the caller's values. The old literal listed
+        // each default and then spread a fully-typed customization over the
+        // top, so the defaults could never apply.
+        customization: { ...DEFAULT_CUSTOMIZATION, ...data.customization },
       };
 
-      const preferencesPath = this.getUserPreferencesPath(preferences.userId);
-      await FileSystemHelper.writeJSON(preferencesPath, preferences);
-
+      await FileSystemHelper.writeJSON(this.getUserPreferencesPath(preferences.userId), preferences);
       return { success: true, data: preferences };
     } catch (error) {
-      return { 
-        success: false, 
-        error: { 
-          code: 'CREATE_ERROR',
-          message: error instanceof Error ? error.message : 'Failed to create preferences'
-        }
-      };
+      return fail('CREATE_ERROR', error, 'Failed to create preferences');
     }
   }
 
   async getByUserId(userId: string): Promise<StorageResult<UserPreferences>> {
     try {
-      const preferencesPath = this.getUserPreferencesPath(userId);
-      const preferences = await FileSystemHelper.readJSON<UserPreferences>(preferencesPath);
+      const preferences = await FileSystemHelper.readJSON<UserPreferences>(this.getUserPreferencesPath(userId));
       return { success: true, data: preferences };
     } catch (error) {
-      return { 
-        success: false, 
-        error: { 
-          code: 'GET_ERROR',
-          message: error instanceof Error ? error.message : 'Failed to get preferences'
-        }
-      };
+      return fail('GET_ERROR', error, 'Failed to get preferences');
     }
   }
 
@@ -78,18 +71,59 @@ export class FileUserStorage implements IUserPreferencesStorage {
         updatedAt: new Date()
       };
 
-      const preferencesPath = this.getUserPreferencesPath(userId);
-      await FileSystemHelper.writeJSON(preferencesPath, updated);
-
+      await FileSystemHelper.writeJSON(this.getUserPreferencesPath(userId), updated);
       return { success: true, data: updated };
     } catch (error) {
-      return { 
-        success: false, 
-        error: { 
-          code: 'UPDATE_ERROR',
-          message: error instanceof Error ? error.message : 'Failed to update preferences'
+      return fail('UPDATE_ERROR', error, 'Failed to update preferences');
+    }
+  }
+
+  // ── Generic operations required by IStorageOperations ──────────────────
+  // Preferences are addressed by user, so these resolve an id to its user
+  // first. None of them existed, so the class did not satisfy its interface.
+
+  async get(id: string): Promise<StorageResult<UserPreferences>> {
+    const direct = await this.getByUserId(id);
+    if (direct.success) return direct;
+    const listed = await this.list();
+    const match = (listed.data ?? []).find(p => p.id === id);
+    return match ? { success: true, data: match } : fail('NOT_FOUND', null, `Preferences not found: ${id}`);
+  }
+
+  async update(id: string, data: Partial<UserPreferences>): Promise<StorageResult<UserPreferences>> {
+    const found = await this.get(id);
+    if (!found.success || !found.data) return found;
+    return this.updateByUserId(found.data.userId, data);
+  }
+
+  async delete(id: string): Promise<StorageResult<void>> {
+    try {
+      const found = await this.get(id);
+      if (!found.success || !found.data) return fail('NOT_FOUND', null, `Preferences not found: ${id}`);
+      await FileSystemHelper.deleteFile(this.getUserPreferencesPath(found.data.userId));
+      return { success: true };
+    } catch (error) {
+      return fail('DELETE_ERROR', error, 'Failed to delete preferences');
+    }
+  }
+
+  async list(query?: StorageQuery): Promise<StorageResult<UserPreferences[]>> {
+    try {
+      const users = await FileSystemHelper.listFiles(this.pathResolver.getUsersPath());
+      const all: UserPreferences[] = [];
+      for (const userId of users) {
+        if (query?.userId && query.userId !== userId) continue;
+        const prefPath = this.getUserPreferencesPath(userId);
+        if (!await FileSystemHelper.fileExists(prefPath)) continue;
+        try {
+          all.push(await FileSystemHelper.readJSON<UserPreferences>(prefPath));
+        } catch {
+          // unreadable preferences file — skip rather than fail the listing
         }
-      };
+      }
+      return { success: true, data: all };
+    } catch (error) {
+      return fail('LIST_ERROR', error, 'Failed to list preferences');
     }
   }
 

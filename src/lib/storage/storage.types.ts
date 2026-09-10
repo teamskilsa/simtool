@@ -33,6 +33,8 @@ export interface UserPreferences {
     editorTheme: string;
     showLineNumbers: boolean;
   };
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 /**
@@ -79,7 +81,12 @@ export interface StoredConfig extends BaseEntity {
   /** True for configs pulled from a system rather than authored here. */
   isServerConfig?: boolean;
   metadata: ConfigMetadata;
-  versions: ConfigVersion[];
+  /** Never populated: versioning was designed but not built (see the note in
+   *  storage.interface.ts). Optional so callers are not forced to invent one. */
+  versions?: ConfigVersion[];
+  /** mtime of the file on disk. The config list API and the UI's "Modified"
+   *  column read this name; updatedAt carries the same value. */
+  modifiedAt?: Date;
   sharing: {
     ownerId: string;
     sharedWith: Array<{

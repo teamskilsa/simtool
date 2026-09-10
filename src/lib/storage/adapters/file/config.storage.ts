@@ -1,352 +1,251 @@
+// src/lib/storage/adapters/file/config.storage.ts
+//
+// File-backed config storage. Configs are raw Amarisoft .cfg text stored at
+// data/users/<owner>/configs/private/<module>/<name>; the file name is the id.
 import path from 'path';
 import fs from 'fs/promises';
 import { IConfigStorage } from '../../storage.interface';
-import { StoragePathResolver } from '../../config';
-import { StoredConfig, StorageResult } from '../../storage.types';
+import { StoragePathResolver, type ModuleType } from '../../config';
+import { StoredConfig, StorageResult, StorageQuery } from '../../storage.types';
 import { FileSystemHelper } from '../utils';
-import { Collection } from 'mongodb';
+
+const MODULES: ModuleType[] = ['enb', 'gnb', 'ims', 'mme', 'ue', 'ue_db'];
+
+type NewConfig = Omit<StoredConfig, 'id' | 'createdAt' | 'updatedAt'>;
+
+function fail<T>(code: string, message: string, details?: unknown): StorageResult<T> {
+  return { success: false, error: { code, message, details } };
+}
+
+function isConfigFile(file: string): boolean {
+  // Any plausible Amarisoft cfg wrapper; skips hidden files and .bak etc.
+  const lower = file.toLowerCase();
+  return !file.startsWith('.')
+    && (lower.endsWith('.cfg') || lower.endsWith('.conf') || lower.endsWith('.json') || lower.endsWith('.txt'));
+}
 
 export class FileConfigStorage implements IConfigStorage {
-  private pathResolver?: StoragePathResolver;
-  private collection?: Collection;
+  // A Mongo `Collection` branch used to live here too. It was unreachable:
+  // StorageAdapter refuses NEXT_PUBLIC_STORAGE_TYPE=mongodb before it ever
+  // constructs this class.
+  constructor(private readonly pathResolver: StoragePathResolver) {}
 
-  constructor(pathResolverOrCollection: StoragePathResolver | Collection) {
-    if (pathResolverOrCollection instanceof StoragePathResolver) {
-      this.pathResolver = pathResolverOrCollection;
-    } else {
-      this.collection = pathResolverOrCollection;
-    }
+  private moduleDir(ownerId: string, module: string): string {
+    return path.join(this.pathResolver.getUsersPath(), ownerId, 'configs', 'private', module);
   }
 
-  async create(data: Omit<StoredConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<StorageResult<StoredConfig>> {
+  async create(data: NewConfig): Promise<StorageResult<StoredConfig>> {
     try {
-      console.log('Storage - Creating config:', {
-        name: data.name,
-        module: data.module,
-        contentLength: data.content?.length
-      });
-  
-      if (this.pathResolver) {
-        // Create base config directory
-        const moduleDir = path.join(
-          this.pathResolver.getUsersPath(),
-          data.sharing.ownerId,
-          'configs',
-          'private',
-          data.module
-        );
-  
-        await FileSystemHelper.ensureDir(moduleDir);
-  
-        // Create config file with original name
-        const configPath = path.join(moduleDir, data.name);
-        await fs.writeFile(configPath, data.content, 'utf8');
-  
-        const now = new Date();
-        const config: StoredConfig = {
+      const moduleDir = this.moduleDir(data.sharing.ownerId, data.module);
+      await FileSystemHelper.ensureDir(moduleDir);
+
+      // Keep the original file name — deploy copies it to the box verbatim.
+      await fs.writeFile(path.join(moduleDir, data.name), data.content, 'utf8');
+
+      const now = new Date();
+      return {
+        success: true,
+        data: {
+          ...data,
           id: data.name,
-          name: data.name,
-          module: data.module,
-          content: data.content,
-          path: data.path,
           size: data.content.length,
-          isServerConfig: true,
+          isServerConfig: data.isServerConfig ?? true,
+          versions: data.versions ?? [],
+          status: 'active',
           createdAt: now,
           updatedAt: now,
-          metadata: data.metadata,
-          sharing: data.sharing,
-          status: 'active',
-          createdBy: data.createdBy,
-          updatedBy: data.createdBy
-        };
-  
-        console.log('Storage - Config created:', configPath);
-        return { success: true, data: config };
-      }
-  
-      throw new Error('Storage not initialized');
+          modifiedAt: now,
+          updatedBy: data.createdBy,
+        },
+      };
     } catch (error) {
       console.error('Create error:', error);
-      return { 
-        success: false, 
-        error: { message: 'Failed to create config' }
-      };
+      return fail('CREATE_ERROR', 'Failed to create config', error);
     }
   }
-
 
   /**
    * Create many configs in one call. Declared on IConfigStorage and called
    * from storage.service.ts, but never implemented — those call sites threw
-   * "bulkCreate is not a function". Sequential on purpose: create() writes
-   * to the index, and concurrent writers would clobber each other.
+   * "bulkCreate is not a function". Sequential on purpose so a failure stops
+   * at the config that caused it.
    */
-  async bulkCreate(
-    configs: Array<Omit<StoredConfig, 'id' | 'createdAt' | 'updatedAt'>>,
-  ): Promise<StorageResult<StoredConfig[]>> {
+  async bulkCreate(configs: NewConfig[]): Promise<StorageResult<StoredConfig[]>> {
     const created: StoredConfig[] = [];
     for (const cfg of configs) {
       const result = await this.create(cfg);
       if (!result.success || !result.data) {
-        return {
-          success: false,
-          error: {
-            code: 'BULK_CREATE_FAILED',
-            message: `bulkCreate failed on "${cfg.name}"`,
-            details: result.error,
-          },
-        };
+        return fail('BULK_CREATE_FAILED', `bulkCreate failed on "${cfg.name}"`, result.error);
       }
       created.push(result.data);
     }
     return { success: true, data: created };
   }
 
+  /**
+   * Configs are raw .cfg text, not JSON. This used to locate the entry via
+   * list() and then readJSON() the file, which threw on every real config —
+   * get() could not succeed. list() already carries the content.
+   */
   async get(id: string): Promise<StorageResult<StoredConfig>> {
-    try {
-      if (this.collection) {
-        const config = await this.collection.findOne({ id });
-        if (!config) {
-          return {
-            success: false,
-            error: { message: 'Configuration not found' }
-          };
-        }
-        return { success: true, data: config as StoredConfig };
-      }
-
-      if (!this.pathResolver) {
-        throw new Error('PathResolver not initialized');
-      }
-
-      const listResult = await this.list();
-      if (!listResult.success) {
-        throw new Error('Failed to list configurations');
-      }
-
-      const config = listResult.data.find(c => c.id === id);
-      if (!config) {
-        return {
-          success: false,
-          error: { message: 'Configuration not found' }
-        };
-      }
-
-      const configPath = path.join(this.getConfigDir(config), config.name);
-      const configData = await FileSystemHelper.readJSON<StoredConfig>(configPath);
-      return { success: true, data: configData };
-    } catch (error) {
-      console.error('Get error:', error);
-      return {
-        success: false,
-        error: { message: error instanceof Error ? error.message : 'Failed to get configuration' }
-      };
+    const listed = await this.list();
+    if (!listed.success) {
+      return fail('GET_ERROR', listed.error?.message ?? 'Failed to list configurations');
     }
+    const config = (listed.data ?? []).find(c => c.id === id);
+    return config
+      ? { success: true, data: config }
+      : fail('NOT_FOUND', `Configuration not found: ${id}`);
   }
 
   async list(query?: StorageQuery): Promise<StorageResult<StoredConfig[]>> {
     try {
-      if (!this.pathResolver) {
-        throw new Error('PathResolver not initialized');
-      }
-
-      const configs: StoredConfig[] = [];
       const userId = query?.userId || 'admin';
-      const baseConfigPath = path.join(
-        this.pathResolver.getUsersPath(),
-        userId,
-        'configs',
-        'private'
-      );
+      let configs: StoredConfig[] = [];
 
-      const modules = ['enb', 'gnb', 'ims', 'mme', 'ue', 'ue_db'];
-
-      for (const module of modules) {
-        const modulePath = path.join(baseConfigPath, module);
-        
+      for (const module of MODULES) {
+        const modulePath = this.moduleDir(userId, module);
+        let files: string[];
         try {
-          const files = await fs.readdir(modulePath);
-          
-          for (const file of files) {
-            // Accept .cfg, .conf, .json, .txt — any plausible Amarisoft cfg
-            // wrapper. Excludes hidden files and obvious non-configs (.bak etc).
-            const lower = file.toLowerCase();
-            const isConfig = lower.endsWith('.cfg')
-                          || lower.endsWith('.conf')
-                          || lower.endsWith('.json')
-                          || lower.endsWith('.txt');
-            if (!isConfig || file.startsWith('.')) continue;
+          files = await fs.readdir(modulePath);
+        } catch {
+          continue; // module directory doesn't exist
+        }
 
-            const filePath = path.join(modulePath, file);
-            try {
-              const content = await fs.readFile(filePath, 'utf8');
-              const stats = await fs.stat(filePath);
-              
-              configs.push({
-                id: file,
-                name: file,
-                module: module,
-                content: content,
+        for (const file of files) {
+          if (!isConfigFile(file)) continue;
+          const filePath = path.join(modulePath, file);
+          try {
+            const [content, stats] = await Promise.all([
+              fs.readFile(filePath, 'utf8'),
+              fs.stat(filePath),
+            ]);
+            const config: StoredConfig = {
+              id: file,
+              name: file,
+              module,
+              content,
+              path: filePath,
+              size: stats.size,
+              isServerConfig: true,
+              createdAt: stats.birthtime,
+              updatedAt: stats.mtime,
+              modifiedAt: stats.mtime,
+              createdBy: { id: userId, username: 'System' },
+              updatedBy: { id: userId, username: 'System' },
+              metadata: {
+                version: 1,
+                tags: [],
+                isTemplate: false,
+                visibility: 'private',
                 path: filePath,
-                size: stats.size,
-                isServerConfig: true,
-                createdAt: stats.birthtime,
-                modifiedAt: stats.mtime,
-                createdBy: {
-                  id: userId,
-                  username: 'System'
-                },
-                updatedBy: {
-                  id: userId,
-                  username: 'System'
-                },
-                metadata: {
-                  version: 1,
-                  tags: [],
-                  isTemplate: false,
-                  visibility: 'private',
-                  path: filePath,
-                  checksum: '',
-                  description: ''
-                },
-                sharing: {
-                  ownerId: userId,
-                  sharedWith: []
-                },
-                status: 'active'
-              });
-            } catch (err) {
-              console.error(`Error reading config ${file}:`, err);
-            }
+                checksum: '',
+                description: '',
+              },
+              versions: [],
+              sharing: { ownerId: userId, sharedWith: [] },
+              status: 'active',
+            };
+            // The query used to be ignored apart from userId, so
+            // getConfigsByModule() returned every module's configs.
+            if (this.matchesQuery(config, query)) configs.push(config);
+          } catch (err) {
+            console.error(`Error reading config ${file}:`, err);
           }
-        } catch (err) {
-          // Module directory doesn't exist, skip it
-          continue;
         }
       }
 
+      if (query?.offset) configs = configs.slice(query.offset);
+      if (query?.limit) configs = configs.slice(0, query.limit);
       return { success: true, data: configs };
     } catch (error) {
       console.error('List error:', error);
-      return { success: false, error: { message: 'Failed to list configs' }};
+      return fail('LIST_ERROR', 'Failed to list configs', error);
     }
   }
 
+  /**
+   * Called by ConfigStorageService.saveConfig for every save of an existing
+   * config, but never implemented — saving an edited config threw
+   * "update is not a function". Content is written back to the same file.
+   * The id is the file name, so renaming or moving modules is not done here.
+   */
+  async update(id: string, data: Partial<StoredConfig>): Promise<StorageResult<StoredConfig>> {
+    try {
+      const current = await this.get(id);
+      if (!current.success || !current.data) {
+        return fail('NOT_FOUND', `Configuration not found: ${id}`);
+      }
+      const existing = current.data;
+      const content = data.content ?? existing.content;
+
+      const filePath = path.join(
+        this.moduleDir(existing.sharing?.ownerId || 'admin', existing.module),
+        existing.name,
+      );
+      await fs.writeFile(filePath, content, 'utf8');
+
+      const now = new Date();
+      return {
+        success: true,
+        data: {
+          ...existing,
+          ...data,
+          id: existing.id,
+          name: existing.name,
+          module: existing.module,
+          path: existing.path,
+          content,
+          size: content.length,
+          createdAt: existing.createdAt,
+          updatedAt: now,
+          modifiedAt: now,
+        },
+      };
+    } catch (error) {
+      console.error('Update error:', error);
+      return fail('UPDATE_ERROR', 'Failed to update config', error);
+    }
+  }
 
   async delete(id: string): Promise<StorageResult<void>> {
     try {
-      if (!this.pathResolver) {
-        throw new Error('PathResolver not initialized');
-      }
-
-      console.log('Attempting to delete config:', id);
-
-      // First try to find the file by searching all module directories
-      const modules = ['enb', 'gnb', 'ims', 'mme', 'ue', 'ue_db'];
-      let foundPath = null;
-
-      for (const module of modules) {
-        const modulePath = path.join(
-          this.pathResolver.getUsersPath(),
-          'admin', // Default user
-          'configs',
-          'private',
-          module
-        );
-
+      // Search every module directory for the file.
+      for (const module of MODULES) {
+        const modulePath = this.moduleDir('admin', module);
+        let files: string[];
         try {
-          // Check if directory exists
-          await fs.access(modulePath);
-          const files = await fs.readdir(modulePath);
-          
-          if (files.includes(id)) {
-            foundPath = path.join(modulePath, id);
-            break;
-          }
-        } catch (err) {
-          // Directory doesn't exist, continue to next module
-          continue;
+          files = await fs.readdir(modulePath);
+        } catch {
+          continue; // directory doesn't exist
+        }
+        if (files.includes(id)) {
+          await fs.unlink(path.join(modulePath, id));
+          return { success: true };
         }
       }
-
-      if (!foundPath) {
-        console.log('File not found for deletion:', id);
-        return { 
-          success: false, 
-          error: { message: 'Configuration file not found' }
-        };
-      }
-
-      console.log('Deleting file at path:', foundPath);
-      await fs.unlink(foundPath);
-
-      return { success: true };
+      return fail('NOT_FOUND', 'Configuration file not found');
     } catch (error) {
       console.error('Delete error:', error);
-      return { 
-        success: false, 
-        error: { message: 'Failed to delete config' }
-      };
+      return fail('DELETE_ERROR', 'Failed to delete config', error);
     }
-  }
-
-  private getConfigDir(config: StoredConfig): string {
-    if (!this.pathResolver) throw new Error('PathResolver not initialized');
-    
-    // If sharing info is missing, use defaults
-    const ownerId = config.sharing?.ownerId || 'admin';
-    const visibility = config.metadata?.visibility || 'private';
-    
-    return path.join(
-      this.pathResolver.getUsersPath(),
-      ownerId,
-      'configs',
-      visibility === 'private' ? 'private' : 'shared',
-      config.module.toLowerCase()
-    );
-  }
-
-  private createSafeFileName(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(/[^a-z0-9-]/g, '')
-      .replace(/-+/g, '-')
-      .replace(/^-+|-+$/g, '');
-  }
-
-  private async getUniqueFilePath(originalPath: string): Promise<string> {
-    const dir = path.dirname(originalPath);
-    const ext = path.extname(originalPath);
-    const baseName = path.basename(originalPath, ext);
-    let finalPath = originalPath;
-    let counter = 1;
-
-    while (await FileSystemHelper.fileExists(finalPath)) {
-      finalPath = path.join(dir, `${baseName}-${counter}${ext}`);
-      counter++;
-    }
-
-    return finalPath;
-  }
-
-  private isValidConfigFile(filename: string): boolean {
-    const validExtensions = ['.cfg', '.conf', '.json'];
-    const ext = path.extname(filename).toLowerCase();
-    return validExtensions.includes(ext);
   }
 
   private matchesQuery(config: StoredConfig, query?: StorageQuery): boolean {
     if (!query) return true;
-  
+
     if (query.module && config.module !== query.module) return false;
     if (query.userId && config.sharing.ownerId !== query.userId) return false;
-    if (query.name && !config.name.toLowerCase().includes(query.name.toLowerCase())) return false;
+    if (query.status && config.status !== query.status) return false;
+    if (query.name) {
+      const matches = typeof query.name === 'string'
+        ? config.name.toLowerCase().includes(query.name.toLowerCase())
+        : query.name.test(config.name);
+      if (!matches) return false;
+    }
     if (query.createdAfter && new Date(config.createdAt) < query.createdAfter) return false;
     if (query.updatedAfter && new Date(config.updatedAt) < query.updatedAfter) return false;
-  
+
     return true;
   }
-
-  // ... other interface methods implementation
 }
