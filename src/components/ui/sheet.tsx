@@ -29,13 +29,14 @@ interface SheetPortalProps
   extends SheetPrimitive.DialogPortalProps,
     VariantProps<typeof portalVariants> {}
 
+// Radix's Portal renders no element of its own and takes no className;
+// the one this used to forward was silently discarded.
 const SheetPortal = ({
   position,
-  className,
   children,
   ...props
 }: SheetPortalProps) => (
-  <SheetPrimitive.Portal className={cn(className)} {...props}>
+  <SheetPrimitive.Portal {...props}>
     <div className={portalVariants({ position })}>{children}</div>
   </SheetPrimitive.Portal>
 )

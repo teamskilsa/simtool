@@ -29,6 +29,10 @@ const toastVariants = cva(
         default: "border bg-background",
         destructive:
           "destructive group border-destructive bg-destructive text-destructive-foreground",
+        // "Connected, but a check failed" — used by the Test Systems flows and
+        // never defined, so partial failures looked identical to success.
+        warning:
+          "border-amber-500/50 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-100",
       },
     },
     defaultVariants: {

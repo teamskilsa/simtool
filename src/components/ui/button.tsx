@@ -23,6 +23,10 @@ const buttonVariants = cva(
         default: "h-9 py-2 px-4",
         sm: "h-8 px-3 rounded-md",
         lg: "h-11 px-8 rounded-md",
+        // Square icon-only button. Used across the app (navbar, filters,
+        // user list, theme picker) but never defined, so those buttons fell
+        // back to text padding and rendered as wide pills.
+        icon: "h-9 w-9",
       },
     },
     defaultVariants: {
