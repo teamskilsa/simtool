@@ -74,8 +74,8 @@ console.log('\n--- verdict ---');
 console.log(`  Cell 1 (where the user set it) keeps gscn 7811 : ${cell1HasGscn ? 'yes' : 'NO'}`);
 console.log(`  Cell 2 (untouched) wrongly gets gscn 7811      : ${cell2HasGscn ? 'YES' : 'no'}`);
 
-const bug = !cell1HasGscn && cell2HasGscn;
-console.log(bug
-  ? '\n  BUG CONFIRMED: the GSCN moved from Cell 1 to Cell 2.'
-  : '\n  Not reproduced in this form.');
-process.exit(bug ? 1 : 0);
+const correct = cell1HasGscn && !cell2HasGscn;
+console.log(correct
+  ? '\n  PASS: the GSCN stayed on Cell 1 and did not leak onto Cell 2.'
+  : '\n  FAIL: the GSCN moved between cells (regression).');
+process.exit(correct ? 0 : 1);

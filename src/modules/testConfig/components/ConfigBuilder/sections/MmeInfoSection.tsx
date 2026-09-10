@@ -8,6 +8,7 @@
 import { Field } from './Field';
 import { BoxedSection, FIELD_GRID } from '../BoxedSection';
 import { Info } from 'lucide-react';
+import { InfoHint } from '../InfoHint';
 import type { NRFormState } from '../constants';
 
 interface Props { form: NRFormState; onChange: (key: string, value: any) => void; }
@@ -39,10 +40,17 @@ export function MmeInfoSection({ form, onChange }: Props) {
         </div>
       </BoxedSection>
 
-      <BoxedSection title="gNB / eNB Identity" hint="cfg root: gnb_id (NR) / enb_id (LTE) + tac">
+      <BoxedSection title="gNB / eNB Identity" hint="cfg root: gnb_id (NR) / enb_id (LTE) + tac + en_dc_support">
         <div className={FIELD_GRID}>
           <Field label="gNB ID" value={form.gnbId} onChange={v => onChange('gnbId', v)} placeholder="0x12345" />
           <Field label="TAC" value={form.tac} onChange={v => onChange('tac', v)} type="number" min={0} max={65535} />
+          <Field
+            label="EN-DC Support"
+            value={form.enDcSupport ?? false}
+            onChange={v => onChange('enDcSupport', v)}
+            type="checkbox"
+            hint={<InfoHint>cfg root: en_dc_support. Lets this gNB serve as the NR leg of an EN-DC (NSA) pair. Only written to the file when on.</InfoHint>}
+          />
         </div>
       </BoxedSection>
 

@@ -136,6 +136,83 @@ export function RFSection({ form, onChange, bare }: Props) {
           )}
         </div>
       </BoxedSection>
+
+      <RfPortsGroup form={form} onChange={onChange} />
     </div>
+  );
+}
+
+/**
+ * cfg root: rf_ports[].
+ *
+ * FR2 needs an external frequency translator, and the translator's DL/UL
+ * frequencies are declared per RF port. On FR1 the array carries no fields —
+ * it only states how many ports exist — so the group stays hidden unless the
+ * config is FR2 or already had rf_ports in it. An empty array means the key
+ * is omitted entirely, which is what the builder always did before.
+ */
+function RfPortsGroup({ form, onChange }: Props) {
+  const ports = form.rfPorts ?? [];
+  const isFR2 = form.fr2 === 1;
+  const cellCount = Math.max(1, form.cells?.length ?? 1);
+  if (!isFR2 && ports.length === 0) return null;
+
+  // One row per RF port: a port per cell, since the generator assigns
+  // rf_port: i to cell i.
+  const rowCount = Math.max(ports.length, isFR2 ? cellCount : 0);
+  const rows = Array.from({ length: rowCount }, (_, i) => ports[i] ?? { dlFreq: null, ulFreq: null });
+
+  const setPort = (idx: number, key: 'dlFreq' | 'ulFreq', raw: any) => {
+    const next = rows.map((p, i) =>
+      i === idx
+        ? { ...p, [key]: raw === '' || raw === null || Number.isNaN(Number(raw)) ? null : Number(raw) }
+        : p,
+    );
+    onChange('rfPorts', next);
+  };
+
+  return (
+    <BoxedSection
+      title="RF Ports"
+      hint="cfg root: rf_ports[]. FR2 requires an external frequency translator; these are its DL/UL frequencies for each port. Leave blank on FR1 — blank ports emit as {} and only declare that the port exists."
+      action={
+        ports.length > 0 ? (
+          <Button
+            size="sm" variant="ghost" className="h-7 text-xs"
+            onClick={() => onChange('rfPorts', [])}
+            title="Remove rf_ports from the generated config"
+          >
+            Clear
+          </Button>
+        ) : undefined
+      }
+    >
+      <div className="space-y-2.5">
+        {/* Three columns, not the shared field grid: a port is a label plus exactly two
+            fields, and the four-column grid split them across two lines. */}
+        {rows.map((p, i) => (
+          <div key={i} className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-2.5">
+            <div className="flex items-center h-8">
+              <span className="text-xs font-medium text-muted-foreground">
+                Port {i}
+                {form.cells?.[i]?.name ? ` — ${form.cells[i].name}` : ''}
+              </span>
+            </div>
+            <Field
+              label="DL Freq (MHz)" type="number"
+              value={p.dlFreq ?? ''}
+              onChange={v => setPort(i, 'dlFreq', v)}
+              placeholder="auto"
+            />
+            <Field
+              label="UL Freq (MHz)" type="number"
+              value={p.ulFreq ?? ''}
+              onChange={v => setPort(i, 'ulFreq', v)}
+              placeholder="auto"
+            />
+          </div>
+        ))}
+      </div>
+    </BoxedSection>
   );
 }

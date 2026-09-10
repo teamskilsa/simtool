@@ -131,6 +131,12 @@ export interface NRFormState {
    *  Empty server_addr → the line is omitted entirely, which is the right
    *  behaviour for a box that licences some other way. */
   licenseServer: { serverAddr: string; tag: string };
+  /** cfg root: en_dc_support — lets this gNB act as the NR leg of EN-DC.
+   *  Only emitted when true. */
+  enDcSupport: boolean;
+  /** cfg root: rf_ports[]. Empty array → the key is omitted entirely, which
+   *  is what every config the builder wrote before this did. */
+  rfPorts: RfPortEntry[];
   amfAddr: string;
   gtpAddr: string;
   gnbId: string;
@@ -238,6 +244,18 @@ export const DEFAULT_LAYERS: LayersConfig = {
 
 // Per-cell fields — stored in cells[] array. Shared fields (PLMN, RF, network)
 // stay at the top of NRFormState since they go into nr_cell_default.
+/** One entry of the cfg's top-level `rf_ports[]`.
+ *
+ *  In an FR1 config these are empty objects — the array only says how many
+ *  RF ports exist. Under FR2 each port can carry the external frequency
+ *  translator's DL/UL frequencies. We keep the array (empties included) so
+ *  re-saving an imported config reproduces what was there. */
+export interface RfPortEntry {
+  /** MHz, FR2 external frequency translator. null → not emitted. */
+  dlFreq: number | null;
+  ulFreq: number | null;
+}
+
 export interface NRCellEntry {
   name: string;                 // UI label, not written to cfg
   cellId: number;
@@ -319,6 +337,8 @@ export const DEFAULT_NR_FORM: NRFormState = {
   rxGain: 60,
   rxAntenna: 'rx',
   licenseServer: { serverAddr: '', tag: '' },
+  enDcSupport: false,
+  rfPorts: [],
   amfAddr: '127.0.1.100',
   gtpAddr: '127.0.1.1',
   gnbId: '0x12345',

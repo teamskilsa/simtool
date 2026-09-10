@@ -93,6 +93,48 @@ const scenarios: Scenario[] = [
     },
   },
   {
+    name: 'EN-DC support flag',
+    form: { ...base, band: 78, nrTdd: 1, enDcSupport: true } as any,
+    fields: ['enDcSupport'],
+    expect: (cfg) => check('en-dc', 'emits en_dc_support: true', /en_dc_support\s*:\s*true/.test(cfg)),
+  },
+  {
+    name: 'EN-DC off omits the key',
+    form: { ...base, band: 78, nrTdd: 1, enDcSupport: false } as any,
+    fields: ['enDcSupport'],
+    expect: (cfg) => check('en-dc off', 'no en_dc_support key when off', !/en_dc_support/.test(cfg)),
+  },
+  {
+    name: 'rf_ports with FR2 frequency translation',
+    form: {
+      ...base, band: 257, fr2: 1, nrTdd: 1, nrBandwidth: 100, subcarrierSpacing: 120,
+      dlNrArfcn: 2079167,
+      rfPorts: [{ dlFreq: 3500, ulFreq: 3500 }],
+    } as any,
+    fields: [],
+    expect: (cfg) => {
+      check('rf_ports', 'emits rf_ports', /rf_ports\s*:\s*\[/.test(cfg));
+      check('rf_ports', 'emits rf_dl_freq', /rf_dl_freq\s*:\s*3500/.test(cfg));
+      check('rf_ports', 'emits rf_ul_freq', /rf_ul_freq\s*:\s*3500/.test(cfg));
+    },
+  },
+  {
+    name: 'empty rfPorts omits the key',
+    form: { ...base, band: 78, nrTdd: 1, rfPorts: [] } as any,
+    fields: [],
+    expect: (cfg) => check('rf_ports empty', 'no rf_ports key when the array is empty', !/rf_ports/.test(cfg)),
+  },
+  {
+    name: 'custom cell names survive a round trip',
+    form: {
+      ...base, band: 78, nrTdd: 1, activeCellIdx: 0, cellId: 1,
+      cells: [makeDefaultCell('Macro North', { cellId: 1 }),
+              makeDefaultCell('Small Cell Lobby', { cellId: 2, dlNrArfcn: 636666 })],
+    } as any,
+    fields: [],
+    expect: () => {},
+  },
+  {
     name: 'layers: non-default values survive',
     form: {
       ...base, band: 78, nrTdd: 1,
@@ -145,6 +187,11 @@ for (const s of scenarios) {
   check(s.name, 'imports back', true);
 
   const f2: any = imported.form;
+  if (s.name.includes('cell names')) {
+    const got = f2.cells.map((c: any) => c.name);
+    check(s.name, 'names preserved', got[0] === 'Macro North' && got[1] === 'Small Cell Lobby',
+      `got ${JSON.stringify(got)}`);
+  }
   for (const k of s.fields) {
     check(s.name, `round trip ${k}`, f2[k] === (s.form as any)[k],
       `set ${JSON.stringify((s.form as any)[k])}, got ${JSON.stringify(f2[k])}`);

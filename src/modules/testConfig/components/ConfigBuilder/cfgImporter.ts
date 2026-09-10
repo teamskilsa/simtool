@@ -38,6 +38,57 @@ function readLicense(ast: any): { serverAddr: string; tag: string } {
   };
 }
 
+
+/**
+ * Recover per-cell names from the `/* name *\/` comment the generator writes
+ * as the first line of each cell block.
+ *
+ * The parser strips comments, so without this the importer relabelled every
+ * cell `Cell 1..N` and a user's own names ("Macro North") were lost on
+ * reopen. Walks the list at brace depth 1 so a comment inside a nested
+ * object cannot be mistaken for a cell name.
+ */
+function extractCellNames(text: string, listKey: string): (string | null)[] {
+  // Word-anchored: a bare indexOf('cell_list:') also matches inside
+  // 'nr_cell_list:', which would read the NR cells as the LTE ones on an
+  // NSA config where the NR list comes first.
+  const at = new RegExp(`(^|[^A-Za-z0-9_])${listKey}\\s*:`, 'm').exec(text);
+  if (!at) return [];
+  const key = at.index + at[0].length;
+  const open = text.indexOf('[', key);
+  if (open < 0) return [];
+
+  const names: (string | null)[] = [];
+  let depth = 0, entryStart = -1;
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '[' && depth === 0) { depth = 1; continue; }
+    if (depth === 1 && ch === ']') break;
+    if (ch === '{') { if (depth === 1) entryStart = i + 1; depth++; }
+    else if (ch === '}') {
+      depth--;
+      if (depth === 1 && entryStart >= 0) {
+        const head = text.slice(entryStart, i);
+        const m = head.match(/^\s*\/\*\s*([^*]+?)\s*\*\//);
+        names.push(m ? m[1] : null);
+        entryStart = -1;
+      }
+    }
+  }
+  return names;
+}
+
+/** rf_ports[] kept verbatim (empty entries included) so a re-save reproduces
+ *  what the source file had. */
+function readRfPorts(ast: any): { dlFreq: number | null; ulFreq: number | null }[] {
+  const ports = ast?.rf_ports;
+  if (!Array.isArray(ports)) return [];
+  return ports.map((p: any) => ({
+    dlFreq: p && typeof p.rf_dl_freq === 'number' ? p.rf_dl_freq : null,
+    ulFreq: p && typeof p.rf_ul_freq === 'number' ? p.rf_ul_freq : null,
+  }));
+}
+
 // ─── Type detection ─────────────────────────────────────────────────────────
 
 /**
@@ -153,7 +204,8 @@ function str(v: any, fallback: string): string {
 
 // ─── NR (gNB SA) mapper ─────────────────────────────────────────────────────
 
-function astToNRForm(ast: Record<string, any>, warnings: string[]): NRFormState {
+function astToNRForm(ast: Record<string, any>, warnings: string[], text = ''): NRFormState {
+  const cellNames = extractCellNames(text, 'nr_cell_list');
   const cellDefault = ast.nr_cell_default || {};
   const cellList: any[] = Array.isArray(ast.nr_cell_list) ? ast.nr_cell_list : [];
   const cell0 = cellList[0] || {};
@@ -171,7 +223,7 @@ function astToNRForm(ast: Record<string, any>, warnings: string[]): NRFormState 
 
   // Build per-cell entries
   const cells: NRCellEntry[] = (cellList.length > 0 ? cellList : [{}]).map((c: any, i: number) =>
-    makeDefaultCell(`Cell ${i + 1}`, {
+    makeDefaultCell(cellNames[i] || `Cell ${i + 1}`, {
       cellId: num(c.cell_id, DEFAULT_NR_FORM.cellId),
       band: num(c.band, band),
       nrBandwidth: num(c.bandwidth ?? cellDefault.bandwidth, DEFAULT_NR_FORM.nrBandwidth),
@@ -250,6 +302,8 @@ function astToNRForm(ast: Record<string, any>, warnings: string[]): NRFormState 
     channelType:      DEFAULT_NR_FORM.channelType,
     noiseLevel:       DEFAULT_NR_FORM.noiseLevel,
     licenseServer:    readLicense(ast),
+    enDcSupport:      bool(ast.en_dc_support, false),
+    rfPorts:          readRfPorts(ast),
     logFilename:      str(ast.log_filename, DEFAULT_NR_FORM.logFilename),
     logLevel:         logOpts.level,
     logLayers:        logOpts.layers,
@@ -265,7 +319,8 @@ function astToNRForm(ast: Record<string, any>, warnings: string[]): NRFormState 
 
 // ─── LTE (eNB) mapper ───────────────────────────────────────────────────────
 
-function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormState {
+function astToLTEForm(ast: Record<string, any>, warnings: string[], text = ''): LTEFormState {
+  const cellNames = extractCellNames(text, 'cell_list');
   const cellList: any[] = Array.isArray(ast.cell_list) ? ast.cell_list : [];
   const cell0 = cellList[0] || {};
 
@@ -366,7 +421,7 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormStat
     const cellNRb = num(cv(c, 'n_rb_dl'), num(cv(c, 'bandwidth'), 0));
     const cellBw = ({ 6: 1.4, 15: 3, 25: 5, 50: 10, 75: 15, 100: 20 } as Record<number, number>)[cellNRb]
       ?? num(cv(c, 'bandwidth'), DEFAULT_LTE_FORM.bandwidth);
-    return makeDefaultLteCell(`Cell ${i + 1}`, {
+    return makeDefaultLteCell(cellNames[i] || `Cell ${i + 1}`, {
       cellId: num(c.cell_id, i + 1),
       pci: num(c.n_id_cell, i),
       tac: num(c.tac, DEFAULT_LTE_FORM.tac),
@@ -499,12 +554,12 @@ function astToCoreForm(ast: Record<string, any>, warnings: string[]): NRFormStat
 
 // ─── NSA / EN-DC mapper — combine LTE anchor + NR secondary forms ─────────
 
-function astToNSAForm(ast: Record<string, any>, warnings: string[]): NSAFormState {
+function astToNSAForm(ast: Record<string, any>, warnings: string[], text = ''): NSAFormState {
   // Reuse the existing LTE and NR mappers — they each look at their own
   // top-level keys (cell_list / cell_default for LTE, nr_cell_list /
   // nr_cell_default for NR), so a single AST works for both.
-  const lteForm = astToLTEForm(ast, warnings);
-  const nrForm  = astToNRForm(ast, warnings);
+  const lteForm = astToLTEForm(ast, warnings, text);
+  const nrForm  = astToNRForm(ast, warnings, text);
 
   const lteCells = lteForm.cells.length;
   const nrCells  = nrForm.cells.length;
@@ -538,13 +593,13 @@ export function importCfgToBuilder(text: string, fileName?: string): ImportedBui
     return { type: 'core', form: astToCoreForm(ast, warnings), warnings };
   }
   if (detected === 'nsa') {
-    return { type: 'nsa', form: astToNSAForm(ast, warnings), warnings };
+    return { type: 'nsa', form: astToNSAForm(ast, warnings, text), warnings };
   }
   if (detected === 'nr') {
-    return { type: 'nr', form: astToNRForm(ast, warnings), warnings };
+    return { type: 'nr', form: astToNRForm(ast, warnings, text), warnings };
   }
   // LTE family: nbiot / catm / lte
-  const lteForm = astToLTEForm(ast, warnings);
+  const lteForm = astToLTEForm(ast, warnings, text);
   if (detected === 'nbiot') return { type: 'nbiot', form: lteForm, warnings };
   if (detected === 'catm')  return { type: 'catm',  form: lteForm, warnings };
   return { type: 'lte', form: lteForm, warnings };

@@ -69,10 +69,15 @@ function rangeError(value: any, min?: number, max?: number): string | null {
 export function Field({ label, value, onChange, type = 'text', options, min, max, step, disabled, placeholder, inline = true, required, hint }: FieldProps) {
   if (type === 'checkbox') {
     return (
-      <label className="flex items-center gap-2 h-8 cursor-pointer">
-        <Checkbox checked={Boolean(value)} onCheckedChange={onChange} disabled={disabled} />
-        <span className="text-xs text-muted-foreground leading-tight">{label}</span>
-      </label>
+      // The hint icon sits outside the <label> so clicking it opens the
+      // tooltip instead of toggling the box.
+      <div className="flex items-center gap-1.5 h-8">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <Checkbox checked={Boolean(value)} onCheckedChange={onChange} disabled={disabled} />
+          <span className="text-xs text-muted-foreground leading-tight">{label}</span>
+        </label>
+        {hint}
+      </div>
     );
   }
 
