@@ -2,6 +2,7 @@
 import type { LTEFormState, LTECellEntry } from './lteConstants';
 import { LTE_TDD_BANDS, makeDefaultLteCell } from './lteConstants';
 import { formatGain } from './rfDefaults';
+import { licenseServerBlock } from './licenseBlock';
 
 /**
  * For the 'ip' rf_driver, derive per-port { dst, src } pairs that match the
@@ -383,6 +384,6 @@ ${cellListBlock}
   ],
 
   nr_cell_list: [],
-}
+${licenseServerBlock(form.licenseServer)}}
 `;
 }

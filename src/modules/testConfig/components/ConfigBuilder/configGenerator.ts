@@ -3,6 +3,7 @@
 // (lteenb-linux-2026-04-22/config/gnb-sa.cfg).
 import type { NRFormState } from './constants';
 import { formatGain } from './rfDefaults';
+import { licenseServerBlock } from './licenseBlock';
 
 /**
  * Format PLMN string as MCC (3-digit) + MNC (2- or 3-digit, zero-padded).
@@ -280,6 +281,6 @@ ${macBlock}
 
     drb_config: "drb_nr.cfg",
   },
-}
+${licenseServerBlock(form.licenseServer)}}
 `;
 }

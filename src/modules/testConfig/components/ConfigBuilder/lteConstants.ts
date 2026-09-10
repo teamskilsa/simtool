@@ -104,6 +104,18 @@ export function makeDefaultLteCell(name: string, overrides: Partial<LTECellEntry
 }
 
 export interface LTEFormState {
+  /** Amarisoft licence seat for this config.
+   *
+   *  Amarisoft will not start a daemon it cannot licence, and every instance
+   *  needs its own seat (two cores sharing one tag is the classic two-core
+   *  failure). A box may carry a global fallback file, but the documented
+   *  setup is a license_server line inside each cfg — so a config generated
+   *  without one is not reliably deployable, and importing a working cfg
+   *  used to silently strip the line it already had.
+   *
+   *  Empty server_addr → the line is omitted entirely, which is the right
+   *  behaviour for a box that licences some other way. */
+  licenseServer: { serverAddr: string; tag: string };
   // ── Cell identity ────────────────────────────────────────────────────────────
   // enb.cfg: cell_list[].cell_id
   cellId: number;
@@ -249,6 +261,7 @@ export interface LTEFormState {
 }
 
 export const DEFAULT_LTE_FORM: LTEFormState = {
+  licenseServer: { serverAddr: '', tag: '' },
   // Cell identity
   cellId: 1,
   pci: 0,

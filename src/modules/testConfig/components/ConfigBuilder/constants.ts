@@ -119,6 +119,18 @@ export interface NRFormState {
   rxGain: number | number[];
   rxAntenna: string;
   // Network
+  /** Amarisoft licence seat for this config.
+   *
+   *  Amarisoft will not start a daemon it cannot licence, and every instance
+   *  needs its own seat (two cores sharing one tag is the classic two-core
+   *  failure). A box may carry a global fallback file, but the documented
+   *  setup is a license_server line inside each cfg — so a config generated
+   *  without one is not reliably deployable, and importing a working cfg
+   *  used to silently strip the line it already had.
+   *
+   *  Empty server_addr → the line is omitted entirely, which is the right
+   *  behaviour for a box that licences some other way. */
+  licenseServer: { serverAddr: string; tag: string };
   amfAddr: string;
   gtpAddr: string;
   gnbId: string;
@@ -234,6 +246,14 @@ export interface NRCellEntry {
   subcarrierSpacing: number;
   dlNrArfcn: number;
   ssbPosBitmap: string;
+  /** GSCN override for this cell. null = let Amarisoft derive the SSB
+   *  position from band + dl_nr_arfcn (the usual case).
+   *
+   *  This has to live per cell because the generator emits gscn inside each
+   *  nr_cell_list[] entry. While it was missing here, the value could only
+   *  be held in the flat form state, so switching cell tabs carried one
+   *  cell's GSCN onto the next one. */
+  ssbArfcn: number | null;
   nrTdd: number;
   fr2: number;
   tddPattern: { period: number; dlSlots: number; dlSymbols: number; ulSlots: number; ulSymbols: number };
@@ -248,6 +268,7 @@ export function makeDefaultCell(name: string, overrides: Partial<NRCellEntry> = 
     subcarrierSpacing: 30,
     dlNrArfcn: 632628,
     ssbPosBitmap: '10000000',
+    ssbArfcn: null,
     nrTdd: 1,
     fr2: 0,
     tddPattern: { period: 5, dlSlots: 7, dlSymbols: 6, ulSlots: 2, ulSymbols: 4 },
@@ -297,6 +318,7 @@ export const DEFAULT_NR_FORM: NRFormState = {
   txGain: 90,
   rxGain: 60,
   rxAntenna: 'rx',
+  licenseServer: { serverAddr: '', tag: '' },
   amfAddr: '127.0.1.100',
   gtpAddr: '127.0.1.1',
   gnbId: '0x12345',

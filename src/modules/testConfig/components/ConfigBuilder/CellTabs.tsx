@@ -9,7 +9,7 @@ import { makeDefaultCell } from './constants';
 // Fields that belong to a cell (everything else is shared in nr_cell_default).
 const CELL_FIELDS: (keyof NRCellEntry)[] = [
   'cellId', 'band', 'nrBandwidth', 'subcarrierSpacing',
-  'dlNrArfcn', 'ssbPosBitmap', 'nrTdd', 'fr2', 'tddPattern',
+  'dlNrArfcn', 'ssbPosBitmap', 'ssbArfcn', 'nrTdd', 'fr2', 'tddPattern',
 ];
 
 /** Snapshot the current flat-state cell fields into a NRCellEntry. */
@@ -19,7 +19,8 @@ function snapshotActiveCell(form: NRFormState): NRCellEntry {
     name,
     cellId: form.cellId, band: form.band, nrBandwidth: form.nrBandwidth,
     subcarrierSpacing: form.subcarrierSpacing, dlNrArfcn: form.dlNrArfcn,
-    ssbPosBitmap: form.ssbPosBitmap, nrTdd: form.nrTdd, fr2: form.fr2,
+    ssbPosBitmap: form.ssbPosBitmap, ssbArfcn: form.ssbArfcn ?? null,
+    nrTdd: form.nrTdd, fr2: form.fr2,
     tddPattern: form.tddPattern,
   };
 }
@@ -35,6 +36,9 @@ function applyCellToFlatState(
   onChange('subcarrierSpacing', cell.subcarrierSpacing);
   onChange('dlNrArfcn', cell.dlNrArfcn);
   onChange('ssbPosBitmap', cell.ssbPosBitmap);
+  // Must be applied even when null, or the previous cell's GSCN stays in
+  // the flat state and gets written onto this one.
+  onChange('ssbArfcn', cell.ssbArfcn ?? null);
   onChange('nrTdd', cell.nrTdd);
   onChange('fr2', cell.fr2);
   onChange('tddPattern', cell.tddPattern);

@@ -29,3 +29,6 @@ dist-ssr
 !/data/.gitkeep
 tsconfig.tsbuildinfo
 data/qa/
+
+# QA: pulled production configs (contain AMF addresses + licence tags)
+scripts/qa/*.cfg

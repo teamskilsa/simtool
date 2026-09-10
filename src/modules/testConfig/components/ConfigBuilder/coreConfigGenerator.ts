@@ -2,6 +2,7 @@
 // Validated against the reference shipped with Amarisoft 2026-04-22
 // (ltemme-linux-2026-04-22/config/mme.cfg).
 import type { NRFormState } from './constants';
+import { licenseServerBlock } from './licenseBlock';
 
 /**
  * Format PLMN string as MCC (3-digit) + MNC (2- or 3-digit, zero-padded).
@@ -117,6 +118,6 @@ ${entries}
 ${pdnBlock()}
 
 ${ueDbBlock()}
-}
+${licenseServerBlock(form.licenseServer)}}
 `;
 }

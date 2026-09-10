@@ -25,6 +25,19 @@ export interface ImportedBuilderState {
   warnings: string[];
 }
 
+
+/** license_server is a plain {server_addr, tag} object at cfg root. Keeping
+ *  it through an import is what stops "Edit in Builder" from stripping the
+ *  licence line off a working config. */
+function readLicense(ast: any): { serverAddr: string; tag: string } {
+  const ls = ast?.license_server;
+  if (!ls || typeof ls !== 'object') return { serverAddr: '', tag: '' };
+  return {
+    serverAddr: typeof ls.server_addr === 'string' ? ls.server_addr : '',
+    tag: typeof ls.tag === 'string' ? ls.tag : '',
+  };
+}
+
 // ─── Type detection ─────────────────────────────────────────────────────────
 
 /**
@@ -165,6 +178,8 @@ function astToNRForm(ast: Record<string, any>, warnings: string[]): NRFormState 
       subcarrierSpacing: num(c.subcarrier_spacing, DEFAULT_NR_FORM.subcarrierSpacing),
       dlNrArfcn: num(c.dl_nr_arfcn, DEFAULT_NR_FORM.dlNrArfcn),
       ssbPosBitmap: str(c.ssb_pos_bitmap, DEFAULT_NR_FORM.ssbPosBitmap),
+      // gscn is only present when the cfg overrides the SSB position.
+      ssbArfcn: c.gscn === undefined || c.gscn === null ? null : num(c.gscn, 0),
       nrTdd: isTdd ? 1 : 0,
       fr2: isFR2 ? 1 : 0,
       tddPattern: {
@@ -234,6 +249,7 @@ function astToNRForm(ast: Record<string, any>, warnings: string[]): NRFormState 
     channelSim:       false,
     channelType:      DEFAULT_NR_FORM.channelType,
     noiseLevel:       DEFAULT_NR_FORM.noiseLevel,
+    licenseServer:    readLicense(ast),
     logFilename:      str(ast.log_filename, DEFAULT_NR_FORM.logFilename),
     logLevel:         logOpts.level,
     logLayers:        logOpts.layers,
@@ -428,6 +444,7 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[]): LTEFormStat
     catM:                 isCatM,
     catMCeMode:           (str(cv(cell0, 'ce_mode'), 'A') as 'A' | 'B'),
     catMRepetitions:      num(cv(cell0, 'max_repetitions'), DEFAULT_LTE_FORM.catMRepetitions),
+    licenseServer:        readLicense(ast),
     logFilename:          str(ast.log_filename, DEFAULT_LTE_FORM.logFilename),
     logLevel:             logOpts.level,
     logLayers:            logOpts.layers,
@@ -473,6 +490,7 @@ function astToCoreForm(ast: Record<string, any>, warnings: string[]): NRFormStat
     gtpAddr:     str(ast.gtp_addr, DEFAULT_NR_FORM.gtpAddr),
     pdnList,
     ueDb,
+    licenseServer: readLicense(ast),
     logFilename: str(ast.log_filename, '/tmp/mme.log'),
     logLevel:    logOpts.level,
     logLayers:   logOpts.layers,
