@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useSystems } from '@/modules/systems/hooks/use-systems';
 import { executionService } from '@/modules/testExecution/services';
 import type { ExecutionStep } from '@/modules/testExecution/types/execution.types';
+import { missingRequiredModules } from '@/modules/testExecution/components/ScenarioCreator/constants';
 
 export interface RunnableScenario {
   id: string;
@@ -69,6 +70,17 @@ export function useScenarioRun(onFinished?: () => void) {
     const enabled = (scenario.moduleConfigs ?? []).filter(c => c.enabled && c.configId);
     if (enabled.length === 0) {
       return fail('No enabled modules with a config selected. Edit the scenario and pick at least one.');
+    }
+
+    // A scenario that still lacks a required module deploys half a stack and
+    // reports success. Scenarios damaged by the old Edit Scenario bug look
+    // exactly like this, so stop and say what is missing.
+    const missing = missingRequiredModules(scenario.topology, scenario.moduleConfigs);
+    if (missing.length > 0) {
+      return fail(
+        `This scenario has no config selected for: ${missing.join(', ')}. ` +
+        'Edit it and pick one for each required module before running.',
+      );
     }
 
     const target = { name: sys.name, host: sys.ip };

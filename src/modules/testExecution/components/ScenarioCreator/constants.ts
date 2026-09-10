@@ -45,3 +45,24 @@ export const TOPOLOGY_OPTIONS = [
     IMS: 'ims',
     UE_DB: 'ue_db'
   } as const;
+
+/**
+ * Required modules a scenario still has no config for, given its topology.
+ *
+ * A scenario can end up partially configured — the old Edit Scenario bug
+ * wiped moduleConfigs on save — and running one deploys half a stack while
+ * reporting success. Optional modules (e.g. ims) never count as missing.
+ * Unknown topologies return [] so a custom topology is never blocked.
+ */
+export function missingRequiredModules(
+  topology: string,
+  moduleConfigs?: ReadonlyArray<{ moduleId: string; configId?: string; enabled?: boolean }>,
+): string[] {
+  const topo = TOPOLOGY_OPTIONS.find(t => t.id === topology);
+  if (!topo) return [];
+  const optional = new Set<string>(topo.optional as readonly string[]);
+  const have = new Set(
+    (moduleConfigs ?? []).filter(m => m.enabled !== false && m.configId).map(m => m.moduleId),
+  );
+  return (topo.modules as readonly string[]).filter(m => !optional.has(m) && !have.has(m));
+}

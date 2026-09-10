@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { TableRow, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Network, FileIcon } from 'lucide-react';
+import { Network } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { executionService } from '@/modules/testExecution/services';
 import { ExecutionStep } from '@/modules/testExecution/types/execution.types';
@@ -11,6 +11,15 @@ import { ExecutionLogs } from './ExecutionLogs';
 import { useToast } from "@/components/ui/use-toast";
 import { useConfigs } from '../../context/ConfigContext/ConfigContext';
 import { useSystems } from '@/modules/systems/hooks/use-systems';
+import { missingRequiredModules } from '../ScenarioCreator/constants';
+
+interface ModuleConfigEntry {
+  moduleId: string;
+  module?: string;
+  configId: string;
+  ipAddress?: string;
+  enabled: boolean;
+}
 
 interface ScenarioCardProps {
   scenario: {
@@ -23,13 +32,7 @@ interface ScenarioCardProps {
       host: string;
       port: string;
     };
-    moduleConfigs: Array<{
-      moduleId: string;
-      module?: string;
-      configId: string;
-      ipAddress?: string;
-      enabled: boolean;
-    }>;
+    moduleConfigs: ModuleConfigEntry[];
     createdAt: string;
     lastRun?: string;
     ipConfig: {
@@ -52,28 +55,24 @@ export function ScenarioCard({ scenario, index, onRefresh, onRun }: ScenarioCard
   const [steps, setSteps] = useState<ExecutionStep[]>([]);
   const [showLogs, setShowLogs] = useState(false);
 
-  // Helper function to safely handle moduleConfigs
-  const getModuleConfigs = () => {
-    // If moduleConfigs is undefined, return empty array
-    if (!scenario.moduleConfigs) return [];
-    
-    // If it's already an array, use it
-    if (Array.isArray(scenario.moduleConfigs)) {
-      return scenario.moduleConfigs.filter(config => config.enabled);
+  // Enabled module configs. Older scenarios stored moduleConfigs as an object
+  // keyed by module id rather than an array, so both shapes are accepted.
+  const getModuleConfigs = (): ModuleConfigEntry[] => {
+    const raw: unknown = scenario.moduleConfigs;
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+      return (raw as ModuleConfigEntry[]).filter(config => config.enabled);
     }
-    
-    // If it's an object, convert to array
-    if (typeof scenario.moduleConfigs === 'object') {
-      return Object.entries(scenario.moduleConfigs)
-        .map(([moduleId, config]) => ({
-          moduleId,
-          ...config
-        }))
+    if (typeof raw === 'object') {
+      return Object.entries(raw as Record<string, Omit<ModuleConfigEntry, 'moduleId'>>)
+        .map(([moduleId, config]) => ({ ...config, moduleId }))
         .filter(config => config.enabled);
     }
-    
     return [];
   };
+
+  const moduleConfigs = getModuleConfigs();
+  const missing = missingRequiredModules(scenario.topology, moduleConfigs);
 
   const handleRun = async () => {
     // Preferred path: let the page own the run so the user gets the
@@ -116,11 +115,19 @@ export function ScenarioCard({ scenario, index, onRefresh, onRun }: ScenarioCard
       });
       return;
     }
-    const enabled = (scenario.moduleConfigs ?? []).filter(c => c.enabled && c.configId);
+    const enabled = moduleConfigs.filter(c => c.configId);
     if (enabled.length === 0) {
       toast({
         title: 'Nothing to deploy',
         description: 'This scenario has no enabled modules with a config selected. Edit it and pick at least one.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (missing.length > 0) {
+      toast({
+        title: 'Scenario incomplete',
+        description: `No config selected for: ${missing.join(', ')}. Edit the scenario and pick one for each required module.`,
         variant: 'destructive',
       });
       return;
@@ -204,19 +211,16 @@ export function ScenarioCard({ scenario, index, onRefresh, onRun }: ScenarioCard
   const getConfigName = (moduleId: string, configId: string) => {
     // mme2 configs live in the mme bucket (second instance of the same daemon)
     const bucket = moduleId === 'mme2' ? 'mme' : moduleId;
-    if (!configs || !configs[bucket]) return configId;
-
-    const moduleConfigs = configs[bucket];
-    const config = moduleConfigs.find(c => c.id === configId);
-    return config?.name || configId;
+    const byModule = configs as unknown as Record<string, Array<{ id: string; name: string }>> | undefined;
+    const list = byModule?.[bucket];
+    if (!list) return configId;
+    return list.find(c => c.id === configId)?.name || configId;
   };
-
-  const moduleConfigs = getModuleConfigs();
 
   return (
     <TableRow className={cn(isRunning && "bg-muted/50")}>
       <TableCell className="text-muted-foreground">{index}</TableCell>
-      
+
       {/* Scenario Name & Topology */}
       <TableCell className="font-medium">
         <div className="flex flex-col space-y-1">
@@ -224,21 +228,29 @@ export function ScenarioCard({ scenario, index, onRefresh, onRun }: ScenarioCard
           <Badge variant="outline" className="w-fit">{scenario.topology}</Badge>
         </div>
       </TableCell>
-      
+
       {/* Modules */}
       <TableCell>
         <div className="flex flex-wrap gap-1">
           {moduleConfigs.map(config => (
-            <Badge 
-              key={config.moduleId} 
-              variant="secondary"
-            >
+            <Badge key={config.moduleId} variant="secondary">
               {config.moduleId}
             </Badge>
           ))}
+          {/* Scenarios can be left partially configured — the old Edit bug
+              wiped moduleConfigs on save — and nothing on the row said so. */}
+          {missing.length > 0 && (
+            <Badge
+              variant="warning"
+              className="w-fit"
+              title="Edit the scenario to pick a config for each required module"
+            >
+              Incomplete · needs {missing.join(', ')}
+            </Badge>
+          )}
         </div>
       </TableCell>
-      
+
       {/* System/IP Info */}
       <TableCell>
         <div className="flex items-center gap-2">
@@ -246,27 +258,21 @@ export function ScenarioCard({ scenario, index, onRefresh, onRun }: ScenarioCard
           {getSystemDisplay()}
         </div>
       </TableCell>
-      
+
       {/* Config Names */}
       <TableCell>
         <div className="flex flex-col gap-1">
-          {moduleConfigs.map(config => {
-            const moduleId = config.moduleId;
-            const configName = getConfigName(moduleId, config.configId);
-            return (
-              <div key={moduleId} className="flex items-center gap-2">
-                <span className="text-sm font-medium min-w-16">
-                  {moduleId}:
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  {configName}
-                </span>
-              </div>
-            );
-          })}
+          {moduleConfigs.map(config => (
+            <div key={config.moduleId} className="flex items-center gap-2">
+              <span className="text-sm font-medium min-w-16">{config.moduleId}:</span>
+              <span className="text-sm text-muted-foreground">
+                {getConfigName(config.moduleId, config.configId)}
+              </span>
+            </div>
+          ))}
         </div>
       </TableCell>
-      
+
       {/* Dates */}
       <TableCell className="whitespace-nowrap">
         {formatDate(scenario.createdAt)}
@@ -274,7 +280,7 @@ export function ScenarioCard({ scenario, index, onRefresh, onRun }: ScenarioCard
       <TableCell className="whitespace-nowrap">
         {scenario.lastRun ? formatDate(scenario.lastRun) : '-'}
       </TableCell>
-      
+
       {/* Actions */}
       <TableCell>
         <ScenarioActions
