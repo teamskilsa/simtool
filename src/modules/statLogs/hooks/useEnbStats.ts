@@ -65,6 +65,14 @@ export function useEnbStats(
     }
   }, []);
 
+  /** Send any remote-API message over the live socket (e.g. ue_get for the
+   *  UE tab). Stable across renders, so callers can use it in effect deps. */
+  const request = useCallback(async (msg: Record<string, unknown>) => {
+    const client = clientRef.current;
+    if (!client) throw new Error('Not connected');
+    return client.sendMessage(msg);
+  }, []);
+
   const startMonitoring = useCallback(async () => {
     setError(null);
     setPhase('connecting');
@@ -116,6 +124,7 @@ export function useEnbStats(
     isConnected: remoteAPI.connected,
     startMonitoring,
     stopMonitoring,
+    request,
   };
 }
 

@@ -2,6 +2,6 @@
 // test pages were removed; the live entry point is EnbMonitoringDashboard
 // (rendered by /stats).
 export { EnbMonitoringDashboard } from './EnbMonitoringDashboard';
-export { EnbStatsView } from './EnbStatsView';
-export { PerformanceView, DetailedStatsView } from './StatsViews';
-export { DashboardSettings } from './DashboardComponents';
+export { GlobalStatsTab } from './GlobalStatsTab';
+export { CellStatsTab } from './CellStatsTab';
+export { UeStatsTab } from './UeStatsTab';
