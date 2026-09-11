@@ -169,7 +169,10 @@ function createTheme(variant: ColorVariant): ThemeConfig {
       button: {
         ...baseComponents.button,
         variants: {
-          default: `bg-${primary}-600 text-white hover:bg-${primary}-700`,
+          // Literal brand classes, not `bg-${primary}-600`: the primary action
+          // is the Simnovus orange in every variant now, and Tailwind's JIT can
+          // only see class names it can read in the source.
+          default: 'bg-brand-orange text-white hover:bg-brand-orange-600',
           secondary: `bg-${primary}-100 text-${primary}-700 hover:bg-${primary}-200`,
           outline: `border border-${primary}-200 bg-transparent hover:bg-${primary}-50`,
           ghost: `hover:bg-${primary}-50 hover:text-${primary}-700`,
@@ -250,7 +253,7 @@ function createTheme(variant: ColorVariant): ThemeConfig {
       accent: `bg-gradient-to-br from-${accent}-400/80 via-${accent}-50 to-white`,
       background: `bg-gradient-to-br from-${primary}-100 via-${primary}-50/30 to-transparent`,
       glass: `bg-white/80 backdrop-blur-md dark:bg-gray-900/80`,
-      header: `bg-gradient-to-r from-${primary}-600 to-${primary}-700`,
+      header: 'bg-gradient-to-r from-brand-orange to-brand-orange-600',
       card: `bg-gradient-to-b from-white via-white to-${primary}-50/10`,
       sidebar: `bg-gradient-to-br from-white/90 to-${primary}-50/10`,
     },

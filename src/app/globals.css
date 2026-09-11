@@ -2,101 +2,110 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Surface tokens — Light mode
-   These map directly to Tailwind's `bg-background`, `text-foreground`, etc.
-   and are consumed by every shadcn/ui component.
-   ───────────────────────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   SIMNOVUS DESIGN TOKENS — petrol #00303F · orange #EC691F · mist #CAE0E7
+   The same palette SimQA uses, so SimTool reads as part of the product family.
+
+   They are mapped onto the shadcn/ui variables below rather than added beside
+   them: every Card, Button, Select, Dialog and Table in the app already reads
+   these, so the whole UI re-skins without touching individual screens. Keep
+   the light and dark blocks stop-for-stop identical in shape.
+   ══════════════════════════════════════════════════════════════════════════ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f4f8fa;          /* page — petrol-tinted paper   */
+  --foreground: #00303f;          /* petrol                        */
 
   --card: #ffffff;
-  --card-foreground: #171717;
+  --card-foreground: #00303f;
 
   --popover: #ffffff;
-  --popover-foreground: #171717;
+  --popover-foreground: #00303f;
 
-  --primary: #4f46e5;
+  --primary: #ec691f;             /* Simnovus orange               */
   --primary-foreground: #ffffff;
 
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
+  --secondary: #e9f1f4;
+  --secondary-foreground: #00303f;
 
-  --muted: #f8fafc;
-  --muted-foreground: #64748b;
+  --muted: #f7fbfc;
+  --muted-foreground: #5c7480;
 
-  --accent: #f1f5f9;
-  --accent-foreground: #0f172a;
+  --accent: #e9f1f4;
+  --accent-foreground: #00303f;
 
-  --destructive: #ef4444;
+  --destructive: #c0392b;
   --destructive-foreground: #ffffff;
 
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #4f46e5;
+  --border: #dbe7ec;              /* hairline                      */
+  --input: #c2d5dd;               /* stronger line for controls    */
+  --ring: #ec691f;
 
   --radius: 0.5rem;
+
+  /* Elevation that reads on both paper and petrol. */
+  --glow: 0 1px 2px rgb(0 48 63 / .05), 0 14px 40px -22px rgb(0 48 63 / .35);
+  /* Faint blueprint lattice behind page headers. */
+  --hero-grid: rgb(0 48 63 / .05);
 
   /* Legacy surface helpers (consumed by .themed-card / .themed-input) */
   --card-background: rgba(255, 255, 255, 0.95);
   --input-background: rgba(255, 255, 255, 0.8);
   --blur-background: rgba(255, 255, 255, 0.1);
   --dropdown-background: rgba(255, 255, 255, 0.98);
-  --dropdown-text: #171717;
-  --dropdown-hover: rgba(0, 0, 0, 0.05);
+  --dropdown-text: #00303f;
+  --dropdown-hover: rgba(0, 48, 63, 0.05);
 
   /* Terminal (always dark regardless of app theme) */
-  --terminal-background: #1a1a1a;
-  --terminal-text: #00ff00;
-  --terminal-prompt: #00ff00;
-  --terminal-error: #ff4444;
-  --terminal-success: #00ff00;
-  --terminal-warning: #ffff00;
+  --terminal-background: #002430;
+  --terminal-text: #e2eff3;
+  --terminal-prompt: #3fc1be;
+  --terminal-error: #ff7a6b;
+  --terminal-success: #3fc1be;
+  --terminal-warning: #efc155;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   Surface tokens — Dark mode
-   Applied via .dark class on <html> (Tailwind darkMode: "class").
-   ───────────────────────────────────────────────────────────────────────────── */
+/* Dark mode: applied via the .dark class on <html> (Tailwind darkMode: "class"). */
 .dark {
-  --background: #0f172a;
-  --foreground: #f1f5f9;
+  --background: #00252f;
+  --foreground: #f2f9fb;
 
-  --card: #1e293b;
-  --card-foreground: #f1f5f9;
+  --card: #00303f;
+  --card-foreground: #f2f9fb;
 
-  --popover: #1e293b;
-  --popover-foreground: #f1f5f9;
+  --popover: #00303f;
+  --popover-foreground: #f2f9fb;
 
-  --primary: #6366f1;
-  --primary-foreground: #ffffff;
+  --primary: #ec691f;
+  --primary-foreground: #00303f;
 
-  --secondary: #1e293b;
-  --secondary-foreground: #f1f5f9;
+  --secondary: #0b3543;
+  --secondary-foreground: #f2f9fb;
 
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
+  --muted: #00374a;
+  --muted-foreground: #a0bbc4;
 
-  --accent: #1e293b;
-  --accent-foreground: #f1f5f9;
+  --accent: #0b3543;
+  --accent-foreground: #f2f9fb;
 
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
+  --destructive: #ff7a6b;
+  --destructive-foreground: #00303f;
 
-  --border: #334155;
-  --input: #334155;
-  --ring: #6366f1;
+  --border: #14414f;
+  --input: #1d4c5b;
+  --ring: #ec691f;
+
+  --glow: 0 0 0 1px rgb(202 224 231 / .06), 0 18px 50px -24px rgb(0 0 0 / .85);
+  --hero-grid: rgb(202 224 231 / .055);
 
   /* Legacy surface helpers */
-  --card-background: rgba(30, 41, 59, 0.9);
-  --input-background: rgba(30, 41, 59, 0.7);
+  --card-background: rgba(0, 48, 63, 0.92);
+  --input-background: rgba(0, 48, 63, 0.7);
   --blur-background: rgba(0, 0, 0, 0.2);
-  --dropdown-background: rgba(30, 41, 59, 0.98);
-  --dropdown-text: #f1f5f9;
-  --dropdown-hover: rgba(255, 255, 255, 0.05);
+  --dropdown-background: rgba(0, 48, 63, 0.98);
+  --dropdown-text: #f2f9fb;
+  --dropdown-hover: rgba(202, 224, 231, 0.06);
 
-  --terminal-background: #000000;
+  --terminal-background: #001a22;
 }
 
 @layer base {
@@ -106,7 +115,9 @@
      default of 16px made the whole app read as oversized. */
   html {
     font-size: 15px;
+    color-scheme: light;
   }
+  html.dark { color-scheme: dark; }
 
   * {
     @apply border-border;
@@ -115,10 +126,17 @@
   body {
     color: var(--foreground);
     background: var(--background);
-    font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+    font-family: var(--font-sans), 'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: 100vh;
+  }
+
+  ::selection { background: rgb(236 105 31 / .25); }
+
+  :focus-visible {
+    outline: 2px solid #ec691f;
+    outline-offset: 2px;
   }
 }
 
@@ -126,10 +144,7 @@
   .themed-card {
     @apply relative backdrop-blur-sm border border-white/10;
     background: var(--card-background);
-    box-shadow:
-      0 0 0 1px rgba(0, 0, 0, 0.03),
-      0 2px 4px rgba(0, 0, 0, 0.05),
-      0 12px 24px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--glow);
   }
 
   .themed-input {
@@ -175,6 +190,43 @@
 
   .terminal-warning {
     color: var(--terminal-warning);
+  }
+
+  .terminal-input {
+    @apply pl-7
+           font-mono
+           bg-gray-800
+           text-white
+           border-white/10
+           focus:border-white/20
+           focus:ring-white/20
+           placeholder-gray-400
+           transition-colors
+           duration-200
+           hover:bg-gray-700;
+  }
+
+  /* ── Brand bits shared with SimQA ─────────────────────────────────────── */
+
+  /* Blueprint grid, faded at the edges — used behind page headers. */
+  .hero-grid { position: relative; }
+  .hero-grid::before {
+    content: '';
+    position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(var(--hero-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--hero-grid) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 90% 120% at 50% 0%, #000 20%, transparent 78%);
+    -webkit-mask-image: radial-gradient(ellipse 90% 120% at 50% 0%, #000 20%, transparent 78%);
+  }
+  .hero-grid > * { position: relative; z-index: 1; }
+
+  /* Monospaced tabular numerals — for metrics, counts, durations, ports. */
+  .num {
+    font-family: var(--font-mono), 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.03em;
   }
 }
 
@@ -235,6 +287,17 @@
   }
 }
 
+/* App scrollbar, themed. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--input);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--muted-foreground); }
+
 /* Animations */
 @keyframes blob {
   0% { transform: translate(0px, 0px) scale(1); }
@@ -264,18 +327,9 @@
   animation-delay: 4s;
 }
 
-@layer components {
-  .terminal-input {
-    @apply pl-7
-           font-mono
-           bg-gray-800
-           text-white
-           border-white/10
-           focus:border-white/20
-           focus:ring-white/20
-           placeholder-gray-400
-           transition-colors
-           duration-200
-           hover:bg-gray-700;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
   }
 }

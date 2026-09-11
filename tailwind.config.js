@@ -22,6 +22,17 @@ module.exports = {
         border: "var(--border)",
         input: "var(--input)",
         ring: "var(--ring)",
+        // Simnovus brand as real hex scales. The shadcn tokens above are CSS
+        // variables holding hex, and Tailwind v3 cannot apply an opacity
+        // modifier (bg-primary/10) to those — translucent brand accents use
+        // these instead.
+        brand: {
+          orange: { DEFAULT: '#EC691F', 50: '#FDF1EA', 100: '#FBE1D2', 400: '#EF8A4F', 500: '#EC691F', 600: '#D95A11', 700: '#A8420A' },
+          petrol: { DEFAULT: '#00303F', 800: '#16404E', 900: '#00303F', 950: '#002430' },
+          teal:   { DEFAULT: '#17A5A2', 400: '#3FC1BE', 500: '#17A5A2', 600: '#0E8C89' },
+          amber:  { DEFAULT: '#C98A1E', 400: '#EFC155', 500: '#C98A1E', 700: '#8A5B13' },
+          mist:   { DEFAULT: '#CAE0E7' },
+        },
         indigo: {
           '50': '#eef2ff',
           '100': '#e0e7ff',
@@ -70,8 +81,16 @@ module.exports = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
-        sans: ['var(--font-inter)'],
+        // Simnovus pairing (next/font variables set on <body> in app/layout.tsx).
+        sans: ['var(--font-sans)', 'Poppins', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-mono)', 'JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+      },
+      letterSpacing: {
+        label: '.14em',   // the uppercase mono micro-labels (Kicker)
+      },
+      boxShadow: {
+        glow: 'var(--glow)',
+        accent: '0 6px 18px -8px rgb(236 105 31 / .8)',
       },
       minWidth: {
         'terminal': '600px'

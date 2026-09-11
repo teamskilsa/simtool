@@ -25,7 +25,8 @@ export function PageHeader({ icon, title, subtitle, actions, className }: PageHe
   return (
     <div
       className={cn(
-        'flex items-center justify-between gap-4 border-b border-border pb-2.5 mb-4',
+        // hero-grid: SimQA's faint blueprint lattice behind the title row.
+        'hero-grid flex items-center justify-between gap-4 border-b border-border pb-2.5 mb-4',
         className,
       )}
     >

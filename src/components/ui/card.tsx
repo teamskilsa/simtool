@@ -2,19 +2,28 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const Card = React.forwardRef<
-  HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
->(({ className, ...props }, ref) => (
-  <div
-    ref={ref}
-    className={cn(
-      "rounded-xl border border-border/70 bg-card text-card-foreground shadow-sm",
-      className
-    )}
-    {...props}
-  />
-))
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  /** The Simnovus 2px orange hairline across the top edge (as in SimQA). */
+  accent?: boolean
+}
+
+const Card = React.forwardRef<HTMLDivElement, CardProps>(
+  ({ className, accent = false, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn(
+        "rounded-xl border border-border bg-card text-card-foreground shadow-glow",
+        // overflow-hidden only with the hairline: on a plain card it would
+        // clip any in-card menu that is not portalled.
+        accent &&
+          "relative overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-0.5 " +
+          "before:bg-gradient-to-r before:from-brand-orange before:via-brand-orange/40 before:to-transparent",
+        className
+      )}
+      {...props}
+    />
+  )
+)
 Card.displayName = "Card"
 
 const CardHeader = React.forwardRef<

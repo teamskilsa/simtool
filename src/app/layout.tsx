@@ -1,6 +1,6 @@
 // app/layout.tsx
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Poppins, JetBrains_Mono } from "next/font/google";
 import { AuthProvider } from "@/modules/auth/context/auth-context";
 import { ThemeProvider } from '@/components/theme/context/theme-context';
 import { UserProvider } from '@/modules/users/context/user-context';
@@ -9,9 +9,18 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
 
-const inter = Inter({ 
+// Simnovus type pairing, shared with SimQA and the Simnovator GUI: Poppins for
+// copy, JetBrains Mono for figures, ports, IDs and the uppercase micro-labels.
+const poppins = Poppins({
   subsets: ['latin'],
-  variable: '--font-inter',
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-sans',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '700'],
+  variable: '--font-mono',
 });
 
 export const metadata: Metadata = {
@@ -29,9 +38,12 @@ export default function RootLayout({
       <head />
       {/* Font classes live on <body> so portaled UI (dialogs, toasts,
           dropdowns) inherits them — an inner div misses portals, and the
-          globals.css body font-family invalidates when --font-inter is
+          globals.css body font-family invalidates when the font variable is
           undefined at that level (serif fallback). */}
-      <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
+      <body
+        className={`${poppins.variable} ${jetbrainsMono.variable} font-sans antialiased`}
+        suppressHydrationWarning
+      >
         <ThemeProvider>
           <TooltipProvider>
             <SystemProvider>
