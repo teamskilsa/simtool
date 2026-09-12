@@ -24,6 +24,8 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from '@/components/ui/tabs';
 
+import { Smartphone } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-header';
 import { useActiveProfile, useSectionList, type TabKey } from '../hooks/useActiveProfile';
 import { ProfileSelector } from '../components/header/ProfileSelector';
 import { SectionHeaderStrip } from '../components/header/SectionHeaderStrip';
@@ -250,6 +252,12 @@ export function UeSimView() {
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        icon={<Smartphone />}
+        title="UE Simulator"
+        subtitle="Build and apply ue.cfg profiles"
+      />
+
       <ProfileSelector
         profiles={profiles}
         activeId={profile.id}
