@@ -1,20 +1,26 @@
-// Global tab — whole-system KPIs, as Simnovator's Statistics → Global.
+// Global tab — the UE-summary donut row over headline KPIs and time-series
+// charts, as in Simnovator's Statistics → Global.
 'use client';
 
 import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Kicker, Stat } from '@/components/ui/stat';
+import { Donut } from './Donut';
 import { TimeSeriesChart } from './StatsCharts';
-import { cellRows, fmt, fmtDuration, type TimePoint } from './statsModel';
+import {
+  cellRows, fmt, fmtDuration, radioSummary, type ModuleKey, type TimePoint,
+} from './statsModel';
 
 interface GlobalStatsTabProps {
   latest: TimePoint | null;
   series: TimePoint[];
   stats: any;
+  module: ModuleKey;
 }
 
-export function GlobalStatsTab({ latest, series, stats }: GlobalStatsTabProps) {
-  const cells = cellRows(stats).length;
+export function GlobalStatsTab({ latest, series, stats, module }: GlobalStatsTabProps) {
+  const rows = cellRows(stats);
+  const cells = rows.length;
   const rfPorts = Array.isArray(stats?.rf_ports)
     ? stats.rf_ports.length
     : stats?.rf_ports && typeof stats.rf_ports === 'object'
@@ -23,8 +29,21 @@ export function GlobalStatsTab({ latest, series, stats }: GlobalStatsTabProps) {
   const cpu = typeof stats?.cpu?.global === 'number' ? stats.cpu.global : undefined;
   const retxTone = (v?: number) => (v === undefined ? 'default' : v >= 10 ? 'warn' : 'default') as 'default' | 'warn';
 
+  const donuts = radioSummary(stats, module);
+
   return (
     <div className="space-y-4">
+      {/* UE Summary — the donut header row */}
+      {donuts.length > 0 && (
+        <section className="space-y-2">
+          <Kicker>UE Summary</Kicker>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {donuts.map(d => <Donut key={d.title} donut={d} />)}
+          </div>
+        </section>
+      )}
+
+      {/* Headline KPIs */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:grid-cols-8">
         <Stat label="DL Throughput" value={fmt(latest?.dlMbps, 1)} unit="Mbps" />
         <Stat label="UL Throughput" value={fmt(latest?.ulMbps, 1)} unit="Mbps" />
@@ -43,6 +62,8 @@ export function GlobalStatsTab({ latest, series, stats }: GlobalStatsTabProps) {
         <Info label="RF ports" value={rfPorts ?? '—'} />
       </Card>
 
+      {/* KPIs */}
+      <Kicker>KPIs</Kicker>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <TimeSeriesChart
           title="Throughput" unit="Mbps" data={series}
@@ -51,6 +72,10 @@ export function GlobalStatsTab({ latest, series, stats }: GlobalStatsTabProps) {
         <TimeSeriesChart
           title="PRB Utilisation" unit="%" data={series} domain={[0, 100]}
           series={[{ key: 'dlPrb', label: 'DL' }, { key: 'ulPrb', label: 'UL' }]}
+        />
+        <TimeSeriesChart
+          title="Scheduled UE" data={series} digits={1}
+          series={[{ key: 'dlSched', label: 'DL' }, { key: 'ulSched', label: 'UL' }]}
         />
         <TimeSeriesChart
           title="UEs" data={series} digits={0}

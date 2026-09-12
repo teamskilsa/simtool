@@ -287,7 +287,7 @@ export function EnbMonitoringDashboard() {
         </div>
 
         <TabsContent value="global">
-          {noData ? <NotConnected /> : <GlobalStatsTab latest={latest} series={visible} stats={currentStats} />}
+          {noData ? <NotConnected /> : <GlobalStatsTab latest={latest} series={visible} stats={currentStats} module={module} />}
         </TabsContent>
 
         <TabsContent value="cell">

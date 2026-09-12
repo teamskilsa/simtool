@@ -90,6 +90,7 @@ export interface TimePoint {
   /** Mean PRB use across cells, %. */
   dlPrb: number; ulPrb: number;
   ues: number; activeUes: number;
+  dlSched: number; ulSched: number;
   dlRetxPct: number; ulRetxPct: number;
   /** Per-cell throughput, keyed by cell id — charted as `cells.<id>.dlMbps`. */
   cells: Record<string, { dlMbps: number; ulMbps: number }>;
@@ -108,6 +109,7 @@ export function toTimePoint(stats: any, t = Date.now()): TimePoint {
       ulPrb: num(stats?.prb_utilization?.ul) * 100,
       ues: num(stats?.connected_ue_count),
       activeUes: num(stats?.active_ue_count),
+      dlSched: 0, ulSched: 0,
       dlRetxPct: 0, ulRetxPct: 0,
       cells: {},
     };
@@ -130,6 +132,8 @@ export function toTimePoint(stats: any, t = Date.now()): TimePoint {
     ulPrb: sum(r => r.ulPrbAvg) / rows.length,
     ues: sum(r => r.ues),
     activeUes: sum(r => r.activeUes),
+    dlSched: sum(r => r.dlSched),
+    ulSched: sum(r => r.ulSched),
     dlRetxPct: pct(dlRetx, dlTx),
     ulRetxPct: pct(ulRetx, ulTx),
     cells,
@@ -203,3 +207,66 @@ const avgOf = (vals: Array<number | undefined>) => {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : undefined;
 };
 export { avgOf };
+
+// ── UE Summary donuts (Simnovator's Statistics → Global header row) ──────────
+//
+// Simnovator draws NAS State / RRC State / Category / UEs-per-Cell donuts from
+// its executor, which joins core + radio state. We pull one Amarisoft
+// remote-API module at a time, so each donut is filled from what that module
+// actually reports and the rest are omitted rather than faked:
+//   eNB / gNB stats  → RRC activity (active vs inactive), UEs per cell, RAT
+//   MME     ue_get   → NAS registration, RAT, PLMN distribution
+
+export interface DonutSegment { label: string; value: number; color: string }
+export interface SummaryDonut { title: string; total: number; segments: DonutSegment[] }
+
+/** Semantic segment colours — brand teal for the healthy state, slate for
+ *  idle/other, amber for in-transition, red for down. */
+export const SEG = {
+  good: '#17A5A2',
+  idle: '#8FA9B3',
+  warn: '#C98A1E',
+  bad: '#D14A39',
+  brand: '#EC691F',
+};
+
+export function ratOf(module: ModuleKey): string {
+  return module === 'gnb' ? 'NR' : module === 'enb' ? 'LTE' : module.toUpperCase();
+}
+
+/** Donuts for a radio module (eNB/gNB), computed from a `stats` response. */
+export function radioSummary(stats: any, module: ModuleKey): SummaryDonut[] {
+  const rows = cellRows(stats);
+  if (rows.length === 0) return [];
+
+  const total = Math.round(rows.reduce((a, r) => a + r.ues, 0));
+  const active = Math.round(rows.reduce((a, r) => a + r.activeUes, 0));
+  const inactive = Math.max(0, total - active);
+
+  const perCell: SummaryDonut = {
+    title: 'UEs / Cell',
+    total,
+    segments: rows.map((r, i) => ({
+      label: `Cell ${r.id}`,
+      value: Math.round(r.ues),
+      color: SERIES[i % SERIES.length],
+    })),
+  };
+
+  return [
+    {
+      title: 'RRC State',
+      total,
+      segments: [
+        { label: 'Connected (active)', value: active, color: SEG.good },
+        { label: 'Inactive', value: inactive, color: SEG.idle },
+      ],
+    },
+    { title: 'Category', total, segments: [{ label: ratOf(module), value: total, color: SEG.brand }] },
+    perCell,
+  ];
+}
+
+// Series palette shared with the charts (kept here to avoid importing a .tsx
+// into this .ts model). Mirror of SERIES_COLORS in StatsCharts.tsx.
+const SERIES = ['#EC691F', '#17A5A2', '#3D8DAC', '#C98A1E', '#D14A39', '#8FA9B3'];

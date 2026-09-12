@@ -1,7 +1,8 @@
 // Time-series chart card in the Simnovus palette (recharts, as in Simnovator).
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
+import { Maximize2, X } from 'lucide-react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts';
@@ -52,20 +53,15 @@ export function TimeSeriesChart({
   title, unit, data, series, domain, digits = 1, height = 220,
 }: TimeSeriesChartProps) {
   const c = useChartChrome();
+  const [full, setFull] = useState(false);
 
-  return (
-    <Card accent>
-      <div className="flex items-baseline justify-between gap-2 px-4 pt-3">
-        <Kicker>{title}</Kicker>
-        {unit ? <span className="font-mono text-[10px] text-muted-foreground">{unit}</span> : null}
+  const chart = (h: number | string) =>
+    data.length === 0 ? (
+      <div className="grid h-full place-items-center text-xs text-muted-foreground">
+        Waiting for samples…
       </div>
-      <div className="px-2 pb-2" style={{ height }}>
-        {data.length === 0 ? (
-          <div className="grid h-full place-items-center text-xs text-muted-foreground">
-            Waiting for samples…
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
+    ) : (
+      <ResponsiveContainer width="100%" height={h}>
             <LineChart data={data} margin={{ top: 10, right: 12, bottom: 0, left: -6 }}>
               <CartesianGrid stroke={c.grid} strokeDasharray="3 3" vertical={false} />
               <XAxis
@@ -111,9 +107,46 @@ export function TimeSeriesChart({
                 />
               ))}
             </LineChart>
-          </ResponsiveContainer>
-        )}
+      </ResponsiveContainer>
+    );
+
+  const header = (expanded: boolean) => (
+    <div className="flex items-center justify-between gap-2 px-4 pt-3">
+      <Kicker>{title}</Kicker>
+      <div className="flex items-center gap-2">
+        {unit ? <span className="font-mono text-[10px] text-muted-foreground">{unit}</span> : null}
+        <button
+          type="button"
+          onClick={() => setFull(!expanded)}
+          className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          aria-label={expanded ? 'Close full screen' : 'Expand chart'}
+        >
+          {expanded ? <X className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+        </button>
       </div>
-    </Card>
+    </div>
+  );
+
+  return (
+    <>
+      <Card accent>
+        {header(false)}
+        <div className="px-2 pb-2" style={{ height }}>{chart('100%')}</div>
+      </Card>
+
+      {full && (
+        // Simple fixed overlay (no portal needed): the chart fills the screen
+        // for reading detail, click the X or the backdrop to return.
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
+          onClick={() => setFull(false)}
+        >
+          <Card accent className="flex h-[80vh] w-full max-w-6xl flex-col" onClick={e => e.stopPropagation()}>
+            {header(true)}
+            <div className="min-h-0 flex-1 px-2 pb-3">{chart('100%')}</div>
+          </Card>
+        </div>
+      )}
+    </>
   );
 }
