@@ -238,6 +238,7 @@ function astToNRForm(ast: Record<string, any>, warnings: string[], text = ''): N
   const cells: NRCellEntry[] = (cellList.length > 0 ? cellList : [{}]).map((c: any, i: number) =>
     makeDefaultCell(cellNames[i] || `Cell ${i + 1}`, {
       cellId: num(c.cell_id, DEFAULT_NR_FORM.cellId),
+      pci: num(c.n_id_cell ?? cellDefault.n_id_cell, DEFAULT_NR_FORM.pci),
       band: num(c.band, band),
       nrBandwidth: num(c.bandwidth ?? cellDefault.bandwidth, DEFAULT_NR_FORM.nrBandwidth),
       subcarrierSpacing: num(c.subcarrier_spacing, DEFAULT_NR_FORM.subcarrierSpacing),
@@ -282,6 +283,7 @@ function astToNRForm(ast: Record<string, any>, warnings: string[], text = ''): N
 
   return {
     cellId:           num(cell0.cell_id ?? cellDefault.n_id_cell, DEFAULT_NR_FORM.cellId),
+    pci:              num(cell0.n_id_cell ?? cellDefault.n_id_cell, DEFAULT_NR_FORM.pci),
     nrTdd:            isTdd ? 1 : 0,
     fr2:              isFR2 ? 1 : 0,
     plmn:             { mcc, mnc },
@@ -289,7 +291,7 @@ function astToNRForm(ast: Record<string, any>, warnings: string[], text = ''): N
     ssbPeriod:        num(cellDefault.ssb_period, DEFAULT_NR_FORM.ssbPeriod),
     dmrsTypeAPos:     num(cellDefault.dmrs_type_a_pos, DEFAULT_NR_FORM.dmrsTypeAPos),
     band,
-    nrBandwidth:      num(cellDefault.bandwidth, DEFAULT_NR_FORM.nrBandwidth),
+    nrBandwidth:      num(cell0.bandwidth ?? cellDefault.bandwidth, DEFAULT_NR_FORM.nrBandwidth),
     subcarrierSpacing: num(cell0.subcarrier_spacing, DEFAULT_NR_FORM.subcarrierSpacing),
     dlNrArfcn:        num(cell0.dl_nr_arfcn, DEFAULT_NR_FORM.dlNrArfcn),
     ssbPosBitmap:     str(cell0.ssb_pos_bitmap, DEFAULT_NR_FORM.ssbPosBitmap),

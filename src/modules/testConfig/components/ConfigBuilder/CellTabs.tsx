@@ -8,7 +8,7 @@ import { makeDefaultCell } from './constants';
 
 // Fields that belong to a cell (everything else is shared in nr_cell_default).
 const CELL_FIELDS: (keyof NRCellEntry)[] = [
-  'cellId', 'band', 'nrBandwidth', 'subcarrierSpacing',
+  'cellId', 'pci', 'band', 'nrBandwidth', 'subcarrierSpacing',
   'dlNrArfcn', 'ssbPosBitmap', 'ssbArfcn', 'nrTdd', 'fr2', 'tddPattern',
 ];
 
@@ -17,7 +17,7 @@ function snapshotActiveCell(form: NRFormState): NRCellEntry {
   const name = form.cells?.[form.activeCellIdx]?.name || 'Cell 1';
   return {
     name,
-    cellId: form.cellId, band: form.band, nrBandwidth: form.nrBandwidth,
+    cellId: form.cellId, pci: form.pci, band: form.band, nrBandwidth: form.nrBandwidth,
     subcarrierSpacing: form.subcarrierSpacing, dlNrArfcn: form.dlNrArfcn,
     ssbPosBitmap: form.ssbPosBitmap, ssbArfcn: form.ssbArfcn ?? null,
     nrTdd: form.nrTdd, fr2: form.fr2,
@@ -31,6 +31,7 @@ function applyCellToFlatState(
   onChange: (key: string, value: any) => void,
 ) {
   onChange('cellId', cell.cellId);
+  onChange('pci', cell.pci);
   onChange('band', cell.band);
   onChange('nrBandwidth', cell.nrBandwidth);
   onChange('subcarrierSpacing', cell.subcarrierSpacing);
@@ -72,8 +73,11 @@ export function CellTabs({ form, onChange }: CellTabsProps) {
     current[activeIdx] = snapshot;
     // Create new cell with a unique cellId and name
     const newName = `Cell ${current.length + 1}`;
+    // Distinct cell_id AND PCI so a freshly added cell is never a collision;
+    // inherit band/bandwidth from the current cell as a sensible starting point.
     const newCell = makeDefaultCell(newName, {
       cellId: 500 + current.length,
+      pci: (snapshot.pci + 1) % 1008,
       band: snapshot.band,
       nrBandwidth: snapshot.nrBandwidth,
     });

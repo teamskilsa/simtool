@@ -49,26 +49,31 @@ export function generateNRConfig(form: NRFormState): string {
     },`;
   };
 
-  // ── Cell list — multi-cell support ────────────────────────────────────────
+  // ── Cell list — one nr_cell_list[] entry per cell ─────────────────────────
+  // n_id_cell (PCI) and bandwidth are emitted PER CELL here, not in
+  // nr_cell_default, so a multi-cell gNB gets a distinct PCI and its own
+  // bandwidth for each cell instead of silently sharing the active cell's.
   const cellListBlock = (() => {
-    const cells = form.cells && form.cells.length > 0
-      ? form.cells.map((c, i) => ({
-          ...(i === form.activeCellIdx ? {
-            cellId: form.cellId, band: form.band, dlNrArfcn: form.dlNrArfcn,
-            subcarrierSpacing: form.subcarrierSpacing, ssbPosBitmap: form.ssbPosBitmap,
-            ssbArfcn: form.ssbArfcn,
-          } : c),
-          name: c.name,
-        }))
-      : [{
-          cellId: form.cellId, band: form.band, dlNrArfcn: form.dlNrArfcn,
-          subcarrierSpacing: form.subcarrierSpacing, ssbPosBitmap: form.ssbPosBitmap,
-          ssbArfcn: form.ssbArfcn, name: 'Cell 1',
-        }];
+    const stored = form.cells && form.cells.length > 0 ? form.cells : [{
+      name: 'Cell 1', cellId: form.cellId, pci: form.pci, band: form.band,
+      nrBandwidth: form.nrBandwidth, subcarrierSpacing: form.subcarrierSpacing,
+      dlNrArfcn: form.dlNrArfcn, ssbPosBitmap: form.ssbPosBitmap, ssbArfcn: form.ssbArfcn,
+      nrTdd: form.nrTdd, fr2: form.fr2, tddPattern: form.tddPattern,
+    }];
+    // The active cell's live edits sit in the flat form fields until a tab
+    // switch snapshots them back, so overlay ALL of them — generating
+    // mid-edit must reflect what's on screen, every field, not a subset.
+    const cells = stored.map((c, i) =>
+      i === form.activeCellIdx
+        ? { ...c,
+            cellId: form.cellId, pci: form.pci, band: form.band,
+            nrBandwidth: form.nrBandwidth, subcarrierSpacing: form.subcarrierSpacing,
+            dlNrArfcn: form.dlNrArfcn, ssbPosBitmap: form.ssbPosBitmap, ssbArfcn: form.ssbArfcn,
+            nrTdd: form.nrTdd, fr2: form.fr2, tddPattern: form.tddPattern }
+        : c);
     return cells.map((c, i) => {
-      // gscn line is only emitted when the user opted in via the SSB ARFCN
-      // override checkbox in the UI. null/undefined → omit entirely so
-      // Amarisoft auto-derives the SSB position from band + dl_nr_arfcn.
+      // gscn only when the user overrode the SSB position; otherwise omit so
+      // Amarisoft derives it from band + dl_nr_arfcn.
       const gscnLine = (c.ssbArfcn !== null && c.ssbArfcn !== undefined)
         ? `\n      gscn: ${c.ssbArfcn},`
         : '';
@@ -76,8 +81,10 @@ export function generateNRConfig(form: NRFormState): string {
       /* ${c.name} */
       rf_port: ${i},
       cell_id: ${c.cellId},
+      n_id_cell: ${c.pci}, /* PCI */
       band: ${c.band},
       dl_nr_arfcn: ${c.dlNrArfcn},
+      bandwidth: ${c.nrBandwidth}, /* MHz */
       subcarrier_spacing: ${c.subcarrierSpacing}, /* kHz */
       ssb_pos_bitmap: "${c.ssbPosBitmap}",${gscnLine}
     }`;
@@ -235,12 +242,12 @@ ${cellListBlock}
   ], /* nr_cell_list */
 
   nr_cell_default: {
-    bandwidth: ${form.nrBandwidth}, /* MHz */
+    /* bandwidth and n_id_cell are set per cell in nr_cell_list[] above; the
+       shared defaults here cover only fields common to every cell. */
     n_antenna_dl: ${form.nAntennaDl},
     n_antenna_ul: ${form.nAntennaUl},
 ${isTdd ? tddBlock() : ''}
     ssb_period: ${form.ssbPeriod}, /* in ms */
-    n_id_cell: ${form.cellId},
 
     plmn_list: [{
       tac: ${form.tac},

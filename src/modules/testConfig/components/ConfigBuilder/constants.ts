@@ -81,8 +81,10 @@ export const DEFAULT_ARFCN: Record<number, number> = Object.fromEntries(
 
 // Default form state for a new NR cell config
 export interface NRFormState {
-  // Cell
+  // Cell — flat fields mirror cells[activeCellIdx] for the section editor.
   cellId: number;
+  /** PCI (n_id_cell) of the active cell; see NRCellEntry.pci. */
+  pci: number;
   nrTdd: number;       // 0=FDD, 1=TDD
   fr2: number;         // 0=FR1, 1=FR2
   plmn: { mcc: string; mnc: string };
@@ -262,6 +264,11 @@ export interface RfPortEntry {
 export interface NRCellEntry {
   name: string;                 // UI label, not written to cfg
   cellId: number;
+  /** Physical Cell ID (n_id_cell), 0..1007. Distinct from cell_id: it is the
+   *  PHY-layer identity a UE syncs to, and MUST differ between cells of a
+   *  multi-cell gNB. Emitted per nr_cell_list[] entry, not in nr_cell_default,
+   *  so two cells can't collide on one PCI. */
+  pci: number;
   band: number;
   nrBandwidth: number;
   subcarrierSpacing: number;
@@ -284,6 +291,7 @@ export function makeDefaultCell(name: string, overrides: Partial<NRCellEntry> = 
   return {
     name,
     cellId: 500,
+    pci: 500,
     band: 78,
     nrBandwidth: 40,
     subcarrierSpacing: 30,
@@ -319,6 +327,7 @@ export interface UeDbEntry {
 
 export const DEFAULT_NR_FORM: NRFormState = {
   cellId: 500,
+  pci: 500,
   nrTdd: 1,
   fr2: 0,
   plmn: { mcc: '001', mnc: '01' },

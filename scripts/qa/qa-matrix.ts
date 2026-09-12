@@ -74,6 +74,25 @@ const scenarios: Scenario[] = [
     },
   },
   {
+    name: 'multi-cell: distinct PCI + per-cell bandwidth',
+    form: {
+      ...base, band: 78, nrTdd: 1,
+      activeCellIdx: 0, cellId: 1, pci: 100, nrBandwidth: 100, dlNrArfcn: 632628,
+      cells: [
+        makeDefaultCell('Cell 1', { cellId: 1, pci: 100, band: 78, nrBandwidth: 100, dlNrArfcn: 632628 }),
+        makeDefaultCell('Cell 2', { cellId: 2, pci: 250, band: 78, nrBandwidth: 20,  dlNrArfcn: 636666 }),
+      ],
+    } as any,
+    fields: [],
+    expect: (cfg) => {
+      const pcis = [...cfg.matchAll(/n_id_cell\s*:\s*(\d+)/g)].map(m => m[1]);
+      check('multi-cell', 'both PCIs emitted, distinct', pcis.includes('100') && pcis.includes('250'), `n_id_cell: ${pcis.join(',')}`);
+      check('multi-cell', 'exactly one n_id_cell assignment per cell (none shared in nr_cell_default)', (cfg.match(/n_id_cell\s*:/g) || []).length === 2, `${(cfg.match(/n_id_cell\s*:/g)||[]).length} assignments`);
+      const bws = [...cfg.matchAll(/bandwidth\s*:\s*(\d+)/g)].map(m => m[1]);
+      check('multi-cell', 'per-cell bandwidth 100 and 20 both present', bws.includes('100') && bws.includes('20'), `bandwidth: ${bws.join(',')}`);
+    },
+  },
+  {
     name: 'multi-cell: 2 cells',
     form: {
       ...base, band: 78, nrTdd: 1,

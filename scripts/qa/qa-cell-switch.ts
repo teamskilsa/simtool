@@ -16,7 +16,7 @@ function snapshotActiveCell(form: NRFormState): NRCellEntry {
   const name = form.cells?.[form.activeCellIdx]?.name || 'Cell 1';
   return {
     name,
-    cellId: form.cellId, band: form.band, nrBandwidth: form.nrBandwidth,
+    cellId: form.cellId, pci: form.pci, band: form.band, nrBandwidth: form.nrBandwidth,
     subcarrierSpacing: form.subcarrierSpacing, dlNrArfcn: form.dlNrArfcn,
     ssbPosBitmap: form.ssbPosBitmap, ssbArfcn: form.ssbArfcn ?? null,
     nrTdd: form.nrTdd, fr2: form.fr2,
@@ -24,7 +24,7 @@ function snapshotActiveCell(form: NRFormState): NRCellEntry {
   };
 }
 function applyCellToFlatState(cell: NRCellEntry, set: (k: string, v: any) => void) {
-  set('cellId', cell.cellId); set('band', cell.band); set('nrBandwidth', cell.nrBandwidth);
+  set('cellId', cell.cellId); set('pci', cell.pci); set('band', cell.band); set('nrBandwidth', cell.nrBandwidth);
   set('subcarrierSpacing', cell.subcarrierSpacing); set('dlNrArfcn', cell.dlNrArfcn);
   set('ssbPosBitmap', cell.ssbPosBitmap); set('ssbArfcn', cell.ssbArfcn ?? null);
   set('nrTdd', cell.nrTdd); set('fr2', cell.fr2);

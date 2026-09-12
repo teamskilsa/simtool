@@ -74,7 +74,7 @@ export function CellEssentials({ form, onChange }: Props) {
   };
 
   const currentCell = {
-    cellId: form.cellId, band: form.band, nrBandwidth: form.nrBandwidth,
+    cellId: form.cellId, pci: form.pci, band: form.band, nrBandwidth: form.nrBandwidth,
     subcarrierSpacing: form.subcarrierSpacing, dlNrArfcn: form.dlNrArfcn,
     nrTdd: form.nrTdd, fr2: form.fr2, ssbArfcn: form.ssbArfcn,
   };
@@ -88,7 +88,15 @@ export function CellEssentials({ form, onChange }: Props) {
       <div className={FIELD_GRID}>
         <Field
           label="Cell ID" required inline
+          hint={<InfoHint>Amarisoft cell_id — the gNB's identifier for this cell. Distinct from PCI.</InfoHint>}
           value={form.cellId} onChange={v => onChange('cellId', v)}
+          type="number" min={0} max={65535}
+        />
+
+        <Field
+          label="PCI" required inline
+          hint={<InfoHint>Physical Cell ID (n_id_cell), 0–1007. Must be distinct per cell in a multi-cell gNB, or UEs cannot tell the cells apart.</InfoHint>}
+          value={form.pci} onChange={v => onChange('pci', v)}
           type="number" min={0} max={1007}
         />
 
