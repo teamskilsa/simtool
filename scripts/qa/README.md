@@ -14,6 +14,7 @@ Run with `npx tsx scripts/qa/<script>.ts` from the repo root.
 | `qa-cell-switch.ts` | regression: the GSCN must not follow you when you switch cell tabs |
 | `qa-cellname.ts` | regression: custom cell names survive re-import |
 | `qa-nsa-names.ts` | regression: the LTE mapper must read `cell_list`, not `nr_cell_list` |
+| `qa-stats-live.ts` | validate the Stats page against a running test: live `stats`/`ue_get` from the box through the render path (needs `QA_LIVE_DIR`) |
 | `qa-root-fields.ts` | regression: license_server, en_dc_support and rf_ports survive for NR and LTE, including port keys with no builder field |
 | `qa-vs-live.ts` | compares against a real production `enb.cfg` (see below) |
 
@@ -46,3 +47,21 @@ missing `license_server` line.
   Cell 2 (`qa-cell-switch.ts` now asserts the fix).
 - Custom cell names were relabelled `Cell 1..N` on re-import.
 - `en_dc_support` and `rf_ports` were dropped from any config that had them. Now kept for both NR and LTE; rf_ports keys the builder has no field for survive through `extra`.
+
+## qa-stats-live.ts — validate Stats against a running test
+
+Pull `stats` and `ue_get` off a box under load (redirect to a FILE, not a pipe —
+the Amarisoft `ws.js` CLI truncates piped stdout at ~68 KB):
+
+    ssh ... 'cd /root/ltemme-linux-*; sudo bash -c "node ws.js 127.0.0.1:9001       '{\"message\":\"stats\",\"samples\":true}' > /tmp/s.raw;       node ws.js 127.0.0.1:9001 '{\"message\":\"ue_get\",\"stats\":true}' > /tmp/u.raw"'
+    # strip the tool header (keep from the first `{`) into s.json / u.json, copy local
+
+    QA_LIVE_DIR=/path/to/folder npx tsx scripts/qa/qa-stats-live.ts
+
+It asserts every KPI, per-cell row, donut and UE row the page shows equals the
+value hand-computed from the raw JSON. Validated 2026-09-12 against a live
+510-UE run (22/22).
+
+Transport note: Amarisoft's remote-API WebSocket requires an **Origin** header
+(`ws.js` sends `origin: "Test"`); a browser sends one automatically, so the
+dashboard connects, but a bare Node `ws` client must pass `{ origin }`.
