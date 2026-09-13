@@ -64,7 +64,7 @@ export function RfPortsGroup({ ports, cellNames, showEmpty, hint, onChange }: Pr
         {rows.map((p, i) => {
           const extraCount = Object.keys(p.extra ?? {}).length;
           return (
-            <div key={i} className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-2.5">
+            <div key={i} className="cfg-field-grid">
               <div className="flex flex-col justify-center min-h-8">
                 <span className="text-xs font-medium text-muted-foreground">
                   Port {i}{cellNames[i] ? ` — ${cellNames[i]}` : ''}

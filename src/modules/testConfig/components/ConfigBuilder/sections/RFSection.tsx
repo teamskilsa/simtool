@@ -51,7 +51,7 @@ export function RFSection({ form, onChange, bare }: Props) {
           </div>
         }
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5">
+        <div className="cfg-field-grid">
           <Field inline
             label="RF Mode"
             value={form.rfMode}
@@ -92,7 +92,7 @@ export function RFSection({ form, onChange, bare }: Props) {
 
           {form.rfMode === 'ip' && (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5">
+              <div className="cfg-field-grid">
                 <Field inline
                   label="TX Address"
                   value={parseRfArgs(form.rfArgs).tx_addr || ''}
@@ -110,7 +110,7 @@ export function RFSection({ form, onChange, bare }: Props) {
                   rf_driver.use_tcp and rf_driver.multi_thread in the
                   emitted cfg. UDP + single-thread (0/0) is the default
                   that worked end-to-end on the user's callbox. */}
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5 mt-4">
+              <div className="cfg-field-grid mt-4">
                 <Field inline
                   label="Transport (rf_driver.use_tcp)"
                   value={parseRfArgs(form.rfArgs).use_tcp ?? '0'}

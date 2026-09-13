@@ -133,7 +133,7 @@ export function AntennaSection({ form, onChange, bare }: Props) {
         <div className="mt-3 space-y-3">
           <div>
             <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">TX Gain (dB) — per DL antenna</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="cfg-field-grid">
               {Array.from({ length: form.nAntennaDl }).map((_, i) => (
                 <Field inline
                   key={`tx-${i}`}
@@ -147,7 +147,7 @@ export function AntennaSection({ form, onChange, bare }: Props) {
           </div>
           <div>
             <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">RX Gain (dB) — per UL antenna</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="cfg-field-grid">
               {Array.from({ length: form.nAntennaUl }).map((_, i) => (
                 <Field inline
                   key={`rx-${i}`}

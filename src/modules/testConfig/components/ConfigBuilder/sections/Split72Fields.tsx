@@ -34,7 +34,7 @@ export function Split72Fields({ rfArgs, onChange }: Props) {
         <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">
           Fronthaul Transport
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="cfg-field-grid">
           <Field
             label="Network Interface"
             value={args.if_name || ''}
@@ -61,7 +61,7 @@ export function Split72Fields({ rfArgs, onChange }: Props) {
         <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">
           IQ Compression (eCPRI)
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="cfg-field-grid">
           <Field
             label="BFP IQ Width (bits)"
             value={args.bfp_iq_width || ''}
@@ -92,7 +92,7 @@ export function Split72Fields({ rfArgs, onChange }: Props) {
         <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">
           O-RU Destination MAC Addresses
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="cfg-field-grid">
           <Field
             label="C-plane Dest MAC"
             value={args.c_plane_dst_mac || ''}
@@ -113,7 +113,7 @@ export function Split72Fields({ rfArgs, onChange }: Props) {
         <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">
           eCPRI Ports (eAxC-ID)
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="cfg-field-grid">
           <Field
             label="C-plane Port"
             value={args.c_plane_port || ''}

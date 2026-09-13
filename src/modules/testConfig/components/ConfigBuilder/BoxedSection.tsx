@@ -90,13 +90,10 @@ export function BoxedSection({
 }
 
 
-/** The one field grid in the builder. Column count follows the CONTAINER's
- *  width, not the viewport: `auto-fill` + a 220px min track means the grid
- *  packs as many usable columns as actually fit and drops to fewer when the
- *  space shrinks. This is what keeps the fields legible when the cfg-preview
- *  panel is open and the form is squeezed to ~half width — viewport `md:`/`xl:`
- *  breakpoints saw the full window and kept 4 columns, crushing each field
- *  (label + input) until they overlapped. Every group uses it, so a field
- *  lands in the same place whichever tab you are on. */
-export const FIELD_GRID =
-  'grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-x-6 gap-y-2.5';
+/** The one field grid in the builder — container-responsive, defined once as
+ *  the `.cfg-field-grid` component class in globals.css (auto-fill + 220px min
+ *  track, so it packs only as many usable columns as actually fit and drops to
+ *  fewer when the cfg-preview panel squeezes the form). Every group uses it —
+ *  the NR sections via this const, the LTE/Core/IoT section grids via the class
+ *  directly — so a field lands in the same place whichever RAT/tab you are on. */
+export const FIELD_GRID = 'cfg-field-grid';

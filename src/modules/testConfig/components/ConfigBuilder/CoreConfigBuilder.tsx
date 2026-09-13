@@ -40,7 +40,7 @@ function GeneralSection({ form, onChange }: { form: NRFormState; onChange: (k: s
       <SectionToolbar type="general" currentData={currentData} onLoad={handleLoad} />
 
       <BoxedSection title="Network Identity">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="cfg-field-grid">
           <Field label="MCC" value={form.plmn.mcc} onChange={v => onChange('plmn', { ...form.plmn, mcc: v })} placeholder="001" />
           <Field label="MNC" value={form.plmn.mnc} onChange={v => onChange('plmn', { ...form.plmn, mnc: v })} placeholder="01" />
           <Field label="TAC" value={form.tac} onChange={v => onChange('tac', v)} type="number" min={0} max={65535} />
@@ -48,14 +48,14 @@ function GeneralSection({ form, onChange }: { form: NRFormState; onChange: (k: s
       </BoxedSection>
 
       <BoxedSection title="MME / AMF" subtitle="Addresses for S1AP / NGAP binding and GTP-U">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="cfg-field-grid">
           <Field label="MME/AMF Address" value={form.amfAddr} onChange={v => onChange('amfAddr', v)} placeholder="127.0.1.100" />
           <Field label="GTP Address" value={form.gtpAddr} onChange={v => onChange('gtpAddr', v)} placeholder="127.0.1.1" />
         </div>
       </BoxedSection>
 
       <BoxedSection title="Security" subtitle="NAS ciphering and integrity algorithms">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="cfg-field-grid">
           <Field label="NAS Integrity" value="eia2" onChange={() => {}} type="select"
             options={[{ value: 'eia0', label: 'EIA0 (null)' }, { value: 'eia1', label: 'EIA1 (SNOW)' }, { value: 'eia2', label: 'EIA2 (AES)' }]} />
           <Field label="NAS Ciphering" value="eea2" onChange={() => {}} type="select"

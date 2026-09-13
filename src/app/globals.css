@@ -141,6 +141,22 @@
 }
 
 @layer components {
+  /* The one field grid for the config builder. Column count follows the
+     CONTAINER's width, not the viewport: auto-fill + a 220px min track packs
+     as many usable columns as actually fit and drops to fewer (or one) as the
+     space shrinks. This is what keeps inline label+input fields legible when
+     the cfg-preview panel is open and the form is squeezed to ~half width —
+     viewport md:/xl: breakpoints saw the whole window and kept 3–4 columns,
+     crushing each field until labels and controls overlapped and values
+     truncated. Used by every RAT builder (NR/LTE/NSA/NB-IoT/CAT-M/Core) via
+     FIELD_GRID and directly by the section grids. */
+  .cfg-field-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    column-gap: 1.5rem;
+    row-gap: 0.625rem;
+  }
+
   .themed-card {
     @apply relative backdrop-blur-sm border border-white/10;
     background: var(--card-background);

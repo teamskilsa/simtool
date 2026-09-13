@@ -39,7 +39,7 @@ import { defaultRfArgs, rfArgsHint, parseRfArgs, setRfArg, type RfMode } from '.
 function CellSection({ form, onChange }: { form: LTEFormState; onChange: (k: string, v: any) => void }) {
   return (
     <BoxedSection title="Cell Identity" subtitle="enb.cfg: cell_list[].{cell_id, n_id_cell, tac, rf_port}">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="cfg-field-grid">
         <Field label="Cell ID" value={form.cellId} onChange={v => onChange('cellId', v)} type="number" min={0} max={255} />
         <Field label="PCI" value={form.pci} onChange={v => onChange('pci', v)} type="number" min={0} max={503} />
         <Field label="TAC" value={form.tac} onChange={v => onChange('tac', v)} type="number" min={0} max={65535} />
@@ -74,7 +74,7 @@ function BandSection({ form, onChange, ratMode }: { form: LTEFormState; onChange
           </div>
         }
       >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="cfg-field-grid">
           <Field label="Band" value={form.band} onChange={handleBandChange} type="select" options={LTE_BAND_OPTIONS} />
           <Field label="Bandwidth (MHz)" value={form.bandwidth} onChange={v => onChange('bandwidth', v)} type="select" options={bwOptions} />
           <Field label="DL EARFCN" value={form.dlEarfcn} onChange={v => onChange('dlEarfcn', v)} type="number" min={0} max={65535} />
@@ -83,7 +83,7 @@ function BandSection({ form, onChange, ratMode }: { form: LTEFormState; onChange
 
       {isTdd && (
         <BoxedSection title="TDD Pattern" subtitle="enb.cfg: cell_list[].{tdd_ul_dl_config, tdd_special_subframe_pattern}">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="cfg-field-grid">
             <Field label="TDD Config" value={form.tddConfig} onChange={v => onChange('tddConfig', v)} type="select" options={LTE_TDD_CONFIGS} />
             <Field label="Special Subframe" value={form.tddSpecialSubframe} onChange={v => onChange('tddSpecialSubframe', v)} type="number" min={0} max={9} />
           </div>
@@ -114,7 +114,7 @@ function RFSection({ form, onChange }: { form: LTEFormState; onChange: (k: strin
         </Button>
       }
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="cfg-field-grid">
         <Field
           label="RF Mode"
           value={form.rfMode}
@@ -155,7 +155,7 @@ function RFSection({ form, onChange }: { form: LTEFormState; onChange: (k: strin
         )}
         {form.rfMode === 'ip' && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="cfg-field-grid">
               <Field
                 label="TX Address"
                 value={parseRfArgs(form.rfArgs).tx_addr || ''}
@@ -173,7 +173,7 @@ function RFSection({ form, onChange }: { form: LTEFormState; onChange: (k: strin
                 rf_driver.use_tcp and rf_driver.multi_thread in the
                 emitted cfg. UDP + single-thread (0/0) is the default
                 that worked end-to-end on the user's callbox. */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div className="cfg-field-grid mt-4">
               <Field
                 label="Transport (rf_driver.use_tcp)"
                 value={parseRfArgs(form.rfArgs).use_tcp ?? '0'}
@@ -211,7 +211,7 @@ function IoTSection({ form, onChange, ratMode }: { form: LTEFormState; onChange:
         title="NB-IoT"
         subtitle="enb.cfg: cell_list[].{nb_iot_mode, nb_iot_prb_index}"
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="cfg-field-grid">
           <Field label="Deployment Mode" value={form.nbIotMode} onChange={v => onChange('nbIotMode', v)} type="select"
             options={[
               { value: 'standalone', label: 'Standalone' },
@@ -234,7 +234,7 @@ function IoTSection({ form, onChange, ratMode }: { form: LTEFormState; onChange:
         title="CAT-M1 / eMTC"
         subtitle="enb.cfg: cell_list[].{ce_mode, max_repetitions}"
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="cfg-field-grid">
           <Field label="CE Mode" value={form.catMCeMode} onChange={v => onChange('catMCeMode', v)} type="select"
             options={[{ value: 'A', label: 'CE Mode A' }, { value: 'B', label: 'CE Mode B' }]} />
           <Field label="Max Repetitions" value={form.catMRepetitions} onChange={v => onChange('catMRepetitions', v)} type="number" min={1} max={2048} />

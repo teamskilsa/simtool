@@ -17,7 +17,7 @@ export function TddPatternFields({ form, onChange }: Props) {
           <code className="font-mono"> tdd_ul_dl_config</code> on the cell.
         </InfoHint>
       </h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5">
+      <div className="cfg-field-grid">
         <Field inline label="Period (ms)" value={form.tddPattern.period} onChange={v => set('period', v)} type="number" step="0.125" />
         <Field inline label="DL Slots" value={form.tddPattern.dlSlots} onChange={v => set('dlSlots', v)} type="number" />
         <Field inline label="DL Symbols" value={form.tddPattern.dlSymbols} onChange={v => set('dlSymbols', v)} type="number" />

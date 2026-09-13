@@ -12,7 +12,7 @@ interface Props { form: LTEFormState; onChange: (key: string, value: any) => voi
 export function PowerLte({ form, onChange }: Props) {
   return (
     <BoxedSection title="Dynamic Power Control" subtitle="enb.cfg: cell_list[].dpc + dpc_*_snr_target">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="cfg-field-grid">
         <Field label="DPC Enabled" value={form.dpc} onChange={v => onChange('dpc', v)} type="checkbox" />
         <Field label="PUSCH SNR (dB)" value={form.dpcPuschSnrTarget} onChange={v => onChange('dpcPuschSnrTarget', v)} type="number" min={-10} max={40} disabled={!form.dpc} />
         <Field label="PUCCH SNR (dB)" value={form.dpcPucchSnrTarget} onChange={v => onChange('dpcPucchSnrTarget', v)} type="number" min={-10} max={40} disabled={!form.dpc} />

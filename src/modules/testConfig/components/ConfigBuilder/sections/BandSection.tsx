@@ -56,7 +56,7 @@ export function BandSection({ form, onChange }: Props) {
         title="Band & Frequency"
         hint="Choosing a band sets the frequency range, duplex mode and a default carrier, and limits bandwidth and subcarrier spacing to the values that band supports."
       >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="cfg-field-grid">
           {/* One list of every band, grouped by range. The old UI split bands
               across an FR selector, so the user had to choose FR *before*
               the band and nothing corrected FR if they changed band later. */}
@@ -114,7 +114,7 @@ export function BandSection({ form, onChange }: Props) {
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <div className="cfg-field-grid mt-3">
           {/* DL NR-ARFCN (DL carrier center) */}
           <Field
             label="DL NR-ARFCN"
