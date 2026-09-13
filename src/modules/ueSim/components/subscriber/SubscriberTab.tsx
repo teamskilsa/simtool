@@ -22,15 +22,18 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import {
-  Card, CardContent, CardHeader, CardTitle,
-} from '@/components/ui/card';
-import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
+import { BoxedSection, FIELD_GRID } from '@/modules/testConfig/components/ConfigBuilder/BoxedSection';
+import { Field } from '@/modules/testConfig/components/ConfigBuilder/sections/Field';
 
 import type {
   SimAlgorithm, SubscriberDefaults, SubscriberEntry, SubscriberSectionData,
 } from '../../types';
+
+// The one table-header style, shared with the eNB stats tables: a mono,
+// uppercase micro-label — the Kicker treatment applied to a column.
+const TH = 'h-8 font-mono text-[10px] font-semibold uppercase tracking-label text-muted-foreground';
 
 interface Props {
   data: SubscriberSectionData;
@@ -122,85 +125,71 @@ export function SubscriberTab({ data, onChange }: Props) {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <SettingsIcon className="h-4 w-4" /> Defaults (applied to bulk-added UEs)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">SIM Algorithm</Label>
-            <Select
-              value={data.defaults.sim_algo}
-              onValueChange={v => updateDefaults({ sim_algo: v as SimAlgorithm })}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {ALGOS.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">UE Category</Label>
-            <Input
-              type="number"
-              value={data.defaults.ue_category}
-              onChange={e => updateDefaults({ ue_category: Number(e.target.value) })}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">AS Release</Label>
-            <Input
-              type="number"
-              value={data.defaults.as_release}
-              onChange={e => updateDefaults({ as_release: Number(e.target.value) })}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Default APN</Label>
-            <Input
-              value={data.defaults.default_apn ?? ''}
-              onChange={e => updateDefaults({ default_apn: e.target.value || undefined })}
-              placeholder="e.g. internet"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <BoxedSection
+        title="Defaults"
+        icon={<SettingsIcon className="h-3.5 w-3.5" />}
+        hint="Applied to every UE created by Bulk Add — and to Add UE for the algorithm, category and release. Edit an individual UE in the pool below to override."
+      >
+        <div className={FIELD_GRID}>
+          <Field
+            label="SIM Algorithm" inline type="select"
+            options={ALGOS.map(a => ({ value: a, label: a }))}
+            value={data.defaults.sim_algo}
+            onChange={v => updateDefaults({ sim_algo: v as SimAlgorithm })}
+          />
+          <Field
+            label="UE Category" inline type="number"
+            value={data.defaults.ue_category}
+            onChange={v => updateDefaults({ ue_category: Number(v) })}
+          />
+          <Field
+            label="AS Release" inline type="number"
+            value={data.defaults.as_release}
+            onChange={v => updateDefaults({ as_release: Number(v) })}
+          />
+          <Field
+            label="Default APN" inline type="text"
+            value={data.defaults.default_apn ?? ''}
+            onChange={v => updateDefaults({ default_apn: String(v) || undefined })}
+            placeholder="e.g. internet"
+          />
+        </div>
+      </BoxedSection>
 
-      <Card>
-        <CardHeader className="py-3 flex-row items-center justify-between">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Users className="h-4 w-4" /> UE Pool ({data.ues.length})
-          </CardTitle>
+      <BoxedSection
+        boxed
+        noPadding
+        icon={<Users className="h-3.5 w-3.5" />}
+        title={`UE Pool · ${data.ues.length}`}
+        action={
           <div className="flex items-center gap-1">
-            <Button size="sm" variant="outline" onClick={addOne}>
+            <Button size="sm" variant="outline" className="h-7" onClick={addOne}>
               <Plus className="h-3.5 w-3.5 mr-1" /> Add UE
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setBulkOpen(true)}>
+            <Button size="sm" variant="outline" className="h-7" onClick={() => setBulkOpen(true)}>
               Bulk Add…
             </Button>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="border rounded-md overflow-x-auto">
+        }
+      >
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">ID</TableHead>
-                  <TableHead>IMSI</TableHead>
-                  <TableHead>K</TableHead>
-                  <TableHead>OPc</TableHead>
-                  <TableHead>Algo</TableHead>
-                  <TableHead>Cat</TableHead>
-                  <TableHead>AS Rel</TableHead>
-                  <TableHead className="w-10" />
+                <TableRow className="bg-muted/60 hover:bg-muted/60">
+                  <TableHead className={`${TH} w-12`}>ID</TableHead>
+                  <TableHead className={TH}>IMSI</TableHead>
+                  <TableHead className={TH}>K</TableHead>
+                  <TableHead className={TH}>OPc</TableHead>
+                  <TableHead className={TH}>Algo</TableHead>
+                  <TableHead className={TH}>Cat</TableHead>
+                  <TableHead className={TH}>AS Rel</TableHead>
+                  <TableHead className={`${TH} w-10`} />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {visibleUes.map(u => (
-                  <TableRow key={u.ue_id}>
-                    <TableCell className="text-muted-foreground">{u.ue_id}</TableCell>
+                  <TableRow key={u.ue_id} className="odd:bg-muted/20">
+                    <TableCell className="num text-muted-foreground">{u.ue_id}</TableCell>
                     <TableCell>
                       <Input
                         value={u.imsi}
@@ -264,14 +253,13 @@ export function SubscriberTab({ data, onChange }: Props) {
             </Table>
           </div>
           {data.ues.length > RENDER_CAP && (
-            <div className="mt-2 text-center">
+            <div className="border-t border-border py-2 text-center">
               <Button size="sm" variant="ghost" onClick={() => setShowAll(s => !s)}>
                 {showAll ? `Show first ${RENDER_CAP}` : `Show all ${data.ues.length} UEs`}
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </BoxedSection>
 
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
         <DialogContent>

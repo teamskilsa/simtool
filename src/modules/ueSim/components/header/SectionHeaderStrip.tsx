@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Kicker } from '@/components/ui/stat';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
@@ -67,15 +68,19 @@ export function SectionHeaderStrip({
 
   return (
     <>
-      <div className="flex items-center flex-wrap gap-2 border border-border/70 rounded-xl px-3 py-2 bg-muted/30">
-        <FileText className="h-4 w-4 text-muted-foreground" />
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          {label}
-        </span>
+      {/* Tab-top file bar. Same hairline-on-muted treatment as the builder's
+          boxed section headers, so a UESIM tab and a config-builder tab read as
+          the same surface. The active section file is chosen here; Save / Save
+          As / Reset / Delete act on it. */}
+      <div className="flex items-center flex-wrap gap-x-3 gap-y-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+          <Kicker>{label}</Kicker>
+        </div>
 
         <div className="w-44 lg:w-64">
           <Select value={activeId} onValueChange={onSelect}>
-            <SelectTrigger className="h-8 [&>span]:truncate [&>span]:text-left">
+            <SelectTrigger className="h-8 bg-background [&>span]:truncate [&>span]:text-left">
               <SelectValue placeholder="Select section…" />
             </SelectTrigger>
             <SelectContent>
@@ -94,25 +99,29 @@ export function SectionHeaderStrip({
         </div>
 
         {isDirty && (
-          <Badge variant="outline" className="text-amber-600 border-amber-300">
+          <Badge
+            variant="outline"
+            className="font-mono text-[10px] uppercase tracking-label text-brand-amber-700 border-brand-amber-300 dark:text-brand-amber-400"
+          >
             unsaved
           </Badge>
         )}
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-0.5">
           <Button
             size="sm"
             variant="ghost"
+            className="h-8 px-2"
             onClick={onSave}
             disabled={isBuiltIn || !isDirty}
             title={isBuiltIn ? 'Built-in sections cannot be overwritten — use Save As' : 'Save changes'}
           >
             <Save className="h-3.5 w-3.5 mr-1" /> Save
           </Button>
-          <Button size="sm" variant="ghost" onClick={openSaveAs}>
+          <Button size="sm" variant="ghost" className="h-8 px-2" onClick={openSaveAs}>
             <Copy className="h-3.5 w-3.5 mr-1" /> Save As
           </Button>
-          <Button size="sm" variant="ghost" onClick={onReset} disabled={!isDirty}>
+          <Button size="sm" variant="ghost" className="h-8 px-2" onClick={onReset} disabled={!isDirty}>
             <RotateCcw className="h-3.5 w-3.5 mr-1" /> Reset
           </Button>
           <Button
@@ -120,7 +129,7 @@ export function SectionHeaderStrip({
             variant="ghost"
             onClick={() => setConfirmDelete(true)}
             disabled={isBuiltIn || !active}
-            className="text-destructive hover:text-destructive"
+            className="h-8 px-2 text-destructive hover:text-destructive"
           >
             <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
           </Button>
