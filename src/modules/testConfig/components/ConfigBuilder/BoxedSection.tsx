@@ -90,8 +90,13 @@ export function BoxedSection({
 }
 
 
-/** The one field grid in the builder. Four columns of inline label+control on
- *  a wide screen, two on a laptop, one on a phone. Every group uses it, so a
- *  field lands in the same place whichever tab you are on. */
+/** The one field grid in the builder. Column count follows the CONTAINER's
+ *  width, not the viewport: `auto-fill` + a 220px min track means the grid
+ *  packs as many usable columns as actually fit and drops to fewer when the
+ *  space shrinks. This is what keeps the fields legible when the cfg-preview
+ *  panel is open and the form is squeezed to ~half width — viewport `md:`/`xl:`
+ *  breakpoints saw the full window and kept 4 columns, crushing each field
+ *  (label + input) until they overlapped. Every group uses it, so a field
+ *  lands in the same place whichever tab you are on. */
 export const FIELD_GRID =
-  'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5';
+  'grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-x-6 gap-y-2.5';

@@ -9,7 +9,8 @@ import { Field } from './Field';
 import { InfoHint } from '../InfoHint';
 import { Button } from '@/components/ui/button';
 import { RotateCcw } from 'lucide-react';
-import { BoxedSection } from '../BoxedSection';
+import { BoxedSection, FIELD_GRID } from '../BoxedSection';
+import { cn } from '@/lib/utils';
 import type { NRFormState } from '../constants';
 import { defaultGains, defaultRfArgs, gainArrayFromScalar, gainAsScalar } from '../rfDefaults';
 
@@ -87,7 +88,7 @@ export function AntennaSection({ form, onChange, bare }: Props) {
         </Button>
       }
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5">
+      <div className={FIELD_GRID}>
         <Field inline
           label="Downlink Antennas"
           value={form.nAntennaDl}
@@ -121,7 +122,7 @@ export function AntennaSection({ form, onChange, bare }: Props) {
 
       {/* Single-value form */}
       {!isPerAntenna && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-6 gap-y-2.5 mt-3">
+        <div className={cn(FIELD_GRID, 'mt-3')}>
           <Field inline label="TX Gain (dB)" value={form.txGain as number} onChange={v => onChange('txGain', v)} type="number" min={0} max={120} />
           <Field inline label="RX Gain (dB)" value={form.rxGain as number} onChange={v => onChange('rxGain', v)} type="number" min={0} max={80} />
         </div>
