@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Save, Copy, Download, Eye, EyeOff, FolderOpen, Radio, Shield, Wifi, Signal, RotateCcw } from 'lucide-react';
+import { Save, Copy, Download, Eye, EyeOff, FileCode2, FolderOpen, LayoutPanelLeft, Radio, Shield, Wifi, Signal, RotateCcw } from 'lucide-react';
+import { RadioOverview } from '../components/ConfigBuilder/RadioOverview';
 import { ResizablePanel } from '@/components/ui/resizable-panel';
 import { toast } from '@/components/ui/use-toast';
 import { ToastAction } from '@/components/ui/toast';
@@ -44,6 +45,9 @@ export const CreateTestView: React.FC = () => {
   const [nsaForm, setNsaForm] = useState<NSAFormState>({ ...DEFAULT_NSA_FORM });
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  // What the preview pane shows: the plain-English picture of the radio, or
+  // the generated file. Core configs have no radio, so they stay on the text.
+  const [previewTab, setPreviewTab] = useState<'overview' | 'cfg'>('overview');
   // The most recently loaded config's raw content. Used to extract external
   // references (drb.cfg, sib*.asn, rf_driver includes) that the form-level
   // generators don't track, so the Dependencies panel can show them.
@@ -373,17 +377,39 @@ export const CreateTestView: React.FC = () => {
           }
           right={
             <div className="flex flex-col h-full">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800 bg-gray-900 rounded-tr-lg">
-                <span className="text-xs font-mono text-gray-400">
-                  {configType === 'core' ? 'mme.cfg' : configType === 'nsa' ? 'enb-nsa.cfg' : 'enb.cfg'}
-                </span>
+              <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-800 bg-gray-900 rounded-tr-lg">
+                {configType === 'core' ? (
+                  <span className="text-xs font-mono text-gray-400">mme.cfg</span>
+                ) : (
+                  <div className="flex items-center gap-1 rounded-md border border-gray-700 p-0.5">
+                    <button
+                      type="button" onClick={() => setPreviewTab('overview')}
+                      className={`px-2.5 py-1 text-xs rounded ${previewTab === 'overview' ? 'bg-primary text-primary-foreground' : 'text-gray-400 hover:text-gray-200'}`}
+                    >
+                      <LayoutPanelLeft className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />Overview
+                    </button>
+                    <button
+                      type="button" onClick={() => setPreviewTab('cfg')}
+                      className={`px-2.5 py-1 text-xs rounded font-mono ${previewTab === 'cfg' ? 'bg-primary text-primary-foreground' : 'text-gray-400 hover:text-gray-200'}`}
+                    >
+                      <FileCode2 className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
+                      {configType === 'nsa' ? 'enb-nsa.cfg' : 'enb.cfg'}
+                    </button>
+                  </div>
+                )}
                 <Badge variant="outline" className="text-[10px] border-gray-700 text-gray-400">
                   {RAT_OPTIONS.find(r => r.id === configType)?.description}
                 </Badge>
               </div>
-              <pre className="flex-1 p-3 text-[11px] font-mono text-gray-300 overflow-auto leading-relaxed">
-                {configOutput}
-              </pre>
+              {configType !== 'core' && previewTab === 'overview' ? (
+                <div className="flex-1 overflow-auto bg-background p-3 rounded-br-lg">
+                  <RadioOverview type={configType} nrForm={nrForm} lteForm={lteForm} />
+                </div>
+              ) : (
+                <pre className="flex-1 p-3 text-[11px] font-mono text-gray-300 overflow-auto leading-relaxed">
+                  {configOutput}
+                </pre>
+              )}
             </div>
           }
         />
