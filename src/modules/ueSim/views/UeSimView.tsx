@@ -24,8 +24,11 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from '@/components/ui/tabs';
 
-import { Smartphone } from 'lucide-react';
+import { useEffect as useEffectMode, useState as useStateMode } from 'react';
+import { FlaskConical, Layers3, Smartphone } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
+import { cn } from '@/lib/utils';
+import { UeTestCaseView } from '../testcase/views/UeTestCaseView';
 import { useActiveProfile, useSectionList, type TabKey } from '../hooks/useActiveProfile';
 import { ProfileSelector } from '../components/header/ProfileSelector';
 import { SectionHeaderStrip } from '../components/header/SectionHeaderStrip';
@@ -74,7 +77,7 @@ function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v));
 }
 
-export function UeSimView() {
+function UeProfileEditor() {
   const {
     hydrated, profile, profiles, sections, materialized,
     selectProfile, createProfile, setSectionForTab,
@@ -252,12 +255,6 @@ export function UeSimView() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        icon={<Smartphone />}
-        title="UE Simulator"
-        subtitle="Build and apply ue.cfg profiles"
-      />
-
       <ProfileSelector
         profiles={profiles}
         activeId={profile.id}
@@ -405,6 +402,71 @@ export function UeSimView() {
         current={materializedFromDrafts}
         profileName={profile.name}
       />
+    </div>
+  );
+}
+
+// ── Page shell ──────────────────────────────────────────────────────────
+//
+// Two ways to build a ue.cfg, one page:
+//   Test Cases — the Simnovator-style wizard (Cell → Subscriber → User
+//                Plane → Traffic → Mobility → Settings). Default.
+//   Profiles   — the section-file editor above, for hand-assembling a
+//                profile from reusable cell / subscriber / traffic files.
+
+type UeSimMode = 'testcases' | 'profiles';
+const MODE_KEY = 'simtool_uesim_mode_v1';
+
+export function UeSimView() {
+  const [mode, setMode] = useStateMode<UeSimMode>('testcases');
+
+  useEffectMode(() => {
+    try {
+      const saved = window.localStorage.getItem(MODE_KEY);
+      if (saved === 'profiles' || saved === 'testcases') setMode(saved);
+    } catch { /* ignore */ }
+  }, []);
+
+  const pick = (m: UeSimMode) => {
+    setMode(m);
+    try { window.localStorage.setItem(MODE_KEY, m); } catch { /* ignore */ }
+  };
+
+  const toggle = (
+    <div className="flex items-center gap-0.5 rounded-md border border-border p-0.5">
+      {([
+        { id: 'testcases', label: 'Test Cases', icon: FlaskConical },
+        { id: 'profiles', label: 'Section Profiles', icon: Layers3 },
+      ] as const).map(t => {
+        const Icon = t.icon;
+        const active = mode === t.id;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => pick(t.id)}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded transition-colors',
+              active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        icon={<Smartphone />}
+        title="UE Simulator"
+        subtitle={mode === 'testcases' ? 'Create UE-SIM test cases and generate ue.cfg' : 'Assemble ue.cfg profiles from section files'}
+        actions={toggle}
+      />
+      {mode === 'testcases' ? <UeTestCaseView /> : <UeProfileEditor />}
     </div>
   );
 }

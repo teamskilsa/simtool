@@ -17,6 +17,8 @@ Run with `npx tsx scripts/qa/<script>.ts` from the repo root.
 | `qa-stats-live.ts` | validate the Stats page against a running test: live `stats`/`ue_get` from the box through the render path (needs `QA_LIVE_DIR`) |
 | `qa-root-fields.ts` | regression: license_server, en_dc_support and rf_ports survive for NR and LTE, including port keys with no builder field |
 | `qa-vs-live.ts` | compares against a real production `enb.cfg` (see below) |
+| `qa-uesim-testcase.ts` | UE-SIM test-case wizard: defaults → `ue.cfg` → re-parse, SUPI/K expansion, attach schedule, iperf/ping events, mobility keys, validation, header round trip (`QA_PRINT=1` prints the cfg) |
+| `qa-corenet-config.ts` | Core network wizard: defaults → `mme.cfg` → re-parse, subscriber/IMS-identity expansion, APN pools and capacity, slices and quoted `"5qi"`, hex categories, validation, header round trip. `QA_LIVE_MME=<path>` also diffs the key set against a real mme.cfg |
 
 ## qa-vs-live.ts
 

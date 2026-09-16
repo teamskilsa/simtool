@@ -64,6 +64,10 @@ const UeSimView = dynamic(
   () => import('@/modules/ueSim').then(m => m.UeSimView),
   { ssr: false, loading: sectionLoading },
 );
+const CoreNetView = dynamic(
+  () => import('@/modules/coreNet').then(m => m.CoreNetView),
+  { ssr: false, loading: sectionLoading },
+);
 
 interface DashboardContentProps {
   activeSection: string;
@@ -128,6 +132,9 @@ export const DashboardContent = ({
 
       case 'uesim':
         return <UeSimView />;
+
+      case 'corenet':
+        return <CoreNetView />;
 
       case 'users':
         if (user?.role !== 'admin') return null;
