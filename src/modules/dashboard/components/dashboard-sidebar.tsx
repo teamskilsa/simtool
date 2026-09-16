@@ -16,26 +16,7 @@ import { useState } from 'react';
 import { ModeToggle } from '@/components/theme/mode-toggle';
 import { cn } from '@/lib/utils';
 import {
-  Menu,
-  Search,
-  LogOut,
-  LayoutDashboard,
-  TestTube,
-  Play,
-  Server,
-  Plus,
-  List,
-  FolderTree,
-  ChevronRight,
-  Settings,
-  LineChart,
-  Users,
-  Signal,
-  Bell,
-  User,
-  Package,
-  Smartphone,
-  RadioTower,
+  Bell, ChevronRight, Database, FolderTree, LayoutDashboard, LineChart, List, LogOut, Menu, Package, Play, Plus, RadioTower, Search, Server, Settings, Signal, Smartphone, TestTube, User, Users,
 } from 'lucide-react';
 
 interface DashboardSidebarProps {
@@ -81,6 +62,7 @@ const SECTIONS: NavSection[] = [
       { id: 'test-execution', icon: Play,       label: 'Test Execution' },
       { id: 'stats',          icon: LineChart,  label: 'Stats' },
       { id: 'uesim',          icon: Smartphone, label: 'UE Simulator' },
+      { id: 'corenet',        icon: Database,   label: 'Core Network' },
     ],
   },
   {
