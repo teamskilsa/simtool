@@ -157,6 +157,22 @@
     row-gap: 0.625rem;
   }
 
+  /* The UE-SIM wizard's step columns, for the same reason as .cfg-field-grid
+     above: a step form sits in a resizable split beside the overview / ue.cfg
+     panel, so its columns have to follow the pane rather than the window. A
+     viewport breakpoint fires while the pane is half that wide and starves
+     every control — measured at 25px for a 6-digit ARFCN. auto-fit with a
+     300px min track (enough for the 116px inline label plus its input) gives
+     as many columns as genuinely fit and collapses to one when the panel is
+     open. Columns are separated by the gap, not by rules, because auto-fit
+     cannot know which child ended a row. */
+  .wizard-cols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    column-gap: 2rem;
+    row-gap: 0.75rem;
+  }
+
   .themed-card {
     @apply relative backdrop-blur-sm border border-white/10;
     background: var(--card-background);

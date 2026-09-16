@@ -145,7 +145,13 @@ export function Field({ label, value, onChange, type = 'text', options, min, max
   return (
     <div className="space-y-1">
       <div className="flex items-baseline justify-between">
-        <Label className="text-xs text-muted-foreground">{label}</Label>
+        <Label className="text-xs text-muted-foreground flex items-center gap-1">
+          <span>
+            {label}
+            {required && <span className="text-destructive ml-0.5">*</span>}
+          </span>
+          {hint}
+        </Label>
         {showRangeHint && rangeHint && (
           <span className="text-[10px] text-muted-foreground/70 font-mono">{rangeHint}</span>
         )}

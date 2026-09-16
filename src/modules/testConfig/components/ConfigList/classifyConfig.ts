@@ -14,7 +14,7 @@ export interface ConfigClassification {
   /** RAT type for main configs; for auxiliary files this is undefined */
   rat?: BuilderConfigType;
   /** Display label for auxiliary files (e.g. "DRB", "SIB", "ASN", "DB") */
-  auxKind?: 'drb' | 'sib' | 'asn' | 'db' | 'include' | 'other';
+  auxKind?: 'drb' | 'sib' | 'asn' | 'db' | 'include' | 'ue' | 'other';
 }
 
 /** Quick filename-based check — auxiliary files don't need full parsing */
@@ -45,6 +45,13 @@ function quickAuxClassify(name: string): ConfigClassification | null {
 export function classifyConfig(config: ConfigItem): ConfigClassification {
   const aux = quickAuxClassify(config.name);
   if (aux) return aux;
+
+  // UE simulator configs (module 'ue', or a ue_list body) are not gNB/eNB
+  // main configs, but they are not stray auxiliaries either — give them
+  // their own badge so a saved test case is recognisable in the list.
+  if (config.module === 'ue' || /ue_list\s*:/.test(config.content || '')) {
+    return { kind: 'auxiliary', auxKind: 'ue' };
+  }
 
   // Main config: detect RAT
   const ast = tryParseAmarisoftConfig(config.content || '');
@@ -80,5 +87,6 @@ export const AUX_BADGE: Record<NonNullable<ConfigClassification['auxKind']>, { l
   asn:     { label: 'ASN',     color: 'bg-purple-50 text-purple-700 border-purple-200' },
   db:      { label: 'DB',      color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   include: { label: 'INCLUDE', color: 'bg-slate-50 text-slate-700 border-slate-200' },
+  ue:      { label: 'UE SIM',  color: 'bg-orange-50 text-orange-700 border-orange-200' },
   other:   { label: 'AUX',     color: 'bg-gray-50 text-gray-700 border-gray-200' },
 };
