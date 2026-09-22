@@ -503,6 +503,10 @@ function astToLTEForm(ast: Record<string, any>, warnings: string[], text = ''): 
     dpcPuschSnrTarget:    num(cv(cell0, 'dpc_pusch_snr_target'), DEFAULT_LTE_FORM.dpcPuschSnrTarget),
     dpcPucchSnrTarget:    num(cv(cell0, 'dpc_pucch_snr_target'), DEFAULT_LTE_FORM.dpcPucchSnrTarget),
     inactivityTimer:      num(cv(cell0, 'inactivity_timer'), DEFAULT_LTE_FORM.inactivityTimer),
+    // ho_from_meas defaults to true in lteenb and in the builder, so only an
+    // explicit false turns it off. ncell_list / meas_config_desc are not read
+    // back: the generator derives them from the cells and this toggle.
+    hoFromMeas:           bool(cv(cell0, 'ho_from_meas'), DEFAULT_LTE_FORM.hoFromMeas ?? true),
     drbConfig:            str(cv(cell0, 'drb_config'), DEFAULT_LTE_FORM.drbConfig),
     cipherAlgoPref:       cipher,
     integAlgoPref:        integ,

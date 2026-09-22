@@ -153,6 +153,17 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
         tddConfig: form.tddConfig, tddSpecialSubframe: form.tddSpecialSubframe,
       })];
 
+  // ── Handover: any multi-cell eNB (NB-IoT excluded — no connected-mode
+  //    handover there) gets per-cell ncell_list plus the measurement config.
+  //    Single-cell output is unchanged.
+  const handoverCapable = cellEntries.length > 1 && ratMode !== 'nbiot';
+  // enb_id is emitted verbatim ("0x1A2D0" or decimal); a bare hex string is read as hex.
+  const enbIdNum = Number.isFinite(Number(form.enbId)) ? Number(form.enbId) : parseInt(String(form.enbId), 16);
+  const eciHex = (cellId: number) => {
+    const eci = (Number.isFinite(enbIdNum) ? (enbIdNum & 0xFFFFF) : 0) * 256 + ((Number(cellId) || 0) & 0xFF);
+    return `0x${eci.toString(16).toUpperCase()}`;
+  };
+
   // ── Per-cell entries: ONLY the fields that genuinely vary per cell.
   //    Everything else lives in cell_default below — Amarisoft merges
   //    cell_default into each cell_list entry at parse time (docs:
@@ -183,10 +194,23 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
     const catmPart = ratMode === 'catm'
       ? `\n      ce_mode: "${form.catMCeMode}",\n      max_repetitions: ${form.catMRepetitions},`
       : '';
-    const otherCellIds = cellEntries.filter((_, j) => j !== i).map(o => o.cellId);
+    // LTE CA tops out at 5 component carriers (1 PCell + maxSCell-r10 = 4
+    // SCells), so with 6+ cells each cell lists the next 4 cells cyclically.
+    const otherCellIds = Array.from({ length: Math.min(cellEntries.length - 1, 4) },
+      (_, k) => cellEntries[(i + k + 1) % cellEntries.length].cellId);
     const scellPart = otherCellIds.length > 0 ? `
       scell_list: [${otherCellIds.map(id => `
         { cell_id: ${id}, cross_carrier_scheduling: false }`).join(',')}
+      ],` : '';
+    // Neighbours: every other cell of this eNB. lteenb resolves a handover
+    // target (PCI + DL EARFCN) to its ECGI through the SOURCE cell's
+    // ncell_list, so without it both the handover remote API / web UI and
+    // measurement-driven handover fail with "ARFCN x PCI y not found in
+    // Neighbour Cell List". cell_id here is the 28-bit ECI = enb_id << 8 | cell_id.
+    const ncellPart = handoverCapable ? `
+      /* neighbour cells: PCI + EARFCN -> ECGI, needed for handover */
+      ncell_list: [${cellEntries.filter((_, j) => j !== i).map(o => `
+        { n_id_cell: ${o.pci}, dl_earfcn: ${o.dlEarfcn}, cell_id: ${eciHex(o.cellId)}, tac: ${o.tac} }`).join(',')}
       ],` : '';
     // rf_port only emitted when explicitly non-zero or multi-cell — single-cell
     // configs match the canonical sample which omits it.
@@ -204,7 +228,7 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
       n_id_cell: ${c.pci},
       cell_id: ${c.cellId},
       tac: ${c.tac},
-      root_sequence_index: ${c.rootSequenceIndex},${rfPortPart}${tddPart}${nbiotPart}${catmPart}${scellPart}
+      root_sequence_index: ${c.rootSequenceIndex},${rfPortPart}${tddPart}${nbiotPart}${catmPart}${ncellPart}${scellPart}
     }`;
   }).join(',\n');
 
@@ -226,9 +250,50 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
   // PRACH config index: 4 for FDD (subframe 4 every 10 ms), 15 for 1.4 MHz.
   const prachConfigIndex = nRbDl === 6 ? 15 : 4;
   // PUCCH dedicated — TDD adds tdd_ack_nack_feedback_mode.
+  // With more than two cells, CA ack/nack needs PUCCH format 3 ("cs" only
+  // covers two serving cells) plus RBs reserved for it — as enb-3cc.cfg does.
+  const caPucch3 = cellEntries.length > 2 && ratMode === 'lte'
+    ? ', ack_nack_feedback_mode_ca: "pucch3", n3_pucch_an_n_rb: 3' : '';
   const pucchDedicated = isTdd
-    ? `{ n1_pucch_sr_count: 11, cqi_pucch_n_rb: 1, tdd_ack_nack_feedback_mode: "multiplexing" }`
-    : `{ n1_pucch_sr_count: 11, cqi_pucch_n_rb: 1 }`;
+    ? `{ n1_pucch_sr_count: 11, cqi_pucch_n_rb: 1, tdd_ack_nack_feedback_mode: "multiplexing"${caPucch3} }`
+    : `{ n1_pucch_sr_count: 11, cqi_pucch_n_rb: 1${caPucch3} }`;
+  // MIMO: PDSCH p_a and transmission mode follow enb.default.cfg
+  // (p_a -3 for 2 antennas, -6 for 4; TM3 with RI reporting every m_ri*cqi_period).
+  const nAntDl = Number(form.nAntennaDl) || 1;
+  const pA = nAntDl >= 4 ? -6 : nAntDl >= 2 ? -3 : 0;
+  const mimoPart = nAntDl >= 2 ? `
+    transmission_mode: 3,
+    m_ri: 8,` : '';
+
+  // Measurement-driven handover (enb-2cell-ho.cfg pattern). meas_config_desc
+  // makes lteenb build the RRC measConfig from ncell_list: A1/A2 on the
+  // serving cell switch measurement gaps on/off (the neighbours sit on other
+  // EARFCNs, so the UE needs gaps — gp0 = 40 ms period), and an A3 event per
+  // neighbour frequency triggers the handover when ho_from_meas is true.
+  // Toggle off → no measurement config, only manual handover (API / web UI).
+  const hoFromMeas = form.hoFromMeas !== false;
+  const handoverPart = !handoverCapable ? '' : hoFromMeas ? `
+    /* handover: measurement config built from ncell_list */
+    meas_config_desc: {
+      a1_report_type: "rsrp",
+      a1_rsrp: -100,
+      a1_hysteresis: 0,
+      a1_time_to_trigger: 640,
+      a2_report_type: "rsrp",
+      a2_rsrp: -105,
+      a2_hysteresis: 0,
+      a2_time_to_trigger: 640,
+      eutra_handover: {
+        a3_report_type: "rsrp",
+        a3_offset: 6,
+        hysteresis: 2,
+        time_to_trigger: 480,
+      },
+    },
+    meas_gap_config: "gp0",
+    ho_from_meas: true,` : `
+    /* handover: manual only (remote API / web UI), no measurement config */
+    ho_from_meas: false,`;
 
   const cellDefaultBlock = `  cell_default: {
     n_antenna_dl: ${form.nAntennaDl},
@@ -250,7 +315,7 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
     si_coderate: ${form.siCoderate},
     si_pdcch_format: 2,
     n_symb_cch: 0,
-    pdsch_dedicated: { p_a: 0, p_b: -1 },
+    pdsch_dedicated: { p_a: ${pA}, p_b: -1 },
     pdcch_format: 2,
     prach_config_index: ${prachConfigIndex},
     prach_freq_offset: -1,
@@ -266,7 +331,7 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
     dl_256qam: true,
     ul_64qam: true,
     sr_period: ${form.srPeriod},
-    cqi_period: ${form.cqiPeriod},
+    cqi_period: ${form.cqiPeriod},${mimoPart}
     srs_dedicated: {
       srs_bandwidth_config: ${srsBwTuple.config},
       srs_bandwidth: ${srsBwTuple.bw},
@@ -281,7 +346,7 @@ export function generateLTEConfig(form: LTEFormState, ratMode: 'lte' | 'nbiot' |
     dpc_pucch_snr_target: ${form.dpcPucchSnrTarget},
     cipher_algo_pref: [${cipherArr}],
     integ_algo_pref: [${integArr}],
-    inactivity_timer: ${form.inactivityTimer},
+    inactivity_timer: ${form.inactivityTimer},${handoverPart}
     drb_config: "${form.drbConfig}",
   },`;
 

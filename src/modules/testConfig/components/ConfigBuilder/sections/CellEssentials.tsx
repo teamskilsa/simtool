@@ -88,9 +88,9 @@ export function CellEssentials({ form, onChange }: Props) {
       <div className={FIELD_GRID}>
         <Field
           label="Cell ID" required inline
-          hint={<InfoHint>Amarisoft cell_id — the gNB's identifier for this cell. Distinct from PCI.</InfoHint>}
+          hint={<InfoHint>Amarisoft cell_id — the gNB's identifier for this cell. Distinct from PCI; lteenb accepts 0–255.</InfoHint>}
           value={form.cellId} onChange={v => onChange('cellId', v)}
-          type="number" min={0} max={65535}
+          type="number" min={0} max={255}
         />
 
         <Field

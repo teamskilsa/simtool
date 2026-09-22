@@ -1,0 +1,241 @@
+{
+  "id": "scell-churn",
+  "name": "SCell churn",
+  "description": "Carrier aggregation churn on the UE's current PCell: release all SCells (rrc_cnx_reconf with an empty eutra_secondary_cell_list), add them back, shrink to one SCell and grow again, then deactivate and re-activate them with the MAC CE (scells_act_deact). If the run stops half-way, teardown re-adds and re-activates the original SCells.",
+  "schemaVersion": 1,
+  "tags": [
+    "carrier-aggregation",
+    "scell"
+  ],
+  "requirements": {
+    "minCells": 2,
+    "needsHoConfig": false,
+    "needsCa": true
+  },
+  "params": {
+    "iterations": 3,
+    "settleMs": 2000,
+    "reconfTimeoutMs": 5000
+  },
+  "steps": [
+    {
+      "type": "assert",
+      "label": "UE connected with SCells",
+      "expect": {
+        "all": [
+          {
+            "path": "ue.connected",
+            "op": "eq",
+            "value": true
+          },
+          {
+            "path": "ue.scells.length",
+            "op": "gte",
+            "value": 1
+          }
+        ]
+      },
+      "timeoutMs": 30000,
+      "capture": {
+        "scellList": "ue.scellList",
+        "scells": "ue.scells"
+      }
+    },
+    {
+      "type": "loop",
+      "label": "churn × ${params.iterations}",
+      "count": "${params.iterations}",
+      "steps": [
+        {
+          "type": "action",
+          "target": "enb",
+          "label": "release all SCells",
+          "mark": "rm",
+          "message": {
+            "message": "rrc_cnx_reconf",
+            "enb_ue_id": "${ue.enb_ue_id}",
+            "eutra_secondary_cell_list": []
+          },
+          "undo": {
+            "message": "rrc_cnx_reconf",
+            "enb_ue_id": "${ue.enb_ue_id}",
+            "eutra_secondary_cell_list": "${vars.scellList}"
+          },
+          "undoKey": "scells-all"
+        },
+        {
+          "type": "assert",
+          "label": "no SCells",
+          "expect": {
+            "path": "ue.scells.length",
+            "op": "eq",
+            "value": 0
+          },
+          "timeoutMs": "${params.reconfTimeoutMs}",
+          "metric": {
+            "name": "scell_release_ms",
+            "since": "rm"
+          }
+        },
+        {
+          "type": "wait",
+          "ms": "${params.settleMs}"
+        },
+        {
+          "type": "action",
+          "target": "enb",
+          "label": "add SCells ${vars.scells} back",
+          "mark": "add",
+          "message": {
+            "message": "rrc_cnx_reconf",
+            "enb_ue_id": "${ue.enb_ue_id}",
+            "eutra_secondary_cell_list": "${vars.scellList}"
+          },
+          "resolvesUndo": "scells-all"
+        },
+        {
+          "type": "assert",
+          "label": "SCells back",
+          "expect": {
+            "path": "ue.scells",
+            "op": "eq",
+            "value": "${vars.scells}"
+          },
+          "timeoutMs": "${params.reconfTimeoutMs}",
+          "metric": {
+            "name": "scell_add_ms",
+            "since": "add"
+          }
+        },
+        {
+          "type": "action",
+          "target": "enb",
+          "label": "shrink to SCell ${vars.scells[0]}",
+          "when": {
+            "path": "vars.scells.length",
+            "op": "gt",
+            "value": 1
+          },
+          "message": {
+            "message": "rrc_cnx_reconf",
+            "enb_ue_id": "${ue.enb_ue_id}",
+            "eutra_secondary_cell_list": [
+              "${vars.scellList[0]}"
+            ]
+          },
+          "undo": {
+            "message": "rrc_cnx_reconf",
+            "enb_ue_id": "${ue.enb_ue_id}",
+            "eutra_secondary_cell_list": "${vars.scellList}"
+          },
+          "undoKey": "scells-one"
+        },
+        {
+          "type": "assert",
+          "label": "one SCell",
+          "when": {
+            "path": "vars.scells.length",
+            "op": "gt",
+            "value": 1
+          },
+          "expect": {
+            "path": "ue.scells.length",
+            "op": "eq",
+            "value": 1
+          },
+          "timeoutMs": "${params.reconfTimeoutMs}"
+        },
+        {
+          "type": "action",
+          "target": "enb",
+          "label": "grow back to ${vars.scells.length} SCells",
+          "when": {
+            "path": "vars.scells.length",
+            "op": "gt",
+            "value": 1
+          },
+          "message": {
+            "message": "rrc_cnx_reconf",
+            "enb_ue_id": "${ue.enb_ue_id}",
+            "eutra_secondary_cell_list": "${vars.scellList}"
+          },
+          "resolvesUndo": "scells-one"
+        },
+        {
+          "type": "assert",
+          "label": "all SCells back",
+          "when": {
+            "path": "vars.scells.length",
+            "op": "gt",
+            "value": 1
+          },
+          "expect": {
+            "path": "ue.scells",
+            "op": "eq",
+            "value": "${vars.scells}"
+          },
+          "timeoutMs": "${params.reconfTimeoutMs}"
+        },
+        {
+          "type": "action",
+          "target": "enb",
+          "label": "deactivate SCells (MAC CE)",
+          "saveAs": "deact",
+          "message": {
+            "message": "scells_act_deact",
+            "enb_ue_id": "${ue.enb_ue_id}",
+            "deactivate": "${vars.scells}"
+          },
+          "undo": {
+            "message": "scells_act_deact",
+            "enb_ue_id": "${ue.enb_ue_id}",
+            "activate": "${vars.scells}"
+          },
+          "undoKey": "act"
+        },
+        {
+          "type": "assert",
+          "source": "reply",
+          "label": "none activated",
+          "expect": {
+            "path": "reply.deact.activated.length",
+            "op": "eq",
+            "value": 0
+          },
+          "timeoutMs": 0
+        },
+        {
+          "type": "wait",
+          "ms": 1000
+        },
+        {
+          "type": "action",
+          "target": "enb",
+          "label": "activate SCells (MAC CE)",
+          "saveAs": "act",
+          "message": {
+            "message": "scells_act_deact",
+            "enb_ue_id": "${ue.enb_ue_id}",
+            "activate": "${vars.scells}"
+          },
+          "resolvesUndo": "act"
+        },
+        {
+          "type": "assert",
+          "source": "reply",
+          "label": "all activated",
+          "expect": {
+            "path": "reply.act.activated.length",
+            "op": "eq",
+            "value": "${vars.scells.length}"
+          },
+          "timeoutMs": 0
+        },
+        {
+          "type": "wait",
+          "ms": "${params.settleMs}"
+        }
+      ]
+    }
+  ]
+}

@@ -18,7 +18,7 @@ import {
   importCfgToBuilder, extractReferencedFiles,
 } from '../components/ConfigBuilder';
 import {
-  validateNRForm, validateLTEForm, validateCoreForm,
+  validateNRForm, validateLTEForm, validateCoreForm, validateNSACellIds,
 } from '../components/ConfigBuilder/validation';
 import { configsService } from '../services/configs.service';
 import { useConfigContext } from '../context';
@@ -132,7 +132,7 @@ export const CreateTestView: React.FC = () => {
     // wrong so they can fix them in place.
     const issues =
       configType === 'core'  ? validateCoreForm(nrForm) :
-      configType === 'nsa'   ? [...validateLTEForm(nsaForm.lteForm), ...validateNRForm(nsaForm.nrForm)] :
+      configType === 'nsa'   ? [...validateLTEForm(nsaForm.lteForm), ...validateNRForm(nsaForm.nrForm), ...validateNSACellIds(nsaForm.lteForm, nsaForm.nrForm)] :
       (configType === 'lte' || configType === 'nbiot' || configType === 'catm') ? validateLTEForm(lteForm) :
       validateNRForm(nrForm);
 
@@ -329,9 +329,12 @@ export const CreateTestView: React.FC = () => {
         {/* Right-side actions */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {savedConfigs.length > 0 && (
-            <Select onValueChange={handleLoadConfig}>
+            // Controlled to "" so the trigger always reads "Load config": the
+            // loaded config's name already shows in the name field beside it,
+            // and a long name here pushed the actions onto a second row.
+            <Select value="" onValueChange={handleLoadConfig}>
               <SelectTrigger className="h-8 w-36 text-xs bg-white">
-                <FolderOpen className="w-3.5 h-3.5 mr-1" />
+                <FolderOpen className="w-3.5 h-3.5 mr-1 shrink-0" />
                 <SelectValue placeholder="Load config" />
               </SelectTrigger>
               <SelectContent>
@@ -340,8 +343,9 @@ export const CreateTestView: React.FC = () => {
             </Select>
           )}
           <Input
-            className="h-8 w-40 text-sm"
+            className="h-8 w-52 text-sm"
             value={configName}
+            title={configName}
             onChange={e => setConfigName(e.target.value)}
             placeholder="config-name"
           />

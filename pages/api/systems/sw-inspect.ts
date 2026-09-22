@@ -4,7 +4,8 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { NodeSSH } from 'node-ssh';
 import { parseTarListing } from '@/modules/sw-management/lib/inspectTar';
-import type { TargetArch } from '@/modules/sw-management/types/detection';
+import type { DetectionResult, TargetArch } from '@/modules/sw-management/types/detection';
+import { collectSystemState } from '@/modules/sw-management/server/systemState.server';
 
 export const config = { api: { bodyParser: true } };
 
@@ -17,9 +18,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     entries,            // Upload mode: client already parsed the tar locally
   } = req.body ?? {};
 
-  if (!host || !username) return res.status(400).json({ error: 'host and username are required' });
-  if (!password && !privateKey) return res.status(400).json({ error: 'password or privateKey is required' });
+  const hasCreds = !!username && !!(password || privateKey);
+  if (!host) return res.status(400).json({ error: 'host is required' });
   if (!tarPath && !entries) return res.status(400).json({ error: 'tarPath or entries is required' });
+  // Remote-path mode lists the tar over SSH, so it needs credentials. Upload
+  // mode parsed the tar in the browser; SSH is only used to read the target's
+  // current state, with the SimTool agent as a credential-less fallback.
+  if (tarPath && !entries && !hasCreds) {
+    return res.status(400).json({ error: 'username and password/privateKey are required to inspect a tar on the target (remote path mode)' });
+  }
 
   const ssh = new NodeSSH();
 
@@ -46,7 +53,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     let targetArch: TargetArch = 'unknown';
     let sshOk = false;
+    let sshError: string | undefined;
     try {
+      if (!hasCreds) throw new Error('no SSH credentials stored for this system');
       await ssh.connect({
         host: String(host),
         port: Number(port),
@@ -64,19 +73,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // entries and can guess arch from them. Remote-path mode does
       // need SSH (we run `tar tzf` over it), so re-throw there.
       if (!Array.isArray(entries)) throw e;
+      sshError = e?.message || String(e);
     }
+
+    /** Read-only snapshot of what the target runs now (SSH, else agent). */
+    const withSystemState = async (result: DetectionResult): Promise<DetectionResult> => {
+      const state = await collectSystemState({
+        host: String(host),
+        ssh: sshOk ? ssh : null,
+        password: password ? String(password) : undefined,
+        packageVersion: result.version,
+      });
+      if (!sshOk && sshError) state.error = `SSH unavailable (${sshError}) — ${state.ok ? 'state read via SimTool agent' : state.error}`;
+      return { ...result, systemState: state };
+    };
 
     // ── Path A: Client provided pre-parsed entries (upload mode) ───────────
     if (Array.isArray(entries)) {
-      if (targetArch === 'unknown') targetArch = archFromEntries(entries as string[]);
-      const result = parseTarListing(entries as string[], targetArch);
-      if (!sshOk) (result as any).warning =
-        'SSH probe failed — target arch guessed from package contents.';
+      let archWarning: string | undefined;
+      let result = parseTarListing(entries as string[], targetArch);
+      result = await withSystemState(result);
+      if (targetArch === 'unknown') {
+        // No SSH: take the arch the agent read (/proc/sys/kernel/arch), else
+        // guess from the package, and re-evaluate availability for it.
+        const stateArch = result.systemState?.arch;
+        targetArch = stateArch && stateArch !== 'unknown' ? stateArch : archFromEntries(entries as string[]);
+        if (!stateArch || stateArch === 'unknown') archWarning = 'SSH probe failed — target arch guessed from package contents.';
+        result = { ...parseTarListing(entries as string[], targetArch), systemState: result.systemState };
+      }
+      if (archWarning) result.warning = archWarning;
       return res.status(200).json(result);
     }
 
     // ── Path B: Remote path on target — run `tar tzf` via SSH ──────────────
-    const existsRes = await ssh.execCommand(`test -f '${tarPath}' && echo ok`);
+    // Single-quote for the shell: a path containing ' must not break out.
+    const qTar = `'${String(tarPath).replace(/'/g, `'\\''`)}'`;
+    const existsRes = await ssh.execCommand(`test -f ${qTar} && echo ok`);
     if (existsRes.stdout.trim() !== 'ok') {
       return res.status(200).json({
         success: false,
@@ -85,7 +117,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const listRes = await ssh.execCommand(`tar tzf '${tarPath}' 2>&1 | head -500`);
+    // Drop doc/ entries BEFORE capping: component and TRX tarballs can be
+    // listed after doc/ (amarisoft.2026-09-11.tar.gz has 570 entries and
+    // trx_sdr-linux near the end), so a plain `head -500` hid them.
+    const listRes = await ssh.execCommand(`tar tzf ${qTar} 2>&1 | grep -v '/doc/' | head -2000`);
     if (listRes.code !== 0) {
       return res.status(200).json({
         success: false,
@@ -95,7 +130,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const parsedEntries = listRes.stdout.split('\n').filter(Boolean);
-    const result = parseTarListing(parsedEntries, targetArch);
+    const result = await withSystemState(parseTarListing(parsedEntries, targetArch));
 
     return res.status(200).json(result);
   } catch (err: any) {

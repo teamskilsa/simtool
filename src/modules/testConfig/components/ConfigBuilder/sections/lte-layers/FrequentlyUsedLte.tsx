@@ -33,6 +33,24 @@ export function FrequentlyUsedLte({ form, onChange }: Props) {
         </div>
       </BoxedSection>
 
+      {(form.cells?.length ?? 1) > 1 && (
+        <BoxedSection title="Mobility" subtitle="enb.cfg: cell_list[].ncell_list, cell_default.{meas_config_desc, meas_gap_config, ho_from_meas}">
+          <div className="cfg-field-grid">
+            <Field
+              label="Handover from measurement reports"
+              value={form.hoFromMeas !== false}
+              onChange={v => onChange('hoFromMeas', v)}
+              type="checkbox"
+            />
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Every cell lists the other {(form.cells?.length ?? 1) - 1} cells of this eNB as neighbours, so manual
+            handover (web UI / remote API) always works. When on, the eNB also sends A1/A2 + A3 measurements
+            with gap pattern gp0 and hands over on the A3 report.
+          </p>
+        </BoxedSection>
+      )}
+
       <BoxedSection title="Bearers">
         <Field label="DRB Config File" value={form.drbConfig} onChange={v => onChange('drbConfig', v)} placeholder="drb.cfg" />
       </BoxedSection>

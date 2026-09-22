@@ -115,7 +115,8 @@ export function parseTarListing(entries: string[], systemArch: TargetArch = 'unk
   }
 
   // ── Detect TRX drivers — only include ones usable on the target arch ──────
-  const trxDrivers: DetectedTrx[] = KNOWN_TRX
+  const trxPackages = KNOWN_TRX
+    .filter(meta => !meta.notInstallable)
     .map(meta => {
       const arches: TargetArch[] = [];
       const pattern = new RegExp(`^trx_${meta.id}(-(linux|aarch64))?-`);
@@ -133,13 +134,24 @@ export function parseTarListing(entries: string[], systemArch: TargetArch = 'unk
           if (!arches.includes('aarch64')) arches.push('aarch64');
         }
       }
-      return { id: meta.id, label: meta.label, arches };
+      return { meta, arches };
     })
     // Filter: must have a tar present AND that tar must support the target arch
     .filter(t =>
       t.arches.length > 0 &&
       (systemArch === 'unknown' || t.arches.includes(systemArch))
     );
+
+  // Expand multi-frontend packages (trx_uhd → n2x0/b2x0/x3x0/n3x0) into the
+  // ids install.sh actually accepts for --trx; de-dup across packages.
+  const trxDrivers: DetectedTrx[] = [];
+  for (const { meta, arches } of trxPackages) {
+    const fes = meta.frontends ?? [{ id: meta.id, label: meta.label }];
+    for (const fe of fes) {
+      if (trxDrivers.some(t => t.id === fe.id)) continue;
+      trxDrivers.push({ id: fe.id, label: fe.label, arches, packageName: meta.id });
+    }
+  }
 
   // ── Count licenses ────────────────────────────────────────────────────────
   const licenses = files.filter(f => {

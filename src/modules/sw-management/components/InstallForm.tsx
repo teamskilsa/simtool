@@ -4,7 +4,7 @@
 //   3. Customize + Install: toggle what to install, run install.sh non-interactively
 import { useState } from 'react';
 import {
-  Upload, FolderOpen, Search, CheckCircle2, XCircle, Loader2, Package, Radio, Cpu, Sparkles,
+  Upload, FolderOpen, Search, Loader2, Package, Radio, Cpu, Sparkles, AlertTriangle, Info, Server,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,8 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { FileUpload } from '@/components/ui/file-upload';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from '@/components/ui/use-toast';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { System } from '@/modules/systems/types';
-import type { DetectionResult, TargetArch } from '../types/detection';
+import type { DetectionResult, SystemState, TargetArch } from '../types/detection';
 import { listTarGzEntries } from '../lib/clientTarInspect';
 
 type SoftwareSource = 'upload' | 'remote-path';
@@ -44,6 +45,89 @@ export interface BuildInstallOptions {
   licenseUpdate: boolean;
 }
 
+const SERVICE_IDS = new Set(['enb', 'mme', 'ims', 'simserver', 'ue', 'mbmsgw', 'n3iwf', 'license', 'probe', 'scan', 'sat', 'monitor']);
+
+/** Selections that reproduce what the target runs now (null when unknown). */
+export function selectionsFromSystem(result: DetectionResult): {
+  components: Record<string, boolean>;
+  trx?: string;
+  mimo?: boolean;
+  autostart?: boolean;
+  nat?: boolean;
+  ipv6?: boolean;
+  licenseUpdate?: boolean;
+} | null {
+  const st = result.systemState;
+  if (!st?.ok) return null;
+  const components: Record<string, boolean> = {};
+  for (const c of result.components) {
+    if (!c.available) continue;
+    const cs = st.components.find(x => x.id === c.id);
+    if (!cs || (cs.installed === null && !cs.active)) { components[c.id] = c.defaultOn; continue; }
+    components[c.id] = cs.active || cs.installed === true;
+  }
+  // The service wrapper must come along whenever it runs anything today.
+  if ('ots' in components && st.components.some(x => SERVICE_IDS.has(x.id) && x.active)) components.ots = true;
+
+  const trx = st.recommendedTrx && result.trxDrivers.some(t => t.id === st.recommendedTrx) ? st.recommendedTrx : undefined;
+  // Only push new keys when a current key would block the new release.
+  const blocking = !!result.version && st.licenses.some(l => l.maxVersion && l.maxVersion < result.version!);
+  const licenseUpdate = st.licenses.length ? blocking : undefined;
+  return {
+    components,
+    trx,
+    mimo: st.mimo,
+    autostart: st.autostart ?? undefined,
+    nat: st.nat ?? undefined,
+    ipv6: st.ipv6 ?? undefined,
+    licenseUpdate,
+  };
+}
+
+function CurrentHint({ now, selected }: { now: boolean | null | undefined; selected: boolean }) {
+  if (now === null || now === undefined) return null;
+  const differs = now !== selected;
+  return (
+    <span className={`ml-2 text-[11px] ${differs ? 'text-amber-700 dark:text-amber-400 font-medium' : 'text-muted-foreground'}`}>
+      {differs ? `⚠ currently ${now ? 'on' : 'off'}` : `currently ${now ? 'on' : 'off'}`}
+    </span>
+  );
+}
+
+/** Human-readable list of what this install changes on the target. */
+function installImpact(st: SystemState | undefined, detection: DetectionResult, sel: {
+  components: Record<string, boolean>; trxDriver: string; mimo: boolean; autostart: boolean; nat: boolean; ipv6: boolean; licenseUpdate: boolean;
+}, labelOf: (id: string) => string): Array<{ level: 'danger' | 'warn' | 'info'; text: string }> {
+  const out: Array<{ level: 'danger' | 'warn' | 'info'; text: string }> = [];
+  if (!st?.ok) {
+    out.push({ level: 'warn', text: `Current state of the target is unknown${st?.error ? ` (${st.error})` : ''}. Nothing below was checked against the box.` });
+  } else {
+    out.push({ level: 'info', text: `Upgrade ${st.installedVersion ?? 'unknown version'} → ${detection.version ?? 'unknown'} on ${st.hostname ?? 'target'}. Old versions stay on disk (--no-clean).` });
+  }
+  if (sel.components.ots) out.push({ level: 'warn', text: 'install.sh stops the LTE service during the install; SimTool restarts it afterwards. Live cells and UEs will drop.' });
+  if (sel.components.enb && sel.trxDriver === 'sdr') {
+    out.push({ level: 'warn', text: 'trx_sdr install rebuilds the SDR kernel module (needs kernel-devel for the running kernel) and checks/upgrades the FPGA firmware on every SDR board.' });
+  }
+  for (const w of st?.warnings ?? []) out.push(w);
+  if (st?.ok) {
+    const dropped = st.components.filter(c => c.active && SERVICE_IDS.has(c.id) && detection.components.some(d => d.id === c.id && d.available) && !sel.components[c.id]);
+    if (dropped.length) out.push({ level: 'danger', text: `Running now but unchecked — they will no longer be started by the service: ${dropped.map(c => labelOf(c.id)).join(', ')}.` });
+    if (sel.components.enb && st.rfDriver && st.recommendedTrx && sel.trxDriver !== st.recommendedTrx) {
+      out.push({ level: 'danger', text: `TRX "${sel.trxDriver}" differs from what the eNB uses now (rf_driver "${st.rfDriver}", ${st.sdrBoards} SDR board function(s)). The eNB will not find its radios.` });
+    }
+    if (st.autostart !== null && st.autostart !== sel.autostart) out.push({ level: sel.autostart ? 'warn' : 'danger', text: `lte.service will be ${sel.autostart ? 'enabled' : 'DISABLED'} at boot (currently ${st.autostart ? 'enabled' : 'disabled'}).` });
+    if (st.nat !== null && st.nat !== sel.nat) out.push({ level: 'warn', text: `NAT for IPv4 changes: ${st.nat ? 'on' : 'off'} → ${sel.nat ? 'on' : 'off'}.` });
+    if (st.ipv6 !== null && st.ipv6 !== sel.ipv6) out.push({ level: 'danger', text: `IPv6 changes: ${st.ipv6 ? 'on' : 'off'} → ${sel.ipv6 ? 'on' : 'off'} (MME/MBMS gateway init option -6).` });
+  }
+  if (sel.licenseUpdate && detection.licenses > 0) {
+    const cur = st?.licenses.length
+      ? ` Current keys: ${st.licenses.map(l => `${l.path.split('/').pop()} (uid ${l.licenseUid ?? '?'}, up to ${l.maxVersion ?? '?'})`).join(', ')}.`
+      : '';
+    out.push({ level: 'warn', text: `License update is ON: install.sh replaces every key in ${st?.licenseDir ?? '~/.amarisoft/'} whose license_uid (or host_id) matches one of the ${detection.licenses} package keys, and deletes duplicate-uid keys. Keys for other hosts are ignored.${cur}` });
+  }
+  return out;
+}
+
 export function InstallForm({ system, isInstalling, onInstall }: InstallFormProps) {
   // Step 1: Source
   const [source, setSource] = useState<SoftwareSource>('remote-path');
@@ -64,6 +148,7 @@ export function InstallForm({ system, isInstalling, onInstall }: InstallFormProp
   const [ipv6, setIpv6] = useState(false);
   const [autostart, setAutostart] = useState(false);
   const [licenseUpdate, setLicenseUpdate] = useState(true);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const canDetect = !!system && !isInstalling && !detecting &&
     ((source === 'remote-path' && remotePath.trim()) || (source === 'upload' && file));
@@ -139,16 +224,26 @@ export function InstallForm({ system, isInstalling, onInstall }: InstallFormProp
 
       setDetection(result);
 
-      // Initialize component selection from the "defaultOn" flags
+      // Pre-select from what the target runs now; package defaults otherwise.
+      const fromSystem = selectionsFromSystem(result);
       const defaults: Record<string, boolean> = {};
       for (const c of result.components) {
         if (c.available) defaults[c.id] = c.defaultOn;
       }
-      setComponentsOn(defaults);
+      setComponentsOn(fromSystem ? fromSystem.components : defaults);
 
-      // Pick default TRX — sdr if available, otherwise first one
-      const preferredTrx = result.trxDrivers.find(t => t.id === 'sdr') || result.trxDrivers[0];
-      if (preferredTrx) setTrxDriver(preferredTrx.id);
+      // TRX: the frontend the box uses; else sdr if packaged; else first one
+      const preferredTrx = (fromSystem?.trx && result.trxDrivers.find(t => t.id === fromSystem.trx))
+        || result.trxDrivers.find(t => t.id === 'sdr') || result.trxDrivers[0];
+      setTrxDriver(preferredTrx ? preferredTrx.id : '');
+      setMimo(fromSystem?.mimo ?? true);
+      setAutostart(fromSystem?.autostart ?? false);
+      setNat(fromSystem?.nat ?? true);
+      setIpv6(fromSystem?.ipv6 ?? false);
+      setLicenseUpdate(fromSystem?.licenseUpdate ?? true);
+      if (result.systemState && !result.systemState.ok) {
+        toast({ title: 'Current system state unknown', description: result.systemState.error || 'Could not read the target', variant: 'destructive' });
+      }
 
       // Set target arch based on detected system arch
       setTargetArch(result.targetArch !== 'unknown' ? result.targetArch : 'linux');
@@ -165,7 +260,16 @@ export function InstallForm({ system, isInstalling, onInstall }: InstallFormProp
     }
   };
 
+  const labelOf = (id: string) => detection?.components.find(c => c.id === id)?.label ?? id;
+  const st = detection?.systemState;
+  const stOk = st?.ok ? st : undefined;
+  const compState = (id: string) => stOk?.components.find(c => c.id === id);
+  const impact = detection
+    ? installImpact(st, detection, { components: componentsOn, trxDriver, mimo, autostart, nat, ipv6, licenseUpdate }, labelOf)
+    : [];
+
   const handleInstall = () => {
+    setConfirmOpen(false);
     onInstall({
       source,
       remotePath: source === 'remote-path' ? remotePath.trim() : undefined,
@@ -291,6 +395,51 @@ export function InstallForm({ system, isInstalling, onInstall }: InstallFormProp
               <Badge variant="outline" className="bg-white">{detection.licenses} license file{detection.licenses === 1 ? '' : 's'}</Badge>
             )}
           </div>
+          {detection.warning && <p className="text-xs text-amber-700 dark:text-amber-400">⚠ {detection.warning}</p>}
+        </section>
+      )}
+
+      {/* ── Current state of the target ─────────────────────────────────── */}
+      {detection && st && (
+        <section className={`space-y-2 rounded-lg border p-4 ${stOk ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20' : 'border-amber-200 bg-amber-50/40'}`}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Server className="h-4 w-4 text-emerald-700" />
+            <span className="text-sm font-semibold">On {stOk?.hostname || system?.name || 'target'}:</span>
+            {stOk ? (
+              <span className="text-sm" data-testid="version-transition">
+                currently installed <b>{stOk.installedVersion ?? 'unknown'}</b> → installing <b>{detection.version ?? 'unknown'}</b>
+              </span>
+            ) : (
+              <span className="text-sm text-amber-800">current state unknown — {st.error}</span>
+            )}
+            <Badge variant="outline" className="bg-white text-[10px]">read via {st.via}</Badge>
+          </div>
+          {stOk && (
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              <div>
+                Service runs: {stOk.components.filter(c => c.active && SERVICE_IDS.has(c.id)).map(c => labelOf(c.id)).join(', ') || 'nothing'}
+                {' · '}TRX: {stOk.rfDriver ?? 'unknown'}{stOk.sdrBoards ? ` (${stOk.sdrBoards} SDR PCIe)` : ''}
+                {stOk.uhdPresent === false ? ' · no UHD' : stOk.uhdPresent ? ' · UHD present' : ''}
+                {stOk.nAntennaDl ? ` · antennas DL ${stOk.nAntennaDl} / UL ${stOk.nAntennaUl ?? '?'}` : ''}
+              </div>
+              {stOk.licenses.length > 0 && (
+                <div>Licenses: {stOk.licenses.map(l => `${l.path.split('/').pop()} (≤ ${l.maxVersion ?? '?'})`).join(', ')}</div>
+              )}
+              <details className="pt-1">
+                <summary className="cursor-pointer">Evidence ({stOk.evidence.length})</summary>
+                <ul className="mt-1 space-y-0.5 font-mono text-[10px]">
+                  {stOk.evidence.map((e, i) => (
+                    <li key={i}><b>{e.key}</b> {e.source}: {e.detail}{e.inferred ? ' (inferred)' : ''}</li>
+                  ))}
+                </ul>
+              </details>
+            </div>
+          )}
+          {(stOk?.warnings ?? []).filter(w => w.level !== 'info').map((w, i) => (
+            <p key={i} className={`text-xs flex gap-1.5 ${w.level === 'danger' ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-400'}`}>
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {w.text}
+            </p>
+          ))}
         </section>
       )}
 
@@ -311,7 +460,18 @@ export function InstallForm({ system, isInstalling, onInstall }: InstallFormProp
                     className="mt-0.5"
                   />
                   <div className="min-w-0">
-                    <div className="text-sm font-medium">{comp.label}</div>
+                    <div className="text-sm font-medium">
+                      {comp.label}
+                      {compState(comp.id)?.active && SERVICE_IDS.has(comp.id) && (
+                        <span className="ml-1.5 rounded bg-emerald-100 px-1 text-[10px] font-normal text-emerald-800">running</span>
+                      )}
+                      {compState(comp.id)?.installed && !(compState(comp.id)?.active && SERVICE_IDS.has(comp.id)) && (
+                        <span className="ml-1.5 rounded bg-slate-100 px-1 text-[10px] font-normal text-slate-700">installed</span>
+                      )}
+                      {stOk && (componentsOn[comp.id] ?? false) !== !!(compState(comp.id)?.active || compState(comp.id)?.installed) && (
+                        <span className="ml-1.5 text-[10px] font-normal text-amber-700">⚠ changes</span>
+                      )}
+                    </div>
                     {comp.description && <div className="text-xs text-muted-foreground">{comp.description}</div>}
                   </div>
                 </label>
@@ -349,8 +509,21 @@ export function InstallForm({ system, isInstalling, onInstall }: InstallFormProp
                 <div className="flex items-center gap-3">
                   <Switch checked={mimo} onCheckedChange={setMimo} />
                   <Label>MIMO</Label>
+                  <CurrentHint now={stOk?.mimo} selected={mimo} />
                 </div>
               </div>
+              {stOk && (
+                <p className={`text-[11px] ${stOk.recommendedTrx && trxDriver !== stOk.recommendedTrx ? 'text-red-700 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>
+                  {stOk.recommendedTrx && trxDriver !== stOk.recommendedTrx ? '⚠ ' : ''}
+                  System uses rf_driver “{stOk.rfDriver ?? 'unknown'}”
+                  {` · ${stOk.sdrBoards} Amarisoft SDR PCIe function(s)`}
+                  {stOk.uhdPresent === false ? ' · no UHD software/devices found' : stOk.uhdPresent ? ' · UHD present' : ''}
+                  {stOk.recommendedTrx ? ` → recommended: ${stOk.recommendedTrx}` : ''}
+                </p>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                The MIMO switch only edits the new release&apos;s stock enb.default.cfg (N_ANTENNA_DL=2); it does not touch your own eNB config.
+              </p>
             </section>
           )}
 
@@ -373,30 +546,36 @@ export function InstallForm({ system, isInstalling, onInstall }: InstallFormProp
             )}
 
             <div className="flex items-center justify-between">
-              <Label className="text-sm">Start LTE service on boot (autostart)</Label>
+              <Label className="text-sm">Start LTE service on boot (autostart)<CurrentHint now={stOk?.autostart} selected={autostart} /></Label>
               <Switch checked={autostart} onCheckedChange={setAutostart} />
             </div>
             <div className="flex items-center justify-between">
-              <Label className="text-sm">NAT for IPv4</Label>
+              <Label className="text-sm">NAT for IPv4<CurrentHint now={stOk?.nat} selected={nat} /></Label>
               <Switch checked={nat} onCheckedChange={setNat} />
             </div>
             <div className="flex items-center justify-between">
-              <Label className="text-sm">Enable IPv6</Label>
+              <Label className="text-sm">Enable IPv6<CurrentHint now={stOk?.ipv6} selected={ipv6} /></Label>
               <Switch checked={ipv6} onCheckedChange={setIpv6} />
             </div>
             {detection && detection.licenses > 0 && (
-              <div className="flex items-center justify-between">
-                <Label className="text-sm">
-                  Update licenses ({detection.licenses} found)
-                </Label>
-                <Switch checked={licenseUpdate} onCheckedChange={setLicenseUpdate} />
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm">
+                    Update licenses ({detection.licenses} keys in package)
+                  </Label>
+                  <Switch checked={licenseUpdate} onCheckedChange={setLicenseUpdate} />
+                </div>
+                <p className={`text-[11px] ${licenseUpdate ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`}>
+                  {licenseUpdate ? '⚠ ' : ''}Overwrites keys in {stOk?.licenseDir ?? '~/.amarisoft/'} that share a license_uid/host_id with a package key and deletes duplicates
+                  {stOk?.licenses.length ? ` (on the box now: ${stOk.licenses.map(l => `${l.path.split('/').pop()} ≤ ${l.maxVersion ?? '?'}`).join(', ')})` : ''}.
+                </p>
               </div>
             )}
           </section>
 
           {/* ── Install button ──────────────────────────────────────────── */}
           <Button
-            onClick={handleInstall}
+            onClick={() => setConfirmOpen(true)}
             disabled={!canInstall}
             size="lg"
             className="w-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-300"
@@ -404,6 +583,32 @@ export function InstallForm({ system, isInstalling, onInstall }: InstallFormProp
             <Package className="w-4 h-4 mr-2" />
             {isInstalling ? 'Installing...' : 'Install Software'}
           </Button>
+
+          <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Install Amarisoft {detection.version} on {system?.name ?? 'target'}?</DialogTitle>
+                <DialogDescription>Review what this install changes on the system.</DialogDescription>
+              </DialogHeader>
+              <ul className="space-y-2 max-h-[55vh] overflow-y-auto text-sm">
+                {impact.map((w, i) => (
+                  <li key={i} className={`flex gap-2 ${w.level === 'danger' ? 'text-red-700 dark:text-red-400' : w.level === 'warn' ? 'text-amber-800 dark:text-amber-300' : 'text-muted-foreground'}`}>
+                    {w.level === 'info' ? <Info className="h-4 w-4 shrink-0 mt-0.5" /> : <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />}
+                    <span>{w.text}</span>
+                  </li>
+                ))}
+              </ul>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+                <Button
+                  onClick={handleInstall}
+                  className={impact.some(w => w.level === 'danger') ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-indigo-600 text-white hover:bg-indigo-700'}
+                >
+                  {impact.some(w => w.level === 'danger') ? 'Install anyway' : 'Install'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>

@@ -1,168 +1,190 @@
-// src/modules/remoteAPI/components/command-selector.tsx
+// Catalogue-driven command picker for the Remote API console.
+//
+// Commands, parameters, ranges and help text come from the 2026-09-11
+// Amarisoft docs (src/shared/default/templates/remoteapi). Picking a command
+// or preset inserts its JSON into the editor; the parameter table below it is
+// what the pre-send validator enforces.
 
-import { useState, useEffect } from 'react';
-import { ThemeConfig } from '@/components/theme/types/theme.types';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, BookOpen, ShieldAlert } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Kicker } from '@/components/ui/stat';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import type { ThemeConfig } from '@/components/theme/types/theme.types';
+import {
+  getCatalogue,
+  getCategories,
+  type ApiCommand,
+  type ComponentType,
+  type ParamSpec,
+} from '../../../shared/default/templates/remoteapi';
+import { versionAtLeast } from '../utils/version';
 
 interface CommandSelectorProps {
-  componentType: 'ENB' | 'UE' | 'MME' | 'IMS' | 'MBMS';
-  themeConfig: ThemeConfig;
+  componentType: ComponentType;
+  /** Server version from the ready banner (gates newer commands). */
+  serverVersion?: string | null;
+  /** Kept for callers that still pass it; styling now uses the ui primitives. */
+  themeConfig?: ThemeConfig;
   onCommandSelect: (command: string) => void;
 }
 
-interface CommandOption { label: string; value: string }
-interface CommandCategory { name: string; commands: readonly CommandOption[] }
-
-// Presets exist for ENB and UE only. Typing this as a partial record makes the
-// other component types (MME, IMS, MBMS) an empty list instead of an untyped
-// undefined lookup.
-const COMMAND_CATEGORIES: Partial<Record<CommandSelectorProps['componentType'], readonly CommandCategory[]>> = {
-  'ENB': [
-    {
-      name: 'Configuration',
-      commands: [
-        { label: 'Get Configuration', value: '{"message": "config_get"}' },
-        { label: 'Basic Log Config', value: '{"message": "config_set", "logs": {"bcch": false}}' },
-        { label: 'Detailed Log Config', value: '{"message": "config_set", "logs": {"layers": {"PHY": {"level": "debug", "max_size": 1, "payload": true}}, "bcch": false}}' }
-      ]
-    },
-    {
-      name: 'Statistics',
-      commands: [
-        { label: 'Basic Stats', value: '{"message": "stats"}' },
-        { label: 'Stats with Samples', value: '{"message": "stats", "samples": true}' },
-        { label: 'Full Stats', value: '{"message": "stats", "samples": true, "rf": true, "Initial_delay": 0.7}' }
-      ]
-    },
-    {
-      name: 'Cell Management',
-      commands: [
-        { label: 'Cell Gain', value: '{"message": "cell_gain", "cell_id": 1, "gain": -20}' },
-        { label: 'Inactivity Timer', value: '{"message": "config_set", "cells": {"1": {"inactivity_timer": 60000}}}' }
-      ]
-    },
-    {
-      name: 'PHY/MAC',
-      commands: [
-        { label: 'Set PDSCH MCS', value: '{"message": "config_set", "cells": {"1": {"pdsch_mcs": 2}}}' },
-        { label: 'Force DL Schedule', value: '{"message": "config_set", "cells": {"1": {"force_dl_schedule": true}}}' },
-        { label: 'Fixed RB Allocation', value: '{"message": "config_set", "cells": {"1": {"pdsch_fixed_rb_alloc": true, "pdsch_fixed_rb_start": 0, "pdsch_fixed_l_crb": 20}}}' },
-        { label: 'Set PUSCH MCS', value: '{"message": "config_set", "cells": {"1": {"pusch_mcs": 2}}}' },
-        { label: 'Force Full BSR', value: '{"message": "config_set", "cells": {"1": {"force_full_bsr": true}}}' }
-      ]
-    },
-    {
-      name: 'SIB Management',
-      commands: [
-        { label: 'Set SIB1 P-Max', value: '{"message": "sib_set", "cells": {"1": {"sib1": {"p_max": 20}}}}' },
-        { label: 'Set SIB3 Hex', value: '{"message": "sib_set", "cells": {"1": {"sib3": {"type": "hex", "payload": "000c16043f95aa0007ae"}}}}' }
-      ]
-    },
-    {
-      name: 'UE Management',
-      commands: [
-        { label: 'Get UE List', value: '{"message": "ue_get"}' },
-        { label: 'UE List with Stats', value: '{"message": "ue_get", "stats": true}' },
-        { label: 'ERAB List', value: '{"message": "erab_get"}' },
-        { label: 'QoS Flow List', value: '{"message": "qos_flow_get"}' }
-      ]
-    },
-    {
-      name: 'RF Management',
-      commands: [
-        { label: 'Get RF Status', value: '{"message": "rf"}' },
-        { label: 'Set TX Gain', value: '{"message": "rf", "tx_gain": 70}' },
-        { label: 'Set RX Gain', value: '{"message": "rf", "rx_gain": 50}' }
-      ]
-    }
-  ],
-  'MME': [
-    {
-      name: 'Configuration',
-      commands: [
-        { label: 'Get Configuration', value: '{"message": "config_get"}' }
-      ]
-    }
-  ],
-  'UE': [
-    {
-      name: 'Configuration',
-      commands: [
-        { label: 'Get Configuration', value: '{"message": "config_get"}' }
-      ]
-    }
-  ]
+export const DANGER_BADGE: Record<ApiCommand['danger'], { label: string; className: string }> = {
+  safe: { label: 'read / safe', className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20' },
+  caution: { label: 'changes live state', className: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20' },
+  destructive: { label: 'destructive', className: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20' },
 };
 
-export function CommandSelector({ componentType, themeConfig, onCommandSelect }: CommandSelectorProps) {
-  const [category, setCategory] = useState('');
-  const [command, setCommand] = useState('');
+function typeLabel(spec: ParamSpec): string {
+  const t = Array.isArray(spec.type) ? spec.type.join(' | ') : spec.type;
+  return spec.items ? `${t}<${spec.items}>` : t;
+}
 
-  const categories = COMMAND_CATEGORIES[componentType] || [];
+function constraintLabel(spec: ParamSpec): string {
+  const parts: string[] = [];
+  if (spec.min !== undefined && spec.max !== undefined) parts.push(`[${spec.min}:${spec.max}]`);
+  else if (spec.min !== undefined) parts.push(`>= ${spec.min}`);
+  else if (spec.max !== undefined) parts.push(`<= ${spec.max}`);
+  if (spec.enum) parts.push(spec.enum.join(' | '));
+  if (spec.default !== undefined) parts.push(`default ${JSON.stringify(spec.default)}`);
+  if (spec.aliases?.length) parts.push(`alias ${spec.aliases.join(', ')}`);
+  if (spec.minVersion) parts.push(`since ${spec.minVersion}`);
+  return parts.join(' · ');
+}
+
+const pretty = (body: unknown) => JSON.stringify(body, null, 2);
+
+export function CommandSelector({ componentType, serverVersion, onCommandSelect }: CommandSelectorProps) {
+  const [category, setCategory] = useState('');
+  const [message, setMessage] = useState('');
+
+  const catalogue = useMemo(() => getCatalogue(componentType), [componentType]);
+  const categories = useMemo(() => getCategories(componentType), [componentType]);
+  const commands = catalogue.filter(c => c.category === category);
+  const selected = catalogue.find(c => c.category === category && c.message === message);
 
   useEffect(() => {
     setCategory('');
-    setCommand('');
+    setMessage('');
   }, [componentType]);
 
-  const handleCommandSelect = (value: string) => {
-    setCommand(value);
-    onCommandSelect(value);
+  const tooNew = (c: ApiCommand) => !!(c.minVersion && serverVersion && !versionAtLeast(serverVersion, c.minVersion));
+
+  const pick = (msg: string) => {
+    setMessage(msg);
+    const cmd = commands.find(c => c.message === msg);
+    if (cmd) onCommandSelect(pretty(cmd.example));
   };
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        {/* Category Selection */}
-        <div>
-          <label className={`block text-sm font-medium mb-2 ${themeConfig.surfaces.card.foreground}`}>
-            Category
-          </label>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className={`w-full rounded-lg px-3 py-2 
-              ${themeConfig.components.select.trigger}
-              text-gray-900 dark:text-gray-100
-              bg-white dark:bg-gray-800
-              border-gray-200 dark:border-gray-700`}
-          >
-            <option value="">Select Category</option>
-            {categories.map((cat, index) => (
-              <option key={index} value={cat.name} className="text-gray-900 dark:text-gray-100">
-                {cat.name}
-              </option>
-            ))}
-          </select>
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="space-y-1">
+          <Kicker>Category</Kicker>
+          <Select value={category} onValueChange={(v) => { setCategory(v); setMessage(''); }}>
+            <SelectTrigger><SelectValue placeholder={`${componentType} command category`} /></SelectTrigger>
+            <SelectContent>
+              {categories.map(cat => (
+                <SelectItem key={cat} value={cat} description={`${catalogue.filter(c => c.category === cat).length} commands`}>
+                  {cat}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-
-        {/* Command Selection */}
-        {category && (
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${themeConfig.surfaces.card.foreground}`}>
-              Command
-            </label>
-            <select
-              value={command}
-              onChange={(e) => handleCommandSelect(e.target.value)}
-              className={`w-full rounded-lg px-3 py-2
-                ${themeConfig.components.select.trigger}
-                text-gray-900 dark:text-gray-100
-                bg-white dark:bg-gray-800
-                border-gray-200 dark:border-gray-700`}
-            >
-              <option value="">Select Command</option>
-              {categories
-                .find(cat => cat.name === category)
-                ?.commands.map((cmd, index) => (
-                  <option key={index} value={cmd.value} className="text-gray-900 dark:text-gray-100">
-                    {cmd.label}
-                  </option>
-                ))
-              }
-            </select>
-          </div>
-        )}
+        <div className="space-y-1">
+          <Kicker>Command</Kicker>
+          <Select value={message} onValueChange={pick} disabled={!category}>
+            <SelectTrigger><SelectValue placeholder="Pick a command" /></SelectTrigger>
+            <SelectContent>
+              {commands.map(cmd => (
+                <SelectItem
+                  key={cmd.message}
+                  value={cmd.message}
+                  disabled={tooNew(cmd)}
+                  description={tooNew(cmd) ? `needs ${cmd.minVersion}, server runs ${serverVersion}` : `${cmd.message}${cmd.danger !== 'safe' ? ` · ${DANGER_BADGE[cmd.danger].label}` : ''}`}
+                >
+                  {cmd.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+
+      {selected && (
+        <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2 text-sm" data-testid="command-details">
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="font-mono text-xs font-semibold">{selected.message}</code>
+            <Badge variant="outline" className={DANGER_BADGE[selected.danger].className}>
+              {selected.danger === 'destructive' ? <ShieldAlert className="mr-1 h-3 w-3" /> : selected.danger === 'caution' ? <AlertTriangle className="mr-1 h-3 w-3" /> : null}
+              {DANGER_BADGE[selected.danger].label}
+            </Badge>
+            {selected.longPoll && <Badge variant="outline">long-poll</Badge>}
+            {selected.minVersion && <Badge variant="outline">since {selected.minVersion}</Badge>}
+            <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <BookOpen className="h-3 w-3" />{selected.docRef}
+            </span>
+          </div>
+          <p className="text-muted-foreground">{selected.description}</p>
+          {selected.dangerNote && <p className="text-xs text-amber-700 dark:text-amber-400">{selected.dangerNote}</p>}
+          {selected.notes && <p className="text-xs text-muted-foreground italic">{selected.notes}</p>}
+
+          {selected.params && Object.keys(selected.params).length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-muted-foreground">
+                    <th className="py-1 pr-3 font-medium">param</th>
+                    <th className="py-1 pr-3 font-medium">type</th>
+                    <th className="py-1 pr-3 font-medium">range / values</th>
+                    <th className="py-1 font-medium">help</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(selected.params).map(([name, spec]) => (
+                    <tr key={name} className="border-t border-border/60 align-top">
+                      <td className="py-1 pr-3 font-mono whitespace-nowrap">
+                        {name}{spec.required && <span className="text-red-600 dark:text-red-400">*</span>}
+                      </td>
+                      <td className="py-1 pr-3 font-mono whitespace-nowrap">{typeLabel(spec)}</td>
+                      <td className="py-1 pr-3 whitespace-nowrap">{constraintLabel(spec)}</td>
+                      <td className="py-1">{spec.help}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {selected.oneOf?.length ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {selected.oneOf.map(g => `one of ${g.join(' / ')}`).join('; ')} required
+                </p>
+              ) : null}
+            </div>
+          )}
+
+          {selected.presets && selected.presets.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              <Kicker className="w-full">Presets</Kicker>
+              {selected.presets.map(p => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => onCommandSelect(pretty(p.body))}
+                  className="rounded-md border border-border bg-background px-2 py-0.5 text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

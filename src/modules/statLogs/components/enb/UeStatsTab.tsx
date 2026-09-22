@@ -6,7 +6,7 @@
 // every second behind a hidden tab.
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,8 +14,8 @@ import { Button } from '@/components/ui/button';
 import { Stat } from '@/components/ui/stat';
 import { cn } from '@/lib/utils';
 import {
-  avgOf, coreUeRows, fmt, parseMessage, radioUeRows,
-  type CoreUeRow, type ModuleKey, type RadioUeRow,
+  avgOf, coreUeRows, fmt, fmtRate, parseMessage, radioUeRows, rateUnit,
+  type CoreUeRow, type ModuleKey, type RadioUeRow, type RateUnit,
 } from './statsModel';
 
 const UE_POLL_MS = 3000;
@@ -38,18 +38,18 @@ type Col<R> = {
   tone?: 'dl' | 'ul';
 };
 
-const RADIO_COLS: Col<RadioUeRow>[] = [
+const radioCols = (u: RateUnit): Col<RadioUeRow>[] => [
   { key: 'rnti',     label: 'RNTI',       numeric: true, sort: r => Number(r.rnti), render: r => r.rnti ?? '—' },
   { key: 'ranUeId',  label: 'RAN UE ID',  numeric: true, sort: r => r.ranUeId, render: r => r.ranUeId ?? '—' },
   { key: 'coreUeId', label: 'Core UE ID', numeric: true, sort: r => r.coreUeId, render: r => r.coreUeId ?? '—' },
-  { key: 'cellId',   label: 'Cell',       numeric: true, sort: r => r.cellId, render: r => r.cellId ?? '—' },
-  { key: 'caCells',  label: 'CA',         numeric: true, sort: r => r.caCells, render: r => r.caCells },
-  { key: 'dlMbps',   label: 'DL Mbps',    numeric: true, sort: r => r.dlMbps, render: r => fmt(r.dlMbps, 2), tone: 'dl' },
+  { key: 'cellId',   label: 'PCell',      numeric: true, sort: r => r.cellId, render: r => r.cellId ?? '—' },
+  { key: 'caCells',  label: 'SCells',     numeric: true, sort: r => r.caCells, render: r => (r.scellIds.length ? r.scellIds.join(', ') : '—') },
+  { key: 'dlMbps',   label: `DL ${u.unit}`, numeric: true, sort: r => r.dlMbps, render: r => fmt(r.dlMbps * u.factor, u.digits), tone: 'dl' },
   { key: 'dlMcs',    label: 'DL MCS',     numeric: true, sort: r => r.dlMcs, render: r => fmt(r.dlMcs, 1), tone: 'dl' },
   { key: 'cqi',      label: 'CQI',        numeric: true, sort: r => r.cqi, render: r => fmt(r.cqi, 0), tone: 'dl' },
   { key: 'ri',       label: 'RI',         numeric: true, sort: r => r.ri, render: r => fmt(r.ri, 0), tone: 'dl' },
   { key: 'dlRetx',   label: 'DL retx %',  numeric: true, sort: r => r.dlRetxPct, render: r => fmt(r.dlRetxPct, 2), tone: 'dl' },
-  { key: 'ulMbps',   label: 'UL Mbps',    numeric: true, sort: r => r.ulMbps, render: r => fmt(r.ulMbps, 2), tone: 'ul' },
+  { key: 'ulMbps',   label: `UL ${u.unit}`, numeric: true, sort: r => r.ulMbps, render: r => fmt(r.ulMbps * u.factor, u.digits), tone: 'ul' },
   { key: 'ulMcs',    label: 'UL MCS',     numeric: true, sort: r => r.ulMcs, render: r => fmt(r.ulMcs, 1), tone: 'ul' },
   { key: 'snr',      label: 'SNR dB',     numeric: true, sort: r => r.snr, render: r => fmt(r.snr, 1), tone: 'ul' },
   { key: 'epre',     label: 'EPRE dBm',   numeric: true, sort: r => r.epre, render: r => fmt(r.epre, 1), tone: 'ul' },
@@ -113,6 +113,15 @@ export function UeStatsTab({ module, isConnected, active, request }: UeStatsTabP
 
   const radioRows = useMemo(() => (isCore ? [] : radioUeRows(resp)), [resp, isCore]);
   const coreRows = useMemo(() => (isCore ? coreUeRows(resp) : []), [resp, isCore]);
+  // Unit from the largest rate over the last ~30 s of polls, so the column
+  // header doesn't flip between bps and kbps every refresh.
+  const recentMax = useRef<number[]>([]);
+  const radioColumns = useMemo(() => {
+    const now = radioRows.reduce((m, r) => Math.max(m, r.dlMbps, r.ulMbps), 0);
+    recentMax.current = [...recentMax.current, now].slice(-10);
+    return radioCols(rateUnit(Math.max(...recentMax.current)));
+  }, [radioRows]);
+  const totalDl = fmtRate(radioRows.reduce((a, r) => a + r.dlMbps, 0));
 
   if (!supported) {
     return (
@@ -146,17 +155,20 @@ export function UeStatsTab({ module, isConnected, active, request }: UeStatsTabP
   ) : (
     <UeTable
       rows={radioRows}
-      cols={RADIO_COLS}
+      cols={radioColumns}
       match={(r, q) =>
         [r.rnti, r.ranUeId, r.coreUeId].some(v => v !== undefined && String(v).includes(q))}
       placeholder="Filter by RNTI or UE ID"
       summary={
         <>
           <Stat label="UEs" value={fmt(radioRows.length, 0)} />
-          <Stat label="Total DL" value={fmt(radioRows.reduce((a, r) => a + r.dlMbps, 0), 1)} unit="Mbps" />
-          <Stat label="Avg CQI" value={fmt(avgOf(radioRows.map(r => r.cqi)), 1)} />
-          <Stat label="Avg DL MCS" value={fmt(avgOf(radioRows.map(r => r.dlMcs)), 1)} />
-          <Stat label="Avg SNR" value={fmt(avgOf(radioRows.map(r => r.snr)), 1)} unit="dB" />
+          <Stat
+            label="Total DL" value={totalDl.value} unit={totalDl.unit}
+            hint="since any client's last ue_get"
+          />
+          <Stat label="Avg CQI" value={fmt(avgOf(radioRows.map(r => r.cqi)), 1)} hint="PCell" />
+          <Stat label="Avg DL MCS" value={fmt(avgOf(radioRows.map(r => r.dlMcs)), 1)} hint="PCell" />
+          <Stat label="Avg SNR" value={fmt(avgOf(radioRows.map(r => r.snr)), 1)} unit="dB" hint="PUSCH, PCell" />
         </>
       }
       {...{ query, setQuery, sortKey, setSortKey, sortDesc, setSortDesc, page, setPage, updatedAt, error }}

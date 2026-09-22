@@ -12,21 +12,23 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-interface LogEntry {
-  command: string;
-  response: any;
-  timestamp: string;
-  status: 'success' | 'error';
-}
+import type { LogEntry, LogStatus } from '../utils/remote-api-storage';
+
+const STATUS_STYLE: Record<LogStatus, { card: string; pill: string; label: string }> = {
+  success: { card: 'border-gray-200 dark:border-gray-700 bg-white/5 dark:bg-gray-800/5', pill: 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400', label: 'RESPONSE' },
+  error: { card: 'border-red-500/50 bg-red-500/10', pill: 'bg-red-500/20 text-red-600 dark:text-red-400', label: 'ERROR' },
+  notification: { card: 'border-sky-500/40 bg-sky-500/5', pill: 'bg-sky-500/20 text-sky-600 dark:text-sky-400', label: 'NOTIFICATION' },
+  event: { card: 'border-violet-500/40 bg-violet-500/5', pill: 'bg-violet-500/20 text-violet-600 dark:text-violet-400', label: 'EVENT' },
+};
 
 interface ResponseLogProps {
   logs: LogEntry[];
-  themeConfig: ThemeConfig;
+  themeConfig?: ThemeConfig;
   onExport?: () => void;
   onClear?: () => void;
 }
 
-export function ResponseLog({ logs, themeConfig, onExport, onClear }: ResponseLogProps) {
+export function ResponseLog({ logs, onExport, onClear }: ResponseLogProps) {
   const [filter, setFilter] = useState('');
   const [showOnlyErrors, setShowOnlyErrors] = useState(false);
   const [showClearDialog, setShowClearDialog] = useState(false);
@@ -62,7 +64,7 @@ export function ResponseLog({ logs, themeConfig, onExport, onClear }: ResponseLo
       {/* Log Header with Entry Count and Controls */}
       <div className="flex items-center justify-between bg-gray-50/80 dark:bg-gray-800/50 px-4 py-2 rounded-lg">
         <div className="flex items-center space-x-2">
-          <h3 className={`text-sm font-medium ${themeConfig.surfaces.card.foreground}`}>
+          <h3 className="text-sm font-medium text-foreground">
             Response Log
           </h3>
           <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs text-gray-600 dark:text-gray-300">
@@ -142,28 +144,18 @@ export function ResponseLog({ logs, themeConfig, onExport, onClear }: ResponseLo
           filteredLogs.map((log, i) => (
             <div
               key={i}
-              className={`
-                p-4 rounded-lg border
-                ${log.status === 'error' 
-                  ? 'border-red-500/50 bg-red-500/10' 
-                  : 'border-gray-200 dark:border-gray-700 bg-white/5 dark:bg-gray-800/5'
-                }
-              `}
+              className={`p-4 rounded-lg border ${(STATUS_STYLE[log.status] ?? STATUS_STYLE.success).card}`}
             >
               {/* Log Header */}
               <div className="flex items-center justify-between text-xs mb-3">
                 <div className="flex items-center space-x-2 text-gray-600 dark:text-gray-300">
                   <Clock className="w-3 h-3" />
                   <span>{new Date(log.timestamp).toLocaleString()}</span>
+                  {typeof log.durationMs === 'number' && <span className="text-gray-500">· {log.durationMs} ms</span>}
+                  {log.server && <span className="text-gray-500">· {log.server}</span>}
                 </div>
-                <span className={`
-                  px-2 py-0.5 rounded-full text-xs font-medium
-                  ${log.status === 'error' 
-                    ? 'bg-red-500/20 text-red-500' 
-                    : 'bg-emerald-500/20 text-emerald-500'
-                  }
-                `}>
-                  {log.status.toUpperCase()}
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${(STATUS_STYLE[log.status] ?? STATUS_STYLE.success).pill}`}>
+                  {(STATUS_STYLE[log.status] ?? STATUS_STYLE.success).label}
                 </span>
               </div>
 

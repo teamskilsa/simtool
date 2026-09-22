@@ -1,5 +1,5 @@
 // Generic Amarisoft remote-API stats poller. Despite the file name, this hook
-// is module-agnostic — eNB (port 9001), gNB (9002), MME (9000), IMS (9003), UE
+// is module-agnostic — eNB (port 9001), gNB (9001, inside lteenb), MME (9000), IMS (9003), UE
 // (9002) all expose a websocket remote API that responds to the `stats` message
 // in the same protocol shape, just with different stat fields.
 //
@@ -80,6 +80,8 @@ export function useEnbStats(
       clientRef.current = remoteAPI.client ?? (await remoteAPI.connect());
       setPhase('connected');
       await fetchStats();
+      // A second Start (or reconnect) must not leave the first interval running.
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = setInterval(fetchStats, pollInterval);
     } catch (err) {
       // The websocket-client emits raw browser errors (Event objects). Pull a

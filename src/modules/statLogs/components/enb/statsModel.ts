@@ -46,6 +46,22 @@ export function fmtDuration(sec: unknown): string {
   return `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
 }
 
+/** Bitrates are carried in Mbps internally. An idle callbox moves a few
+ *  hundred bps, which renders as "0.0 Mbps" — pick the unit from the size. */
+export type RateUnit = { unit: 'Mbps' | 'kbps' | 'bps'; factor: number; digits: number };
+export function rateUnit(maxMbps: number): RateUnit {
+  const m = Math.abs(Number.isFinite(maxMbps) ? maxMbps : 0);
+  if (m >= 1) return { unit: 'Mbps', factor: 1, digits: m >= 100 ? 0 : 1 };
+  if (m >= 0.001) return { unit: 'kbps', factor: 1e3, digits: m >= 0.1 ? 0 : 1 };
+  return { unit: 'bps', factor: 1e6, digits: 0 };
+}
+export function fmtRate(mbps: unknown): { value: string; unit: string } {
+  const x = Number(mbps);
+  if (mbps === undefined || mbps === null || !Number.isFinite(x)) return { value: '—', unit: 'Mbps' };
+  const u = rateUnit(x);
+  return { value: fmt(x * u.factor, u.digits), unit: u.unit };
+}
+
 // ── Cells ────────────────────────────────────────────────────────────────────
 
 export interface CellRow {
@@ -72,7 +88,8 @@ export function cellRows(stats: any): CellRow[] {
     ues: num(c?.ue_count_avg),
     activeUes: num(c?.ue_active_count_avg),
     inactiveUes: num(c?.ue_inactive_count_avg),
-    drbs: num(c?.drb_count_avg),
+    // NR reports drb_count_*, LTE reports erab_count_* instead.
+    drbs: num(c?.drb_count_avg ?? c?.erab_count_avg),
     dlSched: num(c?.dl_sched_users_avg),
     ulSched: num(c?.ul_sched_users_avg),
     dlRetxPct: pct(num(c?.dl_retx), num(c?.dl_tx)),
@@ -92,9 +109,18 @@ export interface TimePoint {
   ues: number; activeUes: number;
   dlSched: number; ulSched: number;
   dlRetxPct: number; ulRetxPct: number;
-  /** Per-cell throughput, keyed by cell id — charted as `cells.<id>.dlMbps`. */
-  cells: Record<string, { dlMbps: number; ulMbps: number }>;
+  /** Per-cell values, keyed by cell id — charted as `cells.<id>.<metric>`. */
+  cells: Record<string, CellPoint>;
 }
+
+export interface CellPoint {
+  dlMbps: number; ulMbps: number;
+  dlPrb: number; ulPrb: number;
+  ues: number; activeUes: number;
+  dlSched: number; ulSched: number;
+  dlRetxPct: number; ulRetxPct: number;
+}
+export type CellMetric = keyof CellPoint;
 
 export function toTimePoint(stats: any, t = Date.now()): TimePoint {
   const rows = cellRows(stats);
@@ -121,7 +147,15 @@ export function toTimePoint(stats: any, t = Date.now()): TimePoint {
     dlRetx += num(c?.dl_retx); ulRetx += num(c?.ul_retx);
   }
   const cells: TimePoint['cells'] = {};
-  for (const r of rows) cells[r.id] = { dlMbps: r.dlMbps, ulMbps: r.ulMbps };
+  for (const r of rows) {
+    cells[r.id] = {
+      dlMbps: r.dlMbps, ulMbps: r.ulMbps,
+      dlPrb: r.dlPrbAvg, ulPrb: r.ulPrbAvg,
+      ues: r.ues, activeUes: r.activeUes,
+      dlSched: r.dlSched, ulSched: r.ulSched,
+      dlRetxPct: r.dlRetxPct, ulRetxPct: r.ulRetxPct,
+    };
+  }
   const sum = (pick: (r: CellRow) => number) => rows.reduce((a, r) => a + pick(r), 0);
 
   return {
@@ -147,13 +181,19 @@ export interface RadioUeRow {
   rnti?: number | string;
   ranUeId?: number;
   coreUeId?: number;
+  /** PCell — the first entry of ue_get cells[]. */
   cellId?: number;
+  /** Secondary cells (carrier aggregation), in ue_get order. */
+  scellIds: number[];
   /** Cells the UE is scheduled on (>1 = carrier aggregation). */
   caCells: number;
+  /** Summed over every cell the UE uses. */
   dlMbps: number; ulMbps: number;
+  /** PCell only: MCS/CQI/RI are per-carrier and do not add up. */
   dlMcs?: number; ulMcs?: number;
   cqi?: number; ri?: number;
   snr?: number; epre?: number; pathLoss?: number; phr?: number;
+  /** retx / tx summed over all of the UE's cells. */
   dlRetxPct: number; ulRetxPct: number;
 }
 
@@ -163,20 +203,22 @@ export function radioUeRows(resp: any): RadioUeRow[] {
     const cs: any[] = Array.isArray(u?.cells) ? u.cells : [];
     const c = cs[0] ?? {};
     const ranUeId = u?.ran_ue_id ?? u?.enb_ue_id;
+    const total = (k: string) => cs.reduce((a, x) => a + num(x?.[k]), 0);
     return {
       key: String(ranUeId ?? u?.rnti ?? i),
       rnti: u?.rnti,
       ranUeId,
       coreUeId: u?.amf_ue_id ?? u?.mme_ue_id,
       cellId: c.cell_id,
+      scellIds: cs.slice(1).map(x => x?.cell_id).filter((v: unknown): v is number => typeof v === 'number'),
       caCells: cs.length,
-      dlMbps: cs.reduce((a, x) => a + num(x?.dl_bitrate), 0) / 1e6,
-      ulMbps: cs.reduce((a, x) => a + num(x?.ul_bitrate), 0) / 1e6,
+      dlMbps: total('dl_bitrate') / 1e6,
+      ulMbps: total('ul_bitrate') / 1e6,
       dlMcs: c.dl_mcs, ulMcs: c.ul_mcs,
       cqi: c.cqi, ri: c.ri,
       snr: c.pusch_snr, epre: c.epre, pathLoss: c.ul_path_loss, phr: c.ul_phr,
-      dlRetxPct: pct(num(c.dl_retx), num(c.dl_tx)),
-      ulRetxPct: pct(num(c.ul_retx), num(c.ul_tx)),
+      dlRetxPct: pct(total('dl_retx'), total('dl_tx')),
+      ulRetxPct: pct(total('ul_retx'), total('ul_tx')),
     };
   });
 }
@@ -262,7 +304,7 @@ export function radioSummary(stats: any, module: ModuleKey): SummaryDonut[] {
         { label: 'Inactive', value: inactive, color: SEG.idle },
       ],
     },
-    { title: 'Category', total, segments: [{ label: ratOf(module), value: total, color: SEG.brand }] },
+    { title: 'RAT', total, segments: [{ label: ratOf(module), value: total, color: SEG.brand }] },
     perCell,
   ];
 }

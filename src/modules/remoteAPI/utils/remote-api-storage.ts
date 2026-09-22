@@ -1,19 +1,52 @@
 // src/modules/remoteAPI/utils/remote-api-storage.ts
+//
+// localStorage persistence for the Remote API console. Every read is guarded:
+// storage can be unavailable (private mode, SSR) or hold corrupt JSON from an
+// older build, and the console must still render.
+import type { ComponentType } from '../types';
 
 export interface ConnectionDetails {
   ip: string;
-  type: 'ENB' | 'UE' | 'MME' | 'IMS' | 'MBMS';
+  type: ComponentType;
   port: string;
   name?: string;
   timestamp?: string;
 }
 
+export type LogStatus = 'success' | 'error' | 'notification' | 'event';
+
 export interface LogEntry {
   command: string;
   response: any;
   timestamp: string;
-  status: 'success' | 'error';
+  status: LogStatus;
+  /** Round trip in ms for request/response entries. */
+  durationMs?: number;
+  /** Server that answered, e.g. "ENB lteenb 2026-06-12". */
+  server?: string;
   connectionDetails?: ConnectionDetails;
+}
+
+const MAX_STORED_RESPONSE_CHARS = 20000;
+
+function readJSON<T>(key: string, fallback: T): T {
+  try {
+    if (typeof window === 'undefined') return fallback;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    const v = JSON.parse(raw);
+    return (v ?? fallback) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJSON(key: string, value: unknown) {
+  try {
+    if (typeof window !== 'undefined') window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* quota exceeded or storage disabled: keep going in memory */
+  }
 }
 
 export const STORAGE_KEYS = {
@@ -36,21 +69,21 @@ export const remoteAPIStorage = {
         ...connection,
         timestamp: new Date().toISOString()
       });
-      localStorage.setItem(STORAGE_KEYS.CONNECTIONS, JSON.stringify(connections));
+      writeJSON(STORAGE_KEYS.CONNECTIONS, connections);
     }
     
     // Update recent connection
-    localStorage.setItem(STORAGE_KEYS.RECENT_CONNECTION, JSON.stringify(connection));
+    writeJSON(STORAGE_KEYS.RECENT_CONNECTION, connection);
   },
 
   getSavedConnections(): ConnectionDetails[] {
-    const saved = localStorage.getItem(STORAGE_KEYS.CONNECTIONS);
-    return saved ? JSON.parse(saved) : [];
+    const v = readJSON<ConnectionDetails[]>(STORAGE_KEYS.CONNECTIONS, []);
+    return Array.isArray(v) ? v : [];
   },
 
   getRecentConnection(): ConnectionDetails | null {
-    const recent = localStorage.getItem(STORAGE_KEYS.RECENT_CONNECTION);
-    return recent ? JSON.parse(recent) : null;
+    const v = readJSON<ConnectionDetails | null>(STORAGE_KEYS.RECENT_CONNECTION, null);
+    return v && typeof v === 'object' && typeof v.ip === 'string' ? v : null;
   },
 
   deleteConnection(connection: ConnectionDetails): void {
@@ -58,40 +91,51 @@ export const remoteAPIStorage = {
     const updated = connections.filter(
       c => !(c.ip === connection.ip && c.port === connection.port)
     );
-    localStorage.setItem(STORAGE_KEYS.CONNECTIONS, JSON.stringify(updated));
+    writeJSON(STORAGE_KEYS.CONNECTIONS, updated);
   },
 
   // Command History Management
   saveCommand(command: string): void {
     const history = this.getCommandHistory();
     const updated = [command, ...history.filter(cmd => cmd !== command)].slice(0, 20); // Keep last 20
-    localStorage.setItem(STORAGE_KEYS.COMMAND_HISTORY, JSON.stringify(updated));
+    writeJSON(STORAGE_KEYS.COMMAND_HISTORY, updated);
   },
 
   getCommandHistory(): string[] {
-    const history = localStorage.getItem(STORAGE_KEYS.COMMAND_HISTORY);
-    return history ? JSON.parse(history) : [];
+    const v = readJSON<string[]>(STORAGE_KEYS.COMMAND_HISTORY, []);
+    return Array.isArray(v) ? v.filter(x => typeof x === 'string') : [];
   },
 
   // Response Log Management
   saveLog(log: LogEntry): void {
     const logs = this.getResponseLogs();
-    const updated = [log, ...logs].slice(0, 100); // Keep last 100 logs
-    localStorage.setItem(STORAGE_KEYS.RESPONSE_LOGS, JSON.stringify(updated));
+    // config_get / log_get / ue_get responses can be megabytes; persisting
+    // them whole blew the localStorage quota and silently lost the history.
+    let stored = log;
+    try {
+      const size = JSON.stringify(log.response ?? null).length;
+      if (size > MAX_STORED_RESPONSE_CHARS) {
+        stored = { ...log, response: { truncated: true, chars: size, preview: JSON.stringify(log.response).slice(0, 2000) } };
+      }
+    } catch { /* unserialisable: store as-is */ }
+    const updated = [stored, ...logs].slice(0, 100); // Keep last 100 logs
+    writeJSON(STORAGE_KEYS.RESPONSE_LOGS, updated);
   },
 
   getResponseLogs(): LogEntry[] {
-    const logs = localStorage.getItem(STORAGE_KEYS.RESPONSE_LOGS);
-    return logs ? JSON.parse(logs) : [];
+    const v = readJSON<LogEntry[]>(STORAGE_KEYS.RESPONSE_LOGS, []);
+    return Array.isArray(v) ? v : [];
   },
 
   clearResponseLogs(): void {
-    localStorage.setItem(STORAGE_KEYS.RESPONSE_LOGS, JSON.stringify([]));
+    writeJSON(STORAGE_KEYS.RESPONSE_LOGS, []);
   },
 
   // Utility methods
   clearAll(): void {
-    Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
+    try {
+      Object.values(STORAGE_KEYS).forEach(key => window.localStorage.removeItem(key));
+    } catch { /* storage unavailable */ }
   },
 
   exportData(): string {
@@ -108,13 +152,13 @@ export const remoteAPIStorage = {
     try {
       const data = JSON.parse(jsonString);
       if (data.connections) {
-        localStorage.setItem(STORAGE_KEYS.CONNECTIONS, JSON.stringify(data.connections));
+        writeJSON(STORAGE_KEYS.CONNECTIONS, data.connections);
       }
       if (data.commandHistory) {
-        localStorage.setItem(STORAGE_KEYS.COMMAND_HISTORY, JSON.stringify(data.commandHistory));
+        writeJSON(STORAGE_KEYS.COMMAND_HISTORY, data.commandHistory);
       }
       if (data.responseLogs) {
-        localStorage.setItem(STORAGE_KEYS.RESPONSE_LOGS, JSON.stringify(data.responseLogs));
+        writeJSON(STORAGE_KEYS.RESPONSE_LOGS, data.responseLogs);
       }
     } catch (error) {
       console.error('Failed to import data:', error);

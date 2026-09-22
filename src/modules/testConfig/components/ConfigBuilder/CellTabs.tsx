@@ -76,7 +76,14 @@ export function CellTabs({ form, onChange }: CellTabsProps) {
     // Distinct cell_id AND PCI so a freshly added cell is never a collision;
     // inherit band/bandwidth from the current cell as a sensible starting point.
     const newCell = makeDefaultCell(newName, {
-      cellId: 500 + current.length,
+      // First unused id from length+1 up (cell_id is 0–255). A removed cell can
+      // leave ids out of order, so a plain length+1 could collide.
+      cellId: (() => {
+        const used = new Set(current.map(c => Number(c.cellId)));
+        let id = current.length + 1;
+        while (used.has(id) && id < 255) id++;
+        return id;
+      })(),
       pci: (snapshot.pci + 1) % 1008,
       band: snapshot.band,
       nrBandwidth: snapshot.nrBandwidth,

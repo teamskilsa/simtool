@@ -1,0 +1,104 @@
+{
+  "id": "rrc-idle-cycle",
+  "name": "RRC idle / connected cycling",
+  "description": "Releases the RRC connection (rrc_cnx_release), checks the UE leaves the eNB, stays idle for a while, then sends data from the phone (ping to the PDN gateway) and measures how long the UE takes to come back with a fresh enb_ue_id. Without a phone the reconnect relies on the UE sending data by itself.",
+  "schemaVersion": 1,
+  "tags": [
+    "rrc",
+    "idle",
+    "release"
+  ],
+  "requirements": {
+    "minCells": 1,
+    "needsHoConfig": false
+  },
+  "params": {
+    "iterations": 5,
+    "idleMs": 5000,
+    "reconnectTimeoutMs": 20000
+  },
+  "steps": [
+    {
+      "type": "assert",
+      "label": "UE connected",
+      "expect": {
+        "path": "ue.connected",
+        "op": "eq",
+        "value": true
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "loop",
+      "label": "idle/connected × ${params.iterations}",
+      "count": "${params.iterations}",
+      "steps": [
+        {
+          "type": "assert",
+          "label": "connected",
+          "expect": {
+            "path": "ue.connected",
+            "op": "eq",
+            "value": true
+          },
+          "timeoutMs": "${params.reconnectTimeoutMs}",
+          "capture": {
+            "oldId": "ue.enb_ue_id"
+          }
+        },
+        {
+          "type": "action",
+          "target": "enb",
+          "label": "RRC release enb_ue_id ${vars.oldId}",
+          "mark": "rel",
+          "message": {
+            "message": "rrc_cnx_release",
+            "ran_ue_id": "${ue.ran_ue_id}"
+          }
+        },
+        {
+          "type": "assert",
+          "label": "UE gone from eNB",
+          "expect": {
+            "path": "ue.connected",
+            "op": "eq",
+            "value": false
+          },
+          "timeoutMs": 5000,
+          "pollMs": 100,
+          "metric": {
+            "name": "release_ms",
+            "since": "rel"
+          }
+        },
+        {
+          "type": "wait",
+          "ms": "${params.idleMs}"
+        },
+        {
+          "type": "assert",
+          "label": "reconnected with a new enb_ue_id",
+          "expect": {
+            "all": [
+              {
+                "path": "ue.connected",
+                "op": "eq",
+                "value": true
+              },
+              {
+                "path": "ue.enb_ue_id",
+                "op": "ne",
+                "value": "${vars.oldId}"
+              }
+            ]
+          },
+          "timeoutMs": "${params.reconnectTimeoutMs}",
+          "metric": {
+            "name": "reconnect_ms",
+            "since": "data"
+          }
+        }
+      ]
+    }
+  ]
+}

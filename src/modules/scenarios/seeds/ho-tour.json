@@ -1,0 +1,127 @@
+{
+  "id": "ho-tour",
+  "name": "Handover tour across all cells",
+  "description": "Starts on the first cell and hands over to every cell in turn (1→2→…→N→1), whatever the cell count (6 or 12). Targets missing from the serving cell's neighbour list are added for the run and removed at teardown. Records ho_complete_ms per hop and, with a phone, ping loss for the whole tour.",
+  "schemaVersion": 1,
+  "tags": [
+    "handover",
+    "blind",
+    "all-cells"
+  ],
+  "requirements": {
+    "minCells": 2,
+    "needsHoConfig": false
+  },
+  "params": {
+    "dwellMs": 5000,
+    "hoTimeoutMs": 5000
+  },
+  "steps": [
+    {
+      "type": "assert",
+      "label": "UE connected, one context (no handover in flight)",
+      "expect": {
+        "all": [
+          {
+            "path": "ue.connected",
+            "op": "eq",
+            "value": true
+          },
+          {
+            "path": "ue.contexts",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "action",
+      "target": "enb",
+      "label": "move to cell ${cells[0].id}",
+      "when": {
+        "path": "ue.pcell",
+        "op": "ne",
+        "value": "${cells[0].id}"
+      },
+      "message": {
+        "message": "handover",
+        "ran_ue_id": "${ue.ran_ue_id}",
+        "pci": "${cells[0].pci}",
+        "dl_earfcn": "${cells[0].earfcn}"
+      },
+      "ensureNeighbour": true
+    },
+    {
+      "type": "assert",
+      "label": "on cell ${cells[0].id}",
+      "expect": {
+        "all": [
+          {
+            "path": "ue.pcell",
+            "op": "eq",
+            "value": "${cells[0].id}"
+          },
+          {
+            "path": "ue.contexts",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "timeoutMs": "${params.hoTimeoutMs}"
+    },
+    {
+      "type": "loop",
+      "label": "tour of ${cellCount} cells",
+      "count": "${cellCount}",
+      "steps": [
+        {
+          "type": "action",
+          "target": "enb",
+          "mark": "ho",
+          "label": "handover → cell ${cells[(loop.i + 1) % cellCount].id} (PCI ${cells[(loop.i + 1) % cellCount].pci}, EARFCN ${cells[(loop.i + 1) % cellCount].earfcn})",
+          "capture": {
+            "target": "cells[(loop.i + 1) % cellCount].id"
+          },
+          "message": {
+            "message": "handover",
+            "ran_ue_id": "${ue.ran_ue_id}",
+            "pci": "${cells[(loop.i + 1) % cellCount].pci}",
+            "dl_earfcn": "${cells[(loop.i + 1) % cellCount].earfcn}"
+          },
+          "ensureNeighbour": true
+        },
+        {
+          "type": "assert",
+          "label": "PCell = cell ${vars.target}, one context",
+          "expect": {
+            "all": [
+              {
+                "path": "ue.pcell",
+                "op": "eq",
+                "value": "${vars.target}"
+              },
+              {
+                "path": "ue.contexts",
+                "op": "eq",
+                "value": 1
+              }
+            ]
+          },
+          "timeoutMs": "${params.hoTimeoutMs}",
+          "pollMs": 100,
+          "metric": {
+            "name": "ho_complete_ms",
+            "since": "ho"
+          }
+        },
+        {
+          "type": "wait",
+          "ms": "${params.dwellMs}"
+        }
+      ]
+    }
+  ]
+}

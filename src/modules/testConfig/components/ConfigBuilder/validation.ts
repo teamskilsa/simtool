@@ -53,6 +53,24 @@ const ipv4 = (label: string, value: string): ValidationIssue | null => {
 // ────────────────────────────────────────────────────────────────────────────
 // NR (5G) — fields that go into nr_cell_list[] and nr_cell_default
 // ────────────────────────────────────────────────────────────────────────────
+/** cell_id values a form will emit: the active cell's id lives in the flat
+ *  field, the others in cells[] (same rule as the validators below). */
+const emittedCellIds = (form: { cellId: number; cells?: { cellId: number }[]; activeCellIdx?: number }): number[] =>
+  form.cells && form.cells.length > 0
+    ? form.cells.map((c, i) => (i === (form.activeCellIdx ?? 0) ? form.cellId : c.cellId))
+    : [form.cellId];
+
+/** NSA: cell_list and nr_cell_list live in one lteenb, and a cell_id must be
+ *  different for each cell configured in the eNB (the remote API addresses
+ *  cells by cell_id alone), so LTE and NR ids may not overlap. */
+export function validateNSACellIds(lte: LTEFormState, nr: NRFormState): ValidationIssue[] {
+  const lteIds = new Set(emittedCellIds(lte as any).map(Number));
+  const clash = [...new Set(emittedCellIds(nr as any).map(Number))].filter(id => lteIds.has(id));
+  return clash.length
+    ? [{ field: 'NR Cell ID', message: `cell_id ${clash.join(', ')} is also used by an LTE anchor cell; every cell in the eNB needs its own cell_id` }]
+    : [];
+}
+
 export function validateNRForm(form: NRFormState): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const push = (i: ValidationIssue | null) => { if (i) issues.push(i); };
@@ -79,7 +97,8 @@ export function validateNRForm(form: NRFormState): ValidationIssue[] {
 
   for (const c of cells) {
     const tag = cells.length > 1 ? `${c.name} ` : '';
-    push(range(`${tag}Cell ID (n_id_cell)`, c.cellId, 0, 1007));
+    // nr_cell_list cell_id, not the PCI — lteenb rejects anything above 255.
+    push(range(`${tag}Cell ID`,             c.cellId, 0, 255));
     push(range(`${tag}DL NR-ARFCN`,         c.dlNrArfcn, 0, 3279165));
     if (!/^[01]+$/.test(c.ssbPosBitmap || '')) {
       issues.push({ field: `${tag}SSB Position Bitmap`, message: 'must be a binary string (e.g. "10000000")' });
@@ -141,8 +160,36 @@ export function validateLTEForm(form: LTEFormState): ValidationIssue[] {
     push(range(`${tag}Cell ID`,    c.cellId, 0, 255));
     push(range(`${tag}PCI`,        c.pci, 0, 503));
     push(range(`${tag}TAC`,        c.tac ?? form.tac, 0, 65535));
-    push(range(`${tag}RF Port`,    c.rfPort ?? 0, 0, 7));
+    // One rf_port per SDR device (or device pair for 4x4). A Callbox Extreme
+    // exposes 12 devices, so 12 cells at 2x2 need ports 0–11; 23 covers 24 devices.
+    push(range(`${tag}RF Port`,    c.rfPort ?? 0, 0, 23));
     push(range(`${tag}DL EARFCN`,  c.dlEarfcn, 0, 262143));
+  }
+
+  // Multi-cell: lteenb needs distinct cell_id and one rf_port per cell.
+  const dupes = (label: string, vals: (number | string)[]) => {
+    const seen = new Set<number | string>();
+    for (const v of vals) {
+      if (seen.has(v)) { issues.push({ field: label, message: `${v} is used by more than one cell` }); return; }
+      seen.add(v);
+    }
+  };
+  if (cells.length > 1) {
+    dupes('Cell ID', cells.map((c: any) => c.cellId));
+    // PCI only has to be unique per carrier: the same PCI on another EARFCN is
+    // legal and handover resolves targets by PCI + EARFCN.
+    dupes('PCI / DL EARFCN', cells.map((c: any) => `${c.pci} on EARFCN ${c.dlEarfcn}`));
+    if (form.rfMode === 'sdr') dupes('RF Port', cells.map((c: any) => c.rfPort ?? 0));
+  }
+
+  // SDR: each board is 2T2R, so every cell needs ceil(antennas/2) devices.
+  if (form.rfMode === 'sdr' && form.rfArgs) {
+    const devs = (form.rfArgs.match(/\bdev\d+\s*=/g) ?? []).length;
+    const ports = new Set(cells.map((c: any) => c.rfPort ?? 0)).size;
+    const need = ports * Math.ceil(Math.max(form.nAntennaDl || 1, form.nAntennaUl || 1) / 2);
+    if (devs > 0 && devs < need) {
+      issues.push({ field: 'RF Device Path', message: `${ports} cell(s) × ${form.nAntennaDl} antennas need ${need} SDR devices (dev0..dev${need - 1}), found ${devs}` });
+    }
   }
 
   push(range('Max UE Power',           form.pMax,           -30, 33));

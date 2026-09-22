@@ -34,8 +34,8 @@ export function AntennaSectionLte({ form, onChange }: Props) {
       const fill = arr[arr.length - 1] ?? defaultGains('lte', value).rxGain;
       onChange('rxGain', Array.from({ length: value }, (_, i) => arr[i] ?? fill));
     }
-    if (key === 'nAntennaDl' && form.rfMode === 'sdr' && form.rfArgs === defaultRfArgs('sdr', form.nAntennaDl)) {
-      onChange('rfArgs', defaultRfArgs('sdr', value));
+    if (key === 'nAntennaDl' && form.rfMode === 'sdr' && form.rfArgs === defaultRfArgs('sdr', form.nAntennaDl, form.cells?.length ?? 1)) {
+      onChange('rfArgs', defaultRfArgs('sdr', value, form.cells?.length ?? 1));
     }
   };
 

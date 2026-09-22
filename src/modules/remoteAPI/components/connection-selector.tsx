@@ -1,53 +1,52 @@
-// src/modules/remoteAPI/components/connection-selector.tsx
-//
 // Connection picker for the Remote API page.
 //
-// The dropdown is now sourced from the shared Systems list
-// (`useSystems()` — same store the Test Systems page manages) instead of a
-// separate "savedConnections" localStorage entry. That used to drift out of
-// sync the moment a system's IP changed in the Test Systems page; now there
-// is one source of truth.
-//
-// Picking a system fills in the IP. Module type (ENB / UE / MME / IMS /
-// MBMS) and port stay user-controlled — the user decides which subsystem
-// they want to query, since a single Callbox typically runs several
-// (eNB on 9001, MME on 9000, IMS on 9003, etc.).
+// The system dropdown is sourced from the shared Systems list (`useSystems()`,
+// the store the Test Systems page manages), so an IP change there is picked up
+// here. Picking a system fills in the IP; the component (ENB / MME / IMS / UE
+// / MBMS / LICENSE) and port stay user-controlled since one callbox runs
+// several remote API servers.
 
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { Input } from '@/components/ui/input';
+import { Kicker } from '@/components/ui/stat';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import type { ThemeConfig } from '@/components/theme/types/theme.types';
 import { useSystems } from '@/modules/systems/hooks/use-systems';
 import type { System, SystemType } from '@/modules/systems/types';
+import { COMPONENT_TYPES, DEFAULT_REMOTE_API_PORTS, type ComponentType } from '../../../shared/default/templates/remoteapi/common/types';
 
-type ComponentType = 'ENB' | 'UE' | 'MME' | 'IMS' | 'MBMS';
-
-interface ConnectionDetails {
+export interface ConnectionDetails {
   ip: string;
   type: ComponentType;
   port: string;
   name?: string;
-  /** Optional remote-API password — only needed when the callbox config
-   *  sets `com_password`. Empty string for unauthenticated deployments. */
+  /** Remote API password, only when the server sets com_auth. Never persisted. */
   password?: string;
 }
 
 interface ConnectionSelectorProps {
-  themeConfig: ThemeConfig;
+  themeConfig?: ThemeConfig;
+  /** Initial values (e.g. the last connection). */
+  initial?: Partial<ConnectionDetails>;
   onConnectionChange: (details: ConnectionDetails) => void;
 }
 
-const DEFAULT_PORTS: Record<ComponentType, string> = {
-  'ENB': '9001',
-  'UE':  '9002',
-  'MME': '9000',
-  'IMS': '9003',
-  'MBMS':'9004',
+const COMPONENT_HINT: Record<ComponentType, string> = {
+  ENB: 'eNB / gNB',
+  MME: 'MME / AMF',
+  IMS: 'IMS',
+  UE: 'UE simulator',
+  MBMS: 'MBMS gateway',
+  LICENSE: 'License server',
 };
 
-/**
- * Suggest a default ComponentType for a saved system. The user can always
- * override after picking — this is just so the type chooser lands on the
- * obvious choice (eNB for callboxes, UE for sim boxes).
- */
 function suggestType(systemType: SystemType): ComponentType {
   switch (systemType) {
     case 'Callbox': return 'ENB';
@@ -58,22 +57,22 @@ function suggestType(systemType: SystemType): ComponentType {
   }
 }
 
-export function ConnectionSelector({ themeConfig, onConnectionChange }: ConnectionSelectorProps) {
+export function ConnectionSelector({ initial, onConnectionChange }: ConnectionSelectorProps) {
   const { systems } = useSystems();
 
-  const [formData, setFormData] = useState<ConnectionDetails>({
-    ip: '',
-    type: 'ENB',
-    port: '9001',
-    password: '',
+  const [formData, setFormData] = useState<ConnectionDetails>(() => {
+    const type = initial?.type && COMPONENT_TYPES.includes(initial.type) ? initial.type : 'ENB';
+    return {
+      ip: initial?.ip ?? '',
+      type,
+      port: initial?.port ?? String(DEFAULT_REMOTE_API_PORTS[type]),
+      name: initial?.name,
+      password: '',
+    };
   });
 
-  // Track which system the user picked so we can highlight it in the
-  // dropdown when they come back. -1 means "manual entry / not from list".
   const [selectedSystemId, setSelectedSystemId] = useState<string>('');
 
-  // Stable, unique list — the systems hook may have transient duplicates
-  // during hot reload; dedupe by id.
   const sortedSystems = useMemo(() => {
     const seen = new Set<number>();
     const out: System[] = [];
@@ -85,37 +84,25 @@ export function ConnectionSelector({ themeConfig, onConnectionChange }: Connecti
     return out.sort((a, b) => a.name.localeCompare(b.name));
   }, [systems]);
 
-  const handlePickSystem = (id: string) => {
-    setSelectedSystemId(id);
-    if (!id) return;
-    const sys = sortedSystems.find(s => String(s.id) === id);
-    if (!sys) return;
-    const suggestedType = suggestType(sys.type);
-    const next: ConnectionDetails = {
-      ...formData,
-      ip: sys.ip,
-      type: suggestedType,
-      port: DEFAULT_PORTS[suggestedType],
-      name: sys.name,
-    };
+  const update = (next: ConnectionDetails) => {
     setFormData(next);
     onConnectionChange(next);
   };
 
+  const handlePickSystem = (id: string) => {
+    setSelectedSystemId(id);
+    const sys = sortedSystems.find(s => String(s.id) === id);
+    if (!sys) return;
+    const type = suggestType(sys.type);
+    update({ ...formData, ip: sys.ip, type, port: String(DEFAULT_REMOTE_API_PORTS[type]), name: sys.name });
+  };
+
   const handleChange = (field: keyof ConnectionDetails, value: string) => {
-    const newData = { ...formData, [field]: value } as ConnectionDetails;
-    // Changing module type snaps the port to that module's default (the user
-    // can still override it afterwards). This has to happen here rather than
-    // in an effect on formData.type: the effect updated local state only and
-    // never called onConnectionChange, so the field showed 9000 while the
-    // parent still connected on 9001.
-    if (field === 'type') {
-      newData.port = DEFAULT_PORTS[value as ComponentType];
-    }
-    setFormData(newData);
-    onConnectionChange(newData);
-    // If the user manually edits the IP, they're no longer "on" a saved
-    // system — clear the dropdown selection so it doesn't lie.
+    const next = { ...formData, [field]: value } as ConnectionDetails;
+    // Changing the component snaps the port to its default in the same update
+    // the parent sees (an effect here used to leave the parent on the old port).
+    if (field === 'type') next.port = String(DEFAULT_REMOTE_API_PORTS[value as ComponentType]);
+    update(next);
     if (field === 'ip' && selectedSystemId) {
       const sys = sortedSystems.find(s => String(s.id) === selectedSystemId);
       if (sys && sys.ip !== value) setSelectedSystemId('');
@@ -123,106 +110,62 @@ export function ConnectionSelector({ themeConfig, onConnectionChange }: Connecti
   };
 
   return (
-    <div className="space-y-4">
-      {/* Module type selector */}
-      <div className="flex items-center space-x-4">
-        {(Object.keys(DEFAULT_PORTS) as ComponentType[]).map((type) => (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Remote API component">
+        {COMPONENT_TYPES.map((type) => (
           <button
             key={type}
+            type="button"
+            role="radio"
+            aria-checked={formData.type === type}
             onClick={() => handleChange('type', type)}
-            className={`
-              px-4 py-2 rounded-lg text-sm font-medium
-              transition-colors
-              ${formData.type === type
-                ? `${themeConfig.components.button.variants.default}`
-                : `${themeConfig.surfaces.card.background} ${themeConfig.surfaces.card.border} border hover:bg-white/10`
-              }
-            `}
+            title={`${COMPONENT_HINT[type]} · default port ${DEFAULT_REMOTE_API_PORTS[type]}`}
+            className={cn(
+              'rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              formData.type === type
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border bg-background text-foreground hover:bg-muted',
+            )}
           >
             {type}
           </button>
         ))}
+        <span className="ml-1 text-xs text-muted-foreground">{COMPONENT_HINT[formData.type]}</span>
       </div>
 
-      {/* Connection form */}
-      <div className="flex items-center space-x-4">
-        {/* Systems dropdown — sourced from the Test Systems list */}
-        <div className="w-72">
-          <select
-            value={selectedSystemId}
-            onChange={(e) => handlePickSystem(e.target.value)}
-            disabled={sortedSystems.length === 0}
-            className={`
-              w-full px-3 py-2 rounded-lg
-              ${themeConfig.surfaces.card.background}
-              border ${themeConfig.surfaces.card.border}
-              ${themeConfig.surfaces.card.foreground}
-              disabled:opacity-50
-            `}
-          >
-            <option value="">
-              {sortedSystems.length === 0
-                ? 'No systems — add one in Test Systems'
-                : 'Select system…'}
-            </option>
-            {sortedSystems.map((sys) => (
-              <option key={sys.id} value={String(sys.id)}>
-                {sys.name} — {sys.ip} ({sys.type})
-              </option>
-            ))}
-          </select>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_7rem_minmax(0,0.9fr)]">
+        <div className="space-y-1">
+          <Kicker>System</Kicker>
+          <Select value={selectedSystemId} onValueChange={handlePickSystem} disabled={sortedSystems.length === 0}>
+            <SelectTrigger>
+              <SelectValue placeholder={sortedSystems.length === 0 ? 'No systems: add one in Test Systems' : 'Select system…'} />
+            </SelectTrigger>
+            <SelectContent>
+              {sortedSystems.map((sys) => (
+                <SelectItem key={sys.id} value={String(sys.id)} description={`${sys.ip} · ${sys.type}`}>
+                  {sys.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-
-        {/* IP Address — editable, populated from system pick or typed manually */}
-        <div className="flex-1">
-          <input
-            type="text"
-            value={formData.ip}
-            onChange={(e) => handleChange('ip', e.target.value)}
-            placeholder="IP Address"
-            className={`
-              w-full px-3 py-2 rounded-lg
-              ${themeConfig.surfaces.card.background}
-              border ${themeConfig.surfaces.card.border}
-              ${themeConfig.surfaces.card.foreground}
-              placeholder:text-white/40
-            `}
-          />
+        <div className="space-y-1">
+          <Kicker>Host</Kicker>
+          <Input value={formData.ip} onChange={(e) => handleChange('ip', e.target.value)} placeholder="IP address or hostname" aria-label="Host" />
         </div>
-
-        {/* Port */}
-        <div className="w-32">
-          <input
-            type="text"
-            value={formData.port}
-            onChange={(e) => handleChange('port', e.target.value)}
-            placeholder="Port"
-            className={`
-              w-full px-3 py-2 rounded-lg
-              ${themeConfig.surfaces.card.background}
-              border ${themeConfig.surfaces.card.border}
-              ${themeConfig.surfaces.card.foreground}
-              placeholder:text-white/40
-            `}
-          />
+        <div className="space-y-1">
+          <Kicker>Port</Kicker>
+          <Input value={formData.port} onChange={(e) => handleChange('port', e.target.value.replace(/[^0-9]/g, ''))} placeholder="Port" inputMode="numeric" aria-label="Port" />
         </div>
-
-        {/* Password (optional — only required when the callbox sets
-            com_password in its remote-API config) */}
-        <div className="w-44">
-          <input
+        <div className="space-y-1">
+          <Kicker>Password</Kicker>
+          <Input
             type="password"
             value={formData.password ?? ''}
             onChange={(e) => handleChange('password', e.target.value)}
-            placeholder="Password (optional)"
+            placeholder="only if com_auth is set"
             autoComplete="off"
-            className={`
-              w-full px-3 py-2 rounded-lg
-              ${themeConfig.surfaces.card.background}
-              border ${themeConfig.surfaces.card.border}
-              ${themeConfig.surfaces.card.foreground}
-              placeholder:text-white/40
-            `}
+            aria-label="Password"
           />
         </div>
       </div>

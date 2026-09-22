@@ -1,0 +1,118 @@
+{
+  "id": "cell-barring",
+  "name": "Cell barring",
+  "description": "Bars the UE's serving cell in SIB1 (sib_set cell_barred), waits for the SIB update (≥12 s), releases the RRC connection and checks the UE comes back on a different, unbarred cell and stays there. Barring is cleared in the scenario and again at teardown.",
+  "schemaVersion": 1,
+  "tags": [
+    "sib",
+    "barring",
+    "idle"
+  ],
+  "requirements": {
+    "minCells": 2,
+    "needsHoConfig": false
+  },
+  "params": {
+    "sibWaitMs": 12000,
+    "reconnectTimeoutMs": 30000,
+    "holdMs": 3000
+  },
+  "steps": [
+    {
+      "type": "assert",
+      "label": "UE connected",
+      "expect": {
+        "path": "ue.connected",
+        "op": "eq",
+        "value": true
+      },
+      "timeoutMs": 30000,
+      "capture": {
+        "src": "ue.pcell",
+        "oldId": "ue.enb_ue_id"
+      }
+    },
+    {
+      "type": "action",
+      "target": "enb",
+      "label": "bar cell ${vars.src}",
+      "mark": "bar",
+      "message": {
+        "message": "sib_set",
+        "cells": {
+          "${vars.src}": {
+            "sib1": {
+              "cell_barred": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "wait",
+      "label": "wait for the SIB1 update",
+      "ms": "${params.sibWaitMs}"
+    },
+    {
+      "type": "action",
+      "target": "enb",
+      "label": "RRC release",
+      "mark": "rel",
+      "message": {
+        "message": "rrc_cnx_release",
+        "ran_ue_id": "${ue.ran_ue_id}"
+      }
+    },
+    {
+      "type": "assert",
+      "label": "UE released",
+      "expect": {
+        "path": "ue.enb_ue_id",
+        "op": "ne",
+        "value": "${vars.oldId}"
+      },
+      "timeoutMs": 5000,
+      "pollMs": 100,
+      "optional": true
+    },
+    {
+      "type": "assert",
+      "label": "back on a cell other than ${vars.src}",
+      "expect": {
+        "all": [
+          {
+            "path": "ue.connected",
+            "op": "eq",
+            "value": true
+          },
+          {
+            "path": "ue.pcell",
+            "op": "ne",
+            "value": "${vars.src}"
+          }
+        ]
+      },
+      "timeoutMs": "${params.reconnectTimeoutMs}",
+      "holdMs": "${params.holdMs}",
+      "metric": {
+        "name": "reconnect_ms",
+        "since": "rel"
+      }
+    },
+    {
+      "type": "action",
+      "target": "enb",
+      "label": "unbar cell ${vars.src}",
+      "message": {
+        "message": "sib_set",
+        "cells": {
+          "${vars.src}": {
+            "sib1": {
+              "cell_barred": false
+            }
+          }
+        }
+      }
+    }
+  ]
+}

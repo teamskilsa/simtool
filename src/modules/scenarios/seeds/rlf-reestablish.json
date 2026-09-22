@@ -1,0 +1,127 @@
+{
+  "id": "rlf-reestablish",
+  "name": "RLF + re-establishment",
+  "description": "Kills the UE's PCell downlink (cell_gain -200 dB) to force a radio link failure, expects RRC re-establishment on another cell (≈0.8 s live), records reestablish_ms, then restores the gain. Raises the eNB RRC log level for the run to look for the re-establishment message (restored at teardown).",
+  "schemaVersion": 1,
+  "tags": [
+    "rlf",
+    "reestablishment"
+  ],
+  "requirements": {
+    "minCells": 2,
+    "needsHoConfig": false
+  },
+  "params": {
+    "iterations": 3,
+    "settleMs": 5000,
+    "reestTimeoutMs": 10000
+  },
+  "logs": {
+    "enb": {
+      "rrc": "debug"
+    }
+  },
+  "steps": [
+    {
+      "type": "assert",
+      "label": "UE connected",
+      "expect": {
+        "path": "ue.connected",
+        "op": "eq",
+        "value": true
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "loop",
+      "label": "RLF × ${params.iterations}",
+      "count": "${params.iterations}",
+      "steps": [
+        {
+          "type": "assert",
+          "label": "connected, one context",
+          "expect": {
+            "all": [
+              {
+                "path": "ue.connected",
+                "op": "eq",
+                "value": true
+              },
+              {
+                "path": "ue.contexts",
+                "op": "eq",
+                "value": 1
+              }
+            ]
+          },
+          "timeoutMs": "${params.reestTimeoutMs}",
+          "capture": {
+            "src": "ue.pcell"
+          }
+        },
+        {
+          "type": "action",
+          "target": "enb",
+          "label": "cell ${vars.src} gain → -200 dB (RLF)",
+          "mark": "rlf",
+          "message": {
+            "message": "cell_gain",
+            "cell_id": "${vars.src}",
+            "gain": -200
+          }
+        },
+        {
+          "type": "assert",
+          "label": "re-established off cell ${vars.src}",
+          "expect": {
+            "all": [
+              {
+                "path": "ue.connected",
+                "op": "eq",
+                "value": true
+              },
+              {
+                "path": "ue.pcell",
+                "op": "ne",
+                "value": "${vars.src}"
+              }
+            ]
+          },
+          "timeoutMs": "${params.reestTimeoutMs}",
+          "pollMs": 100,
+          "metric": {
+            "name": "reestablish_ms",
+            "since": "rlf"
+          }
+        },
+        {
+          "type": "assert",
+          "source": "log",
+          "label": "RRC re-establishment in eNB log",
+          "log": {
+            "target": "enb",
+            "layer": "RRC",
+            "pattern": "reestablishment",
+            "since": "rlf"
+          },
+          "timeoutMs": 3000,
+          "optional": true
+        },
+        {
+          "type": "action",
+          "target": "enb",
+          "label": "cell ${vars.src} gain → 0 dB",
+          "message": {
+            "message": "cell_gain",
+            "cell_id": "${vars.src}",
+            "gain": 0
+          }
+        },
+        {
+          "type": "wait",
+          "ms": "${params.settleMs}"
+        }
+      ]
+    }
+  ]
+}

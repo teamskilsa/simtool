@@ -226,6 +226,14 @@ export interface LTEFormState {
   // enb.cfg: cell_list[].inactivity_timer  (ms)
   inactivityTimer: number;
 
+  // ── Mobility (multi-cell only) ───────────────────────────────────────────────
+  // enb.cfg: cell_default.ho_from_meas. With 2+ cells the generator always
+  // writes per-cell ncell_list (needed by any handover, manual or automatic);
+  // true also adds meas_config_desc (A1/A2 + eutra_handover A3) and
+  // meas_gap_config "gp0" so the eNB hands over on A3 reports. Optional so
+  // forms saved before this existed load as ON.
+  hoFromMeas?: boolean;
+
   // ── Bearers ───────────────────────────────────────────────────────────────────
   // enb.cfg: cell_list[].drb_config  (path to drb.cfg)
   drbConfig: string;
@@ -332,6 +340,9 @@ export const DEFAULT_LTE_FORM: LTEFormState = {
 
   // Timers
   inactivityTimer: 10000,
+
+  // Mobility — handover from measurement reports (multi-cell only)
+  hoFromMeas: true,
 
   // Bearers
   drbConfig: 'drb.cfg',

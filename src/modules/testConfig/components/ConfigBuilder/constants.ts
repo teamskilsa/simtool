@@ -290,7 +290,7 @@ export interface NRCellEntry {
 export function makeDefaultCell(name: string, overrides: Partial<NRCellEntry> = {}): NRCellEntry {
   return {
     name,
-    cellId: 500,
+    cellId: 1,
     pci: 500,
     band: 78,
     nrBandwidth: 40,
@@ -326,7 +326,7 @@ export interface UeDbEntry {
 }
 
 export const DEFAULT_NR_FORM: NRFormState = {
-  cellId: 500,
+  cellId: 1,
   pci: 500,
   nrTdd: 1,
   fr2: 0,

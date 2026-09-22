@@ -28,12 +28,14 @@ import { useEnbStats } from '../../hooks/useEnbStats';
 import { parseMessage, toTimePoint, type ModuleKey, type TimePoint } from './statsModel';
 import { GlobalStatsTab } from './GlobalStatsTab';
 import { CellStatsTab } from './CellStatsTab';
+import type { CellSelection } from './CellPicker';
 import { UeStatsTab } from './UeStatsTab';
 
 // Amarisoft's typical remote-API ports; overridable per system.
 const MODULES: Array<{ key: ModuleKey; label: string; port: number }> = [
   { key: 'enb', label: 'eNB (LTE)',    port: 9001 },
-  { key: 'gnb', label: 'gNB (5G NR)',  port: 9002 },
+  // NR runs inside lteenb, which serves its remote API on the same port as LTE.
+  { key: 'gnb', label: 'gNB (5G NR)',  port: 9001 },
   { key: 'mme', label: 'MME / EPC',    port: 9000 },
   { key: 'ims', label: 'IMS',          port: 9003 },
   { key: 'ue',  label: 'UE Simulator', port: 9002 },
@@ -99,6 +101,8 @@ export function EnbMonitoringDashboard() {
   const [tab, setTab] = useState<TabKey>('global');
   const [windowKey, setWindowKey] = useState<WindowKey>('5m');
   const [pollMs, setPollMs] = useState<number>(1000);
+  // Shared by the Global and Cell tabs: every cell shown until the user hides some.
+  const [cellSelection, setCellSelection] = useState<CellSelection>({ hidden: [], showTotal: false });
 
   // ─── Samples ─────────────────────────────────────────────────────────────
   const [series, setSeries] = useState<TimePoint[]>([]);
@@ -287,11 +291,11 @@ export function EnbMonitoringDashboard() {
         </div>
 
         <TabsContent value="global">
-          {noData ? <NotConnected /> : <GlobalStatsTab latest={latest} series={visible} stats={currentStats} module={module} />}
+          {noData ? <NotConnected /> : <GlobalStatsTab latest={latest} series={visible} stats={currentStats} module={module} selection={cellSelection} onSelectionChange={setCellSelection} />}
         </TabsContent>
 
         <TabsContent value="cell">
-          {noData ? <NotConnected /> : <CellStatsTab stats={currentStats} series={visible} module={module} />}
+          {noData ? <NotConnected /> : <CellStatsTab stats={currentStats} series={visible} module={module} selection={cellSelection} onSelectionChange={setCellSelection} />}
         </TabsContent>
 
         <TabsContent value="ue">

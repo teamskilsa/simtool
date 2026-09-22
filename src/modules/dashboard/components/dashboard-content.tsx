@@ -64,6 +64,26 @@ const UeSimView = dynamic(
   () => import('@/modules/ueSim').then(m => m.UeSimView),
   { ssr: false, loading: sectionLoading },
 );
+const TrafficView = dynamic(
+  () => import('@/modules/traffic/components/TrafficView').then(m => m.TrafficView),
+  { ssr: false, loading: sectionLoading },
+);
+const MobilityScenariosView = dynamic(
+  () => import('@/modules/scenarios/components/MobilityScenariosView').then(m => m.MobilityScenariosView),
+  { ssr: false, loading: sectionLoading },
+);
+const ConformanceView = dynamic(
+  () => import('@/modules/conformance/components/ConformanceView').then(m => m.ConformanceView),
+  { ssr: false, loading: sectionLoading },
+);
+const CaptureView = dynamic(
+  () => import('@/modules/capture/components/CaptureView').then(m => m.CaptureView),
+  { ssr: false, loading: sectionLoading },
+);
+const NetworkView = dynamic(
+  () => import('@/modules/network/components/NetworkView').then(m => m.NetworkView),
+  { ssr: false, loading: sectionLoading },
+);
 const CoreNetView = dynamic(
   () => import('@/modules/coreNet').then(m => m.CoreNetView),
   { ssr: false, loading: sectionLoading },
@@ -129,6 +149,21 @@ export const DashboardContent = ({
       case 'stats':
       case 'monitoring':
         return <EnbMonitoringDashboard />;
+
+      case 'mobility':
+        return <MobilityScenariosView />;
+
+      case 'conformance':
+        return <ConformanceView />;
+
+      case 'capture':
+        return <CaptureView />;
+
+      case 'network':
+        return <NetworkView />;
+
+      case 'traffic':
+        return <TrafficView />;
 
       case 'uesim':
         return <UeSimView />;

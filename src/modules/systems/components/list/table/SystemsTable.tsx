@@ -23,10 +23,8 @@ interface SystemsTableProps {
 
 const TABLE_HEADERS = [
   { label: 'System Info' },
-  { label: 'Connection' },
   { label: 'Status' },
   { label: 'Resources' },
-  { label: 'Configuration' },
   { label: 'Actions', align: 'right' as const },
 ];
 

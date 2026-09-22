@@ -129,7 +129,7 @@ const BUILT_IN: SectionFile[] = [
     createdAt: new Date('2025-01-01').toISOString(),
     modifiedAt: new Date('2025-01-01').toISOString(),
     data: {
-      cellId: 500, nrTdd: 1, fr2: 0, band: 78, nrBandwidth: 40, subcarrierSpacing: 30,
+      cellId: 1, nrTdd: 1, fr2: 0, band: 78, nrBandwidth: 40, subcarrierSpacing: 30,
       dlNrArfcn: 632628, ssbPosBitmap: '10000000',
       tddPattern: { period: 5, dlSlots: 7, dlSymbols: 6, ulSlots: 2, ulSymbols: 4 },
     },
@@ -143,7 +143,7 @@ const BUILT_IN: SectionFile[] = [
     createdAt: new Date('2025-01-01').toISOString(),
     modifiedAt: new Date('2025-01-01').toISOString(),
     data: {
-      cellId: 501, nrTdd: 1, fr2: 0, band: 77, nrBandwidth: 100, subcarrierSpacing: 30,
+      cellId: 2, nrTdd: 1, fr2: 0, band: 77, nrBandwidth: 100, subcarrierSpacing: 30,
       dlNrArfcn: 622000, ssbPosBitmap: '10000000',
       tddPattern: { period: 5, dlSlots: 7, dlSymbols: 6, ulSlots: 2, ulSymbols: 4 },
     },
@@ -157,7 +157,7 @@ const BUILT_IN: SectionFile[] = [
     createdAt: new Date('2025-01-01').toISOString(),
     modifiedAt: new Date('2025-01-01').toISOString(),
     data: {
-      cellId: 502, nrTdd: 1, fr2: 0, band: 41, nrBandwidth: 100, subcarrierSpacing: 30,
+      cellId: 3, nrTdd: 1, fr2: 0, band: 41, nrBandwidth: 100, subcarrierSpacing: 30,
       dlNrArfcn: 514056, ssbPosBitmap: '10000000',
       tddPattern: { period: 5, dlSlots: 7, dlSymbols: 6, ulSlots: 2, ulSymbols: 4 },
     },

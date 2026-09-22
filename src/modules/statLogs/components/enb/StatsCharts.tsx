@@ -1,7 +1,7 @@
 // Time-series chart card in the Simnovus palette (recharts, as in Simnovator).
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Maximize2, X } from 'lucide-react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -9,7 +9,7 @@ import {
 import { useTheme } from '@/components/theme/context/theme-context';
 import { Card } from '@/components/ui/card';
 import { Kicker } from '@/components/ui/stat';
-import { fmt } from './statsModel';
+import { fmt, rateUnit } from './statsModel';
 
 /** Orange leads (DL / primary series), teal follows (UL), then mist-blue,
  *  amber, brick and slate for additional cells. Chosen to stay distinct on
@@ -37,6 +37,8 @@ export interface SeriesDef {
   key: string;
   label: string;
   color?: string;
+  /** Drawn dashed — used for aggregate lines (Total / mean) over per-cell ones. */
+  dashed?: boolean;
 }
 
 interface TimeSeriesChartProps {
@@ -47,13 +49,41 @@ interface TimeSeriesChartProps {
   domain?: [number | 'auto', number | 'auto'];
   digits?: number;
   height?: number;
+  /** Values are Mbps; show them in Mbps / kbps / bps by the largest sample. */
+  rate?: boolean;
 }
 
+const pick = (row: any, path: string): number => {
+  const v = path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), row);
+  const x = Number(v);
+  return Number.isFinite(x) ? x : 0;
+};
+
+/** Axis ticks: few significant digits, so auto-scaled domains never print
+ *  like 0.00065. */
+const tickFmt = (v: any) => {
+  const x = Number(v);
+  if (!Number.isFinite(x)) return '';
+  const a = Math.abs(x);
+  return x.toLocaleString(undefined, { maximumFractionDigits: a >= 100 || a === 0 ? 0 : a >= 1 ? 1 : 3 });
+};
+
 export function TimeSeriesChart({
-  title, unit, data, series, domain, digits = 1, height = 220,
+  title, unit, data, series, domain, digits = 1, height = 220, rate = false,
 }: TimeSeriesChartProps) {
   const c = useChartChrome();
   const [full, setFull] = useState(false);
+
+  const scale = useMemo(() => {
+    if (!rate || data.length === 0) return { unit, factor: 1, digits };
+    let max = 0;
+    for (const row of data) for (const s of series) max = Math.max(max, Math.abs(pick(row, s.key)));
+    // All-zero data: recharts falls back to a 0–4 axis, which scaled to bps
+    // would read 4,000,000 — keep the nominal unit instead.
+    if (max === 0) return { unit, factor: 1, digits };
+    const u = rateUnit(max);
+    return { unit: u.unit as string, factor: u.factor, digits: u.digits };
+  }, [rate, data, series, unit, digits]);
 
   const chart = (h: number | string) =>
     data.length === 0 ? (
@@ -80,6 +110,7 @@ export function TimeSeriesChart({
                 axisLine={false}
                 width={48}
                 domain={domain}
+                tickFormatter={(v: any) => tickFmt(Number(v) * scale.factor)}
               />
               <Tooltip
                 contentStyle={{
@@ -91,7 +122,7 @@ export function TimeSeriesChart({
                 }}
                 labelStyle={{ color: c.axis, fontSize: 11 }}
                 labelFormatter={(t: any) => clock(Number(t))}
-                formatter={(v: any, name: any) => [`${fmt(v, digits)}${unit ? ` ${unit}` : ''}`, name]}
+                formatter={(v: any, name: any) => [`${fmt(Number(v) * scale.factor, scale.digits)}${scale.unit ? ` ${scale.unit}` : ''}`, name]}
               />
               <Legend iconType="plainline" wrapperStyle={{ fontSize: 11, color: c.axis }} />
               {series.map((s, i) => (
@@ -102,6 +133,7 @@ export function TimeSeriesChart({
                   name={s.label}
                   stroke={s.color ?? SERIES_COLORS[i % SERIES_COLORS.length]}
                   strokeWidth={2}
+                  strokeDasharray={s.dashed ? '5 4' : undefined}
                   dot={false}
                   isAnimationActive={false}
                 />
@@ -114,7 +146,7 @@ export function TimeSeriesChart({
     <div className="flex items-center justify-between gap-2 px-4 pt-3">
       <Kicker>{title}</Kicker>
       <div className="flex items-center gap-2">
-        {unit ? <span className="font-mono text-[10px] text-muted-foreground">{unit}</span> : null}
+        {scale.unit ? <span className="font-mono text-[10px] text-muted-foreground">{scale.unit}</span> : null}
         <button
           type="button"
           onClick={() => setFull(!expanded)}

@@ -1,0 +1,123 @@
+{
+  "id": "tau",
+  "name": "Load-balancing TAU",
+  "description": "Asks the MME for a load-balancing TAU (load_balancing_tau with the UE's IMSI and IMEI). The MME releases the S1 connection; the UE performs a Tracking Area Update and comes back. Checks the UE is registered and connected again with a new eNB context, and records tau_reconnect_ms.",
+  "schemaVersion": 1,
+  "tags": [
+    "tau",
+    "mme"
+  ],
+  "requirements": {
+    "minCells": 1,
+    "needsHoConfig": false
+  },
+  "params": {
+    "iterations": 3,
+    "reconnectTimeoutMs": 30000,
+    "settleMs": 5000
+  },
+  "logs": {
+    "mme": {
+      "nas": "debug",
+      "s1ap": "debug"
+    }
+  },
+  "steps": [
+    {
+      "type": "loop",
+      "label": "TAU × ${params.iterations}",
+      "count": "${params.iterations}",
+      "steps": [
+        {
+          "type": "assert",
+          "label": "registered and connected",
+          "expect": {
+            "all": [
+              {
+                "path": "mme.registered",
+                "op": "eq",
+                "value": true
+              },
+              {
+                "path": "ue.connected",
+                "op": "eq",
+                "value": true
+              }
+            ]
+          },
+          "timeoutMs": "${params.reconnectTimeoutMs}",
+          "capture": {
+            "oldEnb": "ue.enb_ue_id"
+          }
+        },
+        {
+          "type": "action",
+          "target": "mme",
+          "label": "load_balancing_tau",
+          "mark": "tau",
+          "message": {
+            "message": "load_balancing_tau",
+            "imsi": "${ue.imsi}",
+            "imei": "${ue.imei}"
+          }
+        },
+        {
+          "type": "assert",
+          "label": "S1 released",
+          "expect": {
+            "path": "ue.enb_ue_id",
+            "op": "ne",
+            "value": "${vars.oldEnb}"
+          },
+          "timeoutMs": 5000,
+          "pollMs": 100,
+          "optional": true
+        },
+        {
+          "type": "assert",
+          "label": "back: registered, new eNB context",
+          "expect": {
+            "all": [
+              {
+                "path": "mme.registered",
+                "op": "eq",
+                "value": true
+              },
+              {
+                "path": "ue.connected",
+                "op": "eq",
+                "value": true
+              },
+              {
+                "path": "ue.enb_ue_id",
+                "op": "ne",
+                "value": "${vars.oldEnb}"
+              }
+            ]
+          },
+          "timeoutMs": "${params.reconnectTimeoutMs}",
+          "metric": {
+            "name": "tau_reconnect_ms",
+            "since": "tau"
+          }
+        },
+        {
+          "type": "assert",
+          "source": "log",
+          "label": "TAU in MME log",
+          "log": {
+            "target": "mme",
+            "pattern": "tracking area update",
+            "since": "tau"
+          },
+          "timeoutMs": 2000,
+          "optional": true
+        },
+        {
+          "type": "wait",
+          "ms": "${params.settleMs}"
+        }
+      ]
+    }
+  ]
+}

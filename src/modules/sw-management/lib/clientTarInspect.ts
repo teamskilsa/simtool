@@ -7,8 +7,12 @@
 //
 // For Amarisoft 2026-04-22 (~95 MB, 543 entries) this completes in about
 // 3-5 seconds. We also:
-//   • Abort early once we've entered the doc/ subdirectory (nothing we care
-//     about lives beyond that point in any Amarisoft release).
+//   • Leave doc/ entries out of the result (they are never needed and would
+//     eat into the entry cap). We do NOT stop reading at doc/: tar order is
+//     not guaranteed — amarisoft.2026-09-11.tar.gz has doc/ at entry 236 and
+//     trx_sdr-linux, trx_ip-linux, trx_s72-linux, lteots-linux, lteue-linux,
+//     ltesat-linux and ltelicense-linux AFTER it. Stopping early hid all of
+//     them, which made the form default the TRX to "Ettus UHD" on SDR boxes.
 //   • Cap the total entry count so pathological archives can't hang the tab.
 //   • Report progress via the optional onProgress callback.
 
@@ -20,7 +24,7 @@ const HEADER_SIZE_OFFSET = 124;
 const HEADER_SIZE_LEN = 12;
 const HEADER_TYPE_OFFSET = 156;
 const MAX_ENTRIES = 2000;
-const EARLY_STOP_MARKER = '/doc/';   // Everything after this is documentation
+const DOC_MARKER = '/doc/';   // Documentation entries — skipped, not a stop signal
 
 function readCString(buf: Uint8Array, start: number, len: number): string {
   let end = start;
@@ -190,15 +194,8 @@ export async function listTarGzEntries(file: File, opts: ListOptions = {}): Prom
       const fullName = pendingLongName ?? (prefix ? `${prefix}/${name}` : name);
       pendingLongName = null;
 
-      if (fullName) {
+      if (fullName && !fullName.includes(DOC_MARKER)) {
         entries.push(fullName);
-
-        // Early-stop: once we're in the doc directory, nothing we care about
-        // lives beyond. Abort decompression so the user gets a result in
-        // seconds instead of minutes.
-        if (fullName.includes(EARLY_STOP_MARKER)) {
-          break;
-        }
 
         if (opts.onProgress && entries.length - lastProgressReport >= 50) {
           lastProgressReport = entries.length;

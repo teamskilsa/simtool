@@ -10,13 +10,15 @@ export type RfMode = 'sdr' | 'split' | 'ip';
 /**
  * Default `rf_driver.args` for a given mode + antenna count.
  *
- * SDR:    one /dev/sdrN per pair of antennas (1-2 ant → 1 device, 4 ant → 2)
+ * SDR:    one /dev/sdrN per pair of antennas per cell (an Amarisoft SDR board is
+ *         2T2R): 1-2 ant → 1 device per cell, 4 ant → 2. E.g. 6 cells × 4x4 → dev0..dev11.
  * Split:  O-RAN 7.2 fronthaul defaults (VLAN 10, BFP IQ 9-bit compression)
  * IP:     ZMQ socket pair on localhost (sample/test setup)
  */
-export function defaultRfArgs(mode: RfMode, nAntennaDl: number): string {
+export function defaultRfArgs(mode: RfMode, nAntennaDl: number, nCells = 1): string {
   if (mode === 'sdr') {
-    return nAntennaDl >= 4 ? 'dev0=/dev/sdr0,dev1=/dev/sdr1' : 'dev0=/dev/sdr0';
+    const n = sdrDeviceCount(nAntennaDl, nCells);
+    return Array.from({ length: n }, (_, i) => `dev${i}=/dev/sdr${i}`).join(',');
   }
   if (mode === 'split') {
     // ORAN 7.2 fronthaul — typical defaults for a single-cell DU testbed.
@@ -30,6 +32,11 @@ export function defaultRfArgs(mode: RfMode, nAntennaDl: number): string {
     return 'tx_addr=tcp://127.0.0.1:2000,rx_addr=tcp://127.0.0.1:2001,use_tcp=0,multi_thread=0';
   }
   return '';
+}
+
+/** SDR boards needed: each board carries 2 channels, one rf_port per cell. */
+export function sdrDeviceCount(nAntenna: number, nCells = 1): number {
+  return Math.max(1, nCells) * Math.max(1, Math.ceil((Number(nAntenna) || 1) / 2));
 }
 
 /**
@@ -67,7 +74,7 @@ export function formatGain(g: number | number[]): string {
 export function rfArgsHint(mode: RfMode): string {
   switch (mode) {
     case 'sdr':
-      return 'SDR device path. Format: dev0=/dev/sdrN[,dev1=/dev/sdrN]. Use one device per 2 antennas (1-2 ant → dev0; 4 ant → dev0+dev1).';
+      return 'SDR device path. Format: dev0=/dev/sdrN[,dev1=/dev/sdrN]. Use one device per 2 antennas per cell (1-2 ant → dev0; 4 ant → dev0+dev1; 6 cells × 4 ant → dev0..dev11).';
     case 'split':
       return 'O-RAN 7.2 fronthaul. Common opts: vlan_id (DU↔O-RU VLAN), if_name (NIC), bfp_iq_width (IQ compression bits, typ. 9), c_plane_dst_mac, u_plane_dst_mac.';
     case 'ip':

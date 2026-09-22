@@ -1,0 +1,227 @@
+{
+  "id": "drive-test",
+  "name": "Drive test (gain ramp, measurement HO)",
+  "description": "Simulates driving past every cell in order: all cells but the first are attenuated to a floor, then for each hop the serving cell fades out while the next fades in, in stepDb steps every dwellMs, until the UE's measurement report makes the eNB hand over (ho_from_meas). Needs the running config to have ncell_list + meas_config_desc + ho_from_meas; the preflight fails clearly otherwise. Records how long each fade took to trigger the handover.",
+  "schemaVersion": 1,
+  "tags": [
+    "handover",
+    "measurement",
+    "drive-test",
+    "all-cells"
+  ],
+  "requirements": {
+    "minCells": 2,
+    "needsHoConfig": true
+  },
+  "params": {
+    "floorDb": -30,
+    "stepDb": 3,
+    "dwellMs": 1500,
+    "hoTimeoutMs": 5000,
+    "holdMs": 2000
+  },
+  "logs": {
+    "enb": {
+      "rrc": "debug"
+    }
+  },
+  "maxDurationMs": 3600000,
+  "steps": [
+    {
+      "type": "assert",
+      "label": "UE connected, one context (no handover in flight)",
+      "expect": {
+        "all": [
+          {
+            "path": "ue.connected",
+            "op": "eq",
+            "value": true
+          },
+          {
+            "path": "ue.contexts",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "action",
+      "target": "enb",
+      "label": "start on cell ${cells[0].id}",
+      "when": {
+        "path": "ue.pcell",
+        "op": "ne",
+        "value": "${cells[0].id}"
+      },
+      "message": {
+        "message": "handover",
+        "ran_ue_id": "${ue.ran_ue_id}",
+        "pci": "${cells[0].pci}",
+        "dl_earfcn": "${cells[0].earfcn}"
+      },
+      "ensureNeighbour": true
+    },
+    {
+      "type": "assert",
+      "label": "on cell ${cells[0].id}",
+      "expect": {
+        "all": [
+          {
+            "path": "ue.pcell",
+            "op": "eq",
+            "value": "${cells[0].id}"
+          },
+          {
+            "path": "ue.contexts",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "timeoutMs": "${params.hoTimeoutMs}"
+    },
+    {
+      "type": "loop",
+      "label": "set start gains",
+      "count": "${cellCount}",
+      "steps": [
+        {
+          "type": "action",
+          "target": "enb",
+          "label": "cell ${cells[loop.i].id} → 0 dB",
+          "when": {
+            "path": "loop.i",
+            "op": "eq",
+            "value": 0
+          },
+          "message": {
+            "message": "cell_gain",
+            "cell_id": "${cells[loop.i].id}",
+            "gain": 0
+          }
+        },
+        {
+          "type": "action",
+          "target": "enb",
+          "label": "cell ${cells[loop.i].id} → ${params.floorDb} dB",
+          "when": {
+            "path": "loop.i",
+            "op": "gt",
+            "value": 0
+          },
+          "message": {
+            "message": "cell_gain",
+            "cell_id": "${cells[loop.i].id}",
+            "gain": "${params.floorDb}"
+          }
+        }
+      ]
+    },
+    {
+      "type": "assert",
+      "label": "still on cell ${cells[0].id}",
+      "expect": {
+        "path": "ue.pcell",
+        "op": "eq",
+        "value": "${cells[0].id}"
+      },
+      "timeoutMs": 3000,
+      "holdMs": "${params.holdMs}"
+    },
+    {
+      "type": "loop",
+      "label": "drive ${cellCount - 1} hops",
+      "count": "${cellCount - 1}",
+      "steps": [
+        {
+          "type": "ramp",
+          "label": "fade cell ${cells[loop.i].id} out, cell ${cells[loop.i + 1].id} in",
+          "mark": "fade",
+          "capture": {
+            "src": "cells[loop.i].id",
+            "dst": "cells[loop.i + 1].id"
+          },
+          "cells": [
+            {
+              "cell": "${vars.src}",
+              "from": 0,
+              "to": "${params.floorDb}"
+            },
+            {
+              "cell": "${vars.dst}",
+              "from": "${params.floorDb}",
+              "to": 0
+            }
+          ],
+          "stepDb": "${params.stepDb}",
+          "dwellMs": "${params.dwellMs}",
+          "stopWhen": {
+            "path": "ue.pcell",
+            "op": "eq",
+            "value": "${vars.dst}"
+          },
+          "requireStop": true,
+          "saveAs": "fade",
+          "metric": {
+            "name": "fade_to_ho_ms"
+          }
+        },
+        {
+          "type": "assert",
+          "label": "handed over to cell ${vars.dst} and stays",
+          "expect": {
+            "all": [
+              {
+                "path": "ue.pcell",
+                "op": "eq",
+                "value": "${vars.dst}"
+              },
+              {
+                "path": "ue.contexts",
+                "op": "eq",
+                "value": 1
+              }
+            ]
+          },
+          "timeoutMs": "${params.hoTimeoutMs}",
+          "holdMs": "${params.holdMs}"
+        },
+        {
+          "type": "assert",
+          "source": "log",
+          "label": "measurement report in eNB log",
+          "log": {
+            "target": "enb",
+            "layer": "RRC",
+            "pattern": "measurementReport",
+            "since": "fade"
+          },
+          "timeoutMs": 2000,
+          "optional": true
+        },
+        {
+          "type": "action",
+          "target": "enb",
+          "label": "cell ${vars.src} → floor",
+          "message": {
+            "message": "cell_gain",
+            "cell_id": "${vars.src}",
+            "gain": "${params.floorDb}"
+          }
+        },
+        {
+          "type": "action",
+          "target": "enb",
+          "label": "cell ${vars.dst} → 0 dB",
+          "message": {
+            "message": "cell_gain",
+            "cell_id": "${vars.dst}",
+            "gain": 0
+          }
+        }
+      ]
+    }
+  ]
+}

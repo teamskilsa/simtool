@@ -1,0 +1,131 @@
+{
+  "id": "ho-ping-pong",
+  "name": "Handover ping-pong",
+  "description": "Blind (API) handover back and forth between two cells every period, N times. Each handover must show the new PCell with a single UE context on the eNB; the time from the handover request to that point is recorded as ho_complete_ms. With a phone, a 200 ms background ping measures loss across all handovers. Pick the pair with params.pair (cell indexes, 0-based).",
+  "schemaVersion": 1,
+  "tags": [
+    "handover",
+    "blind"
+  ],
+  "requirements": {
+    "minCells": 2,
+    "needsHoConfig": false
+  },
+  "params": {
+    "pair": [
+      0,
+      1
+    ],
+    "iterations": 6,
+    "periodMs": 10000,
+    "hoTimeoutMs": 5000
+  },
+  "steps": [
+    {
+      "type": "assert",
+      "label": "UE connected, one context (no handover in flight)",
+      "expect": {
+        "all": [
+          {
+            "path": "ue.connected",
+            "op": "eq",
+            "value": true
+          },
+          {
+            "path": "ue.contexts",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "action",
+      "target": "enb",
+      "label": "move to start cell ${cells[params.pair[0]].id}",
+      "when": {
+        "path": "ue.pcell",
+        "op": "ne",
+        "value": "${cells[params.pair[0]].id}"
+      },
+      "message": {
+        "message": "handover",
+        "ran_ue_id": "${ue.ran_ue_id}",
+        "pci": "${cells[params.pair[0]].pci}",
+        "dl_earfcn": "${cells[params.pair[0]].earfcn}"
+      },
+      "ensureNeighbour": true
+    },
+    {
+      "type": "assert",
+      "label": "on start cell, one context",
+      "expect": {
+        "all": [
+          {
+            "path": "ue.pcell",
+            "op": "eq",
+            "value": "${cells[params.pair[0]].id}"
+          },
+          {
+            "path": "ue.contexts",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "timeoutMs": "${params.hoTimeoutMs}"
+    },
+    {
+      "type": "loop",
+      "label": "ping-pong × ${params.iterations}",
+      "count": "${params.iterations}",
+      "steps": [
+        {
+          "type": "action",
+          "target": "enb",
+          "mark": "ho",
+          "label": "handover → cell ${cells[params.pair[(loop.i + 1) % 2]].id}",
+          "capture": {
+            "target": "cells[params.pair[(loop.i + 1) % 2]].id"
+          },
+          "message": {
+            "message": "handover",
+            "ran_ue_id": "${ue.ran_ue_id}",
+            "pci": "${cells[params.pair[(loop.i + 1) % 2]].pci}",
+            "dl_earfcn": "${cells[params.pair[(loop.i + 1) % 2]].earfcn}"
+          },
+          "ensureNeighbour": true
+        },
+        {
+          "type": "assert",
+          "label": "PCell = cell ${vars.target}, one context",
+          "expect": {
+            "all": [
+              {
+                "path": "ue.pcell",
+                "op": "eq",
+                "value": "${vars.target}"
+              },
+              {
+                "path": "ue.contexts",
+                "op": "eq",
+                "value": 1
+              }
+            ]
+          },
+          "timeoutMs": "${params.hoTimeoutMs}",
+          "pollMs": 100,
+          "metric": {
+            "name": "ho_complete_ms",
+            "since": "ho"
+          }
+        },
+        {
+          "type": "wait",
+          "ms": "${params.periodMs}"
+        }
+      ]
+    }
+  ]
+}

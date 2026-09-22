@@ -43,7 +43,7 @@ function CellSection({ form, onChange }: { form: LTEFormState; onChange: (k: str
         <Field label="Cell ID" value={form.cellId} onChange={v => onChange('cellId', v)} type="number" min={0} max={255} />
         <Field label="PCI" value={form.pci} onChange={v => onChange('pci', v)} type="number" min={0} max={503} />
         <Field label="TAC" value={form.tac} onChange={v => onChange('tac', v)} type="number" min={0} max={65535} />
-        <Field label="RF Port" value={form.rfPort} onChange={v => onChange('rfPort', v)} type="number" min={0} max={7} />
+        <Field label="RF Port" value={form.rfPort} onChange={v => onChange('rfPort', v)} type="number" min={0} max={23} />
       </div>
     </BoxedSection>
   );
@@ -99,9 +99,9 @@ function BandSection({ form, onChange, ratMode }: { form: LTEFormState; onChange
 function RFSection({ form, onChange }: { form: LTEFormState; onChange: (k: string, v: any) => void }) {
   const handleModeChange = (mode: RfMode) => {
     onChange('rfMode', mode);
-    onChange('rfArgs', defaultRfArgs(mode, form.nAntennaDl));
+    onChange('rfArgs', defaultRfArgs(mode, form.nAntennaDl, form.cells?.length ?? 1));
   };
-  const resetArgs = () => onChange('rfArgs', defaultRfArgs(form.rfMode as RfMode, form.nAntennaDl));
+  const resetArgs = () => onChange('rfArgs', defaultRfArgs(form.rfMode as RfMode, form.nAntennaDl, form.cells?.length ?? 1));
 
   return (
     <BoxedSection
@@ -145,9 +145,10 @@ function RFSection({ form, onChange }: { form: LTEFormState; onChange: (k: strin
               label="Device Path (rf_driver.args)"
               value={form.rfArgs}
               onChange={v => onChange('rfArgs', v)}
-              placeholder={defaultRfArgs('sdr', form.nAntennaDl)}
+              placeholder={defaultRfArgs('sdr', form.nAntennaDl, form.cells?.length ?? 1)}
             />
-            <p className="text-[11px] text-muted-foreground mt-1.5">{rfArgsHint('sdr')}</p>
+            <SdrDeviceSummary args={form.rfArgs} />
+            <p className="text-[11px] text-muted-foreground mt-1">{rfArgsHint('sdr')}</p>
           </>
         )}
         {form.rfMode === 'split' && (
@@ -354,5 +355,18 @@ export function LTEConfigBuilder({
 
       <div>{renderMainContent()}</div>
     </div>
+  );
+}
+
+/** The args string for a multi-cell 4x4 config is too long to read in one
+ *  input ("dev0=/dev/sdr0,…,dev11=/dev/sdr11"), so list the devices it names. */
+function SdrDeviceSummary({ args }: { args: string }) {
+  const devs = [...(args ?? '').matchAll(/dev\d+=([^,\s]+)/g)].map(m => m[1].replace(/^\/dev\//, ''));
+  if (devs.length === 0) return null;
+  return (
+    <p className="mt-1.5 text-[11px] text-foreground/80">
+      <span className="font-medium">{devs.length} SDR device{devs.length === 1 ? '' : 's'}:</span>{' '}
+      <span className="font-mono">{devs.join(' · ')}</span>
+    </p>
   );
 }

@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "id": "ho-3cc-groups",
+  "name": "3CC group handover (A ↔ B)",
+  "description": "Two groups of carrier-aggregated cells: the UE runs carrier aggregation on group A, hands over to group B's primary, and rebuilds it there. Every hop asserts the new PCell, a single UE context, and that the secondary carriers come back, recording ho_complete_ms and ca_rebuild_ms. params.pair holds the two group primaries as 0-based cell indexes (default [0,3] = cells 1 and 4); params.carriers is how many carriers each group should end up with.",
+  "tags": [
+    "handover",
+    "carrier-aggregation",
+    "blind",
+    "demo"
+  ],
+  "requirements": {
+    "minCells": 2,
+    "needsHoConfig": false,
+    "needsCa": true
+  },
+  "params": {
+    "pair": [
+      0,
+      3
+    ],
+    "carriers": 3,
+    "iterations": 4,
+    "settleMs": 6000,
+    "hoTimeoutMs": 5000,
+    "caTimeoutMs": 10000
+  },
+  "steps": [
+    {
+      "type": "assert",
+      "label": "UE connected, one context",
+      "expect": {
+        "all": [
+          {
+            "path": "ue.connected",
+            "op": "eq",
+            "value": true
+          },
+          {
+            "path": "ue.contexts",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "timeoutMs": 30000
+    },
+    {
+      "type": "action",
+      "target": "enb",
+      "ensureNeighbour": true,
+      "label": "start on group A (cell ${cells[params.pair[0]].id})",
+      "capture": {
+        "target": "cells[params.pair[0]].id"
+      },
+      "message": {
+        "message": "handover",
+        "ran_ue_id": "${ue.ran_ue_id}",
+        "pci": "${cells[params.pair[0]].pci}"
+      }
+    },
+    {
+      "type": "assert",
+      "label": "PCell = cell ${vars.target}",
+      "expect": {
+        "all": [
+          {
+            "path": "ue.pcell",
+            "op": "eq",
+            "value": "${vars.target}"
+          },
+          {
+            "path": "ue.contexts",
+            "op": "eq",
+            "value": 1
+          }
+        ]
+      },
+      "timeoutMs": "${params.hoTimeoutMs}"
+    },
+    {
+      "type": "wait",
+      "ms": "${params.settleMs}"
+    },
+    {
+      "type": "assert",
+      "label": "group A carriers up (${params.carriers} total)",
+      "expect": {
+        "path": "ue.scells.length",
+        "op": "gte",
+        "value": "${params.carriers - 1}"
+      },
+      "timeoutMs": "${params.caTimeoutMs}",
+      "capture": {
+        "groupA_carriers": "ue.scells"
+      }
+    },
+    {
+      "type": "loop",
+      "label": "A ↔ B × ${params.iterations}",
+      "count": "${params.iterations}",
+      "steps": [
+        {
+          "type": "action",
+          "target": "enb",
+          "mark": "ho",
+          "ensureNeighbour": true,
+          "label": "handover → cell ${cells[params.pair[(loop.i + 1) % 2]].id}",
+          "capture": {
+            "target": "cells[params.pair[(loop.i + 1) % 2]].id"
+          },
+          "message": {
+            "message": "handover",
+            "ran_ue_id": "${ue.ran_ue_id}",
+            "pci": "${cells[params.pair[(loop.i + 1) % 2]].pci}"
+          }
+        },
+        {
+          "type": "assert",
+          "label": "PCell = cell ${vars.target}, one context",
+          "expect": {
+            "all": [
+              {
+                "path": "ue.pcell",
+                "op": "eq",
+                "value": "${vars.target}"
+              },
+              {
+                "path": "ue.contexts",
+                "op": "eq",
+                "value": 1
+              }
+            ]
+          },
+          "timeoutMs": "${params.hoTimeoutMs}",
+          "metric": {
+            "name": "ho_complete_ms",
+            "since": "ho"
+          }
+        },
+        {
+          "type": "assert",
+          "label": "carriers rebuilt on cell ${vars.target} (${params.carriers} total)",
+          "expect": {
+            "path": "ue.scells.length",
+            "op": "gte",
+            "value": "${params.carriers - 1}"
+          },
+          "timeoutMs": "${params.caTimeoutMs}",
+          "metric": {
+            "name": "ca_rebuild_ms",
+            "since": "ho"
+          },
+          "capture": {
+            "carriers": "ue.scells"
+          }
+        },
+        {
+          "type": "wait",
+          "ms": "${params.settleMs}"
+        }
+      ]
+    }
+  ]
+}

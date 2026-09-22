@@ -150,9 +150,12 @@
      crushing each field until labels and controls overlapped and values
      truncated. Used by every RAT builder (NR/LTE/NSA/NB-IoT/CAT-M/Core) via
      FIELD_GRID and directly by the section grids. */
+  /* 280px min track: the inline label is a fixed 116px, so anything narrower
+     leaves a select ~100px and its value ("B7 (2.6 GHz)", "4 (4x4 MIMO)")
+     wraps onto two lines. */
   .cfg-field-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     column-gap: 1.5rem;
     row-gap: 0.625rem;
   }

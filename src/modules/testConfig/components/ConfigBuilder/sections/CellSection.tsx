@@ -50,7 +50,7 @@ export function CellSection({ form, onChange }: Props) {
           when the band changed. Now they read back what the band implies. */}
       <BoxedSection title="Identity" hint="Duplex mode and frequency range are properties of the band, so they are shown here rather than asked for. Change the band to change them.">
         <div className="cfg-field-grid">
-          <Field label="Cell ID" value={form.cellId} onChange={v => onChange('cellId', v)} type="number" min={0} max={1007} />
+          <Field label="Cell ID" value={form.cellId} onChange={v => onChange('cellId', v)} type="number" min={0} max={255} />
           <DerivedField
             label="Mode"
             value={form.nrTdd === 1 ? 'TDD' : 'FDD'}

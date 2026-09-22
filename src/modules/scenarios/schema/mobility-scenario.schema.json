@@ -1,0 +1,1111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://simtool.local/schemas/mobility-scenario.schema.json",
+  "title": "MobilityScenario",
+  "description": "A SimTool Mobility Scenario (data/scenarios/<id>.json). Kept in sync with src/modules/scenarios/types.ts; lib/validate.ts adds semantic checks (placeholders, blocked messages, required remote API fields).",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "description",
+    "schemaVersion",
+    "requirements",
+    "steps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "builtin": {
+      "type": "boolean"
+    },
+    "updatedAt": {
+      "type": "string"
+    },
+    "maxDurationMs": {
+      "type": "number",
+      "minimum": 1000
+    },
+    "requirements": {
+      "type": "object",
+      "required": [
+        "minCells",
+        "needsHoConfig"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "minCells": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "needsPhone": {
+          "type": "boolean",
+          "description": "Legacy, ignored: SimTool drives the callbox only."
+        },
+        "needsHoConfig": {
+          "type": "boolean"
+        },
+        "needsCa": {
+          "type": "boolean"
+        }
+      }
+    },
+    "params": {
+      "type": "object"
+    },
+    "logs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enb": {
+          "$ref": "#/definitions/logLevels"
+        },
+        "mme": {
+          "$ref": "#/definitions/logLevels"
+        }
+      }
+    },
+    "steps": {
+      "$ref": "#/definitions/steps"
+    }
+  },
+  "definitions": {
+    "num": {
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "pattern": "\\$\\{"
+        }
+      ]
+    },
+    "logLevels": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": [
+          "error",
+          "warn",
+          "info",
+          "debug"
+        ]
+      }
+    },
+    "condition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "path",
+            "op"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "op": {
+              "enum": [
+                "eq",
+                "ne",
+                "gt",
+                "gte",
+                "lt",
+                "lte",
+                "in",
+                "nin",
+                "exists",
+                "absent",
+                "truthy",
+                "falsy",
+                "match",
+                "contains"
+              ]
+            },
+            "value": {}
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "all"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "all": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/definitions/condition"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "any"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "any": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/definitions/condition"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "not"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "not": {
+              "$ref": "#/definitions/condition"
+            }
+          }
+        }
+      ]
+    },
+    "common": {
+      "label": {
+        "type": "string"
+      },
+      "when": {
+        "$ref": "#/definitions/condition"
+      },
+      "optional": {
+        "type": "boolean"
+      },
+      "mark": {
+        "type": "string"
+      },
+      "capture": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/step"
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "action",
+            "wait",
+            "assert",
+            "ramp",
+            "loop",
+            "traffic",
+            "operator"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "action"
+              },
+              "target": {
+                "enum": [
+                  "enb",
+                  "mme"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "target"
+            ]
+          },
+          "then": {
+            "$ref": "#/definitions/remoteAction"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "action"
+              },
+              "target": {
+                "const": "phone"
+              }
+            },
+            "required": [
+              "type",
+              "target"
+            ]
+          },
+          "then": {
+            "$ref": "#/definitions/phoneAction"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "action"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "target"
+            ],
+            "properties": {
+              "target": {
+                "enum": [
+                  "enb",
+                  "mme",
+                  "phone"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "wait"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/wait"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "assert"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/assert"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "ramp"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/ramp"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "loop"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/loop"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "traffic"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/traffic"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "operator"
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/operator"
+          }
+        }
+      ]
+    },
+    "remoteMessage": {
+      "type": "object",
+      "required": [
+        "message"
+      ],
+      "properties": {
+        "message": {
+          "type": "string",
+          "not": {
+            "enum": [
+              "ue_del",
+              "ue_detach",
+              "quit",
+              "ue_add",
+              "ue_set"
+            ]
+          }
+        }
+      }
+    },
+    "remoteAction": {
+      "type": "object",
+      "required": [
+        "type",
+        "target",
+        "message"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "action"
+        },
+        "target": {
+          "enum": [
+            "enb",
+            "mme"
+          ]
+        },
+        "label": {
+          "$ref": "#/definitions/common/label"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "mark": {
+          "type": "string"
+        },
+        "capture": {
+          "$ref": "#/definitions/common/capture"
+        },
+        "message": {
+          "$ref": "#/definitions/remoteMessage"
+        },
+        "undo": {
+          "$ref": "#/definitions/remoteMessage"
+        },
+        "undoKey": {
+          "type": "string"
+        },
+        "resolvesUndo": {
+          "type": "string"
+        },
+        "ensureNeighbour": {
+          "type": "boolean"
+        },
+        "expectError": {
+          "type": "string"
+        },
+        "saveAs": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "type": "number",
+          "minimum": 100
+        },
+        "onFail": {
+          "$ref": "#/definitions/onFail"
+        },
+        "inconclusiveReason": {
+          "type": "string"
+        }
+      }
+    },
+    "phoneAction": {
+      "type": "object",
+      "required": [
+        "type",
+        "target",
+        "phone"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "action"
+        },
+        "target": {
+          "const": "phone"
+        },
+        "label": {
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "mark": {
+          "type": "string"
+        },
+        "capture": {
+          "$ref": "#/definitions/common/capture"
+        },
+        "saveAs": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "object",
+          "required": [
+            "op"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "enum": [
+                "airplane_on",
+                "airplane_off",
+                "ping",
+                "ping_start",
+                "ping_stop",
+                "wake",
+                "radio_info",
+                "cell_info"
+              ]
+            },
+            "host": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "intervalMs": {
+              "type": "number",
+              "minimum": 200
+            }
+          }
+        },
+        "onFail": {
+          "$ref": "#/definitions/onFail"
+        },
+        "inconclusiveReason": {
+          "type": "string"
+        }
+      }
+    },
+    "wait": {
+      "type": "object",
+      "required": [
+        "type",
+        "ms"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "wait"
+        },
+        "ms": {
+          "$ref": "#/definitions/num"
+        },
+        "label": {
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "mark": {
+          "type": "string"
+        },
+        "capture": {
+          "$ref": "#/definitions/common/capture"
+        },
+        "onFail": {
+          "$ref": "#/definitions/onFail"
+        },
+        "inconclusiveReason": {
+          "type": "string"
+        }
+      }
+    },
+    "assert": {
+      "type": "object",
+      "required": [
+        "type",
+        "timeoutMs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "assert"
+        },
+        "label": {
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "mark": {
+          "type": "string"
+        },
+        "capture": {
+          "$ref": "#/definitions/common/capture"
+        },
+        "source": {
+          "enum": [
+            "ue",
+            "mme",
+            "log",
+            "reply",
+            "phone",
+            "vars",
+            "sequence"
+          ]
+        },
+        "expect": {
+          "$ref": "#/definitions/condition"
+        },
+        "log": {
+          "type": "object",
+          "required": [
+            "target",
+            "pattern"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "target": {
+              "enum": [
+                "enb",
+                "mme"
+              ]
+            },
+            "pattern": {
+              "type": "string"
+            },
+            "layer": {
+              "type": "string"
+            },
+            "since": {
+              "type": "string"
+            },
+            "minCount": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "timeoutMs": {
+          "$ref": "#/definitions/num"
+        },
+        "holdMs": {
+          "$ref": "#/definitions/num"
+        },
+        "pollMs": {
+          "type": "number",
+          "minimum": 10
+        },
+        "metric": {
+          "type": "object",
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "since": {
+              "type": "string"
+            },
+            "unit": {
+              "type": "string"
+            }
+          }
+        },
+        "onFail": {
+          "$ref": "#/definitions/onFail"
+        },
+        "inconclusiveReason": {
+          "type": "string"
+        },
+        "saveAs": {
+          "type": "string"
+        },
+        "sequence": {
+          "type": "object",
+          "required": [
+            "items"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/definitions/logSeqItem"
+              }
+            },
+            "target": {
+              "enum": [
+                "enb",
+                "mme"
+              ]
+            },
+            "since": {
+              "type": "string"
+            },
+            "withinMs": {
+              "$ref": "#/definitions/num"
+            },
+            "metrics": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "from",
+                  "to"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "from": {
+                    "type": "integer",
+                    "minimum": -1
+                  },
+                  "to": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "unit": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "log"
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "required": [
+              "log"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "sequence"
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "required": [
+              "sequence"
+            ]
+          }
+        },
+        {
+          "if": {
+            "not": {
+              "properties": {
+                "source": {
+                  "enum": [
+                    "log",
+                    "sequence"
+                  ]
+                }
+              },
+              "required": [
+                "source"
+              ]
+            }
+          },
+          "then": {
+            "required": [
+              "expect"
+            ]
+          }
+        }
+      ]
+    },
+    "ramp": {
+      "type": "object",
+      "required": [
+        "type",
+        "cells",
+        "stepDb",
+        "dwellMs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "ramp"
+        },
+        "label": {
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "mark": {
+          "type": "string"
+        },
+        "capture": {
+          "$ref": "#/definitions/common/capture"
+        },
+        "cells": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "cell",
+              "from",
+              "to"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "cell": {
+                "$ref": "#/definitions/num"
+              },
+              "from": {
+                "$ref": "#/definitions/num"
+              },
+              "to": {
+                "$ref": "#/definitions/num"
+              }
+            }
+          }
+        },
+        "stepDb": {
+          "$ref": "#/definitions/num"
+        },
+        "dwellMs": {
+          "$ref": "#/definitions/num"
+        },
+        "stopWhen": {
+          "$ref": "#/definitions/condition"
+        },
+        "requireStop": {
+          "type": "boolean"
+        },
+        "saveAs": {
+          "type": "string"
+        },
+        "metric": {
+          "type": "object",
+          "required": [
+            "name"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          }
+        },
+        "onFail": {
+          "$ref": "#/definitions/onFail"
+        },
+        "inconclusiveReason": {
+          "type": "string"
+        }
+      }
+    },
+    "loop": {
+      "type": "object",
+      "required": [
+        "type",
+        "steps"
+      ],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "count"
+          ]
+        },
+        {
+          "required": [
+            "until"
+          ]
+        }
+      ],
+      "properties": {
+        "type": {
+          "const": "loop"
+        },
+        "label": {
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "mark": {
+          "type": "string"
+        },
+        "capture": {
+          "$ref": "#/definitions/common/capture"
+        },
+        "count": {
+          "$ref": "#/definitions/num"
+        },
+        "until": {
+          "$ref": "#/definitions/condition"
+        },
+        "maxIterations": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "steps": {
+          "$ref": "#/definitions/steps"
+        },
+        "onFail": {
+          "$ref": "#/definitions/onFail"
+        },
+        "inconclusiveReason": {
+          "type": "string"
+        }
+      }
+    },
+    "traffic": {
+      "type": "object",
+      "required": [
+        "type",
+        "op"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "traffic"
+        },
+        "label": {
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "mark": {
+          "type": "string"
+        },
+        "capture": {
+          "$ref": "#/definitions/common/capture"
+        },
+        "op": {
+          "enum": [
+            "start",
+            "stop"
+          ]
+        },
+        "generator": {
+          "enum": [
+            "callbox",
+            "phone"
+          ]
+        },
+        "direction": {
+          "enum": [
+            "dl",
+            "ul"
+          ]
+        },
+        "protocol": {
+          "enum": [
+            "udp",
+            "tcp"
+          ]
+        },
+        "bitrateMbps": {
+          "$ref": "#/definitions/num"
+        },
+        "durationSec": {
+          "$ref": "#/definitions/num"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "onFail": {
+          "$ref": "#/definitions/onFail"
+        },
+        "inconclusiveReason": {
+          "type": "string"
+        }
+      }
+    },
+    "onFail": {
+      "enum": [
+        "fail",
+        "inconclusive"
+      ],
+      "description": "inconclusive: a failure of this step ends the run as INCONCLUSIVE (test-system or precondition problem, not a verdict on the UE)."
+    },
+    "logSeqItem": {
+      "type": "object",
+      "required": [
+        "msg"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "enum": [
+            "enb",
+            "mme"
+          ]
+        },
+        "layer": {
+          "type": "string"
+        },
+        "dir": {
+          "enum": [
+            "UL",
+            "DL",
+            "TO",
+            "FROM"
+          ]
+        },
+        "msg": {
+          "type": "string",
+          "description": "Case-insensitive regex on the first line of the log entry"
+        },
+        "contains": {
+          "type": "string",
+          "description": "Case-insensitive regex on the whole entry (decoded ASN.1 / NAS)"
+        },
+        "label": {
+          "type": "string"
+        },
+        "optional": {
+          "type": "boolean"
+        }
+      }
+    },
+    "operator": {
+      "type": "object",
+      "required": [
+        "type",
+        "prompt",
+        "timeoutMs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "operator"
+        },
+        "label": {
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "mark": {
+          "type": "string"
+        },
+        "capture": {
+          "$ref": "#/definitions/common/capture"
+        },
+        "onFail": {
+          "$ref": "#/definitions/onFail"
+        },
+        "inconclusiveReason": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "detail": {
+          "type": "string"
+        },
+        "continueLabel": {
+          "type": "string"
+        },
+        "timeoutMs": {
+          "$ref": "#/definitions/num"
+        },
+        "onTimeout": {
+          "enum": [
+            "inconclusive",
+            "fail"
+          ]
+        }
+      }
+    }
+  }
+}

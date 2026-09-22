@@ -12,11 +12,11 @@
 
 import type { ThemeConfig } from '@/components/theme/types/theme.types';
 import { useUser } from '@/modules/users/context/user-context';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ModeToggle } from '@/components/theme/mode-toggle';
 import { cn } from '@/lib/utils';
 import {
-  Bell, ChevronRight, Database, FolderTree, LayoutDashboard, LineChart, List, LogOut, Menu, Package, Play, Plus, RadioTower, Search, Server, Settings, Signal, Smartphone, TestTube, User, Users,
+  Bell, ChevronRight, ClipboardCheck, Database, FolderTree, Gauge, LayoutDashboard, Network, Radio, Route, LineChart, List, LogOut, Menu, Package, Play, Plus, RadioTower, Search, Server, Settings, Signal, Smartphone, TestTube, User, Users,
 } from 'lucide-react';
 
 interface DashboardSidebarProps {
@@ -50,7 +50,7 @@ const SECTIONS: NavSection[] = [
   {
     title: 'Workflow',
     items: [
-      { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', badge: '3' },
+      { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       {
         id: 'test-management', icon: TestTube, label: 'Test Management',
         subItems: [
@@ -61,6 +61,10 @@ const SECTIONS: NavSection[] = [
       },
       { id: 'test-execution', icon: Play,       label: 'Test Execution' },
       { id: 'stats',          icon: LineChart,  label: 'Stats' },
+      { id: 'traffic',        icon: Gauge,      label: 'Traffic' },
+      { id: 'capture',        icon: Radio,      label: 'Capture' },
+      { id: 'mobility',       icon: Route,      label: 'Mobility Scenarios' },
+      { id: 'conformance',    icon: ClipboardCheck, label: 'Pre-conformance' },
       { id: 'uesim',          icon: Smartphone, label: 'UE Simulator' },
       { id: 'corenet',        icon: Database,   label: 'Core Network' },
     ],
@@ -68,9 +72,10 @@ const SECTIONS: NavSection[] = [
   {
     title: 'Infrastructure',
     items: [
-      { id: 'systems',       icon: Server,  label: 'Test Systems', badge: '2' },
+      { id: 'systems',       icon: Server,  label: 'Test Systems' },
       { id: 'sw-management', icon: Package, label: 'SW Management' },
       { id: 'remote-api',    icon: Signal,  label: 'Remote API' },
+      { id: 'network',       icon: Network, label: 'Network' },
     ],
   },
   {
@@ -108,6 +113,29 @@ export const DashboardSidebar = ({
 }: DashboardSidebarProps) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const { user } = useUser();
+
+  // Live count of configured test systems (localStorage 'stored_systems').
+  // Same-tab writes don't fire 'storage', so also re-read on navigation and
+  // on a slow timer.
+  const [systemCount, setSystemCount] = useState<number | null>(null);
+  useEffect(() => {
+    const read = () => {
+      try {
+        const raw = window.localStorage.getItem('stored_systems');
+        const parsed = raw ? JSON.parse(raw) : [];
+        setSystemCount(Array.isArray(parsed) ? parsed.length : 0);
+      } catch {
+        setSystemCount(null);
+      }
+    };
+    read();
+    const onStorage = (e: StorageEvent) => { if (e.key === 'stored_systems') read(); };
+    window.addEventListener('storage', onStorage);
+    const t = setInterval(read, 5000);
+    return () => { window.removeEventListener('storage', onStorage); clearInterval(t); };
+  }, [activeSection]);
+  const badgeFor = (item: NavLink): string | undefined =>
+    item.id === 'systems' && systemCount ? String(systemCount) : item.badge;
 
   const sections = SECTIONS.filter(s => !s.adminOnly || user?.role === 'admin');
   const allItems = sections.flatMap(s => s.items);
@@ -229,16 +257,16 @@ export const DashboardSidebar = ({
                       {isSidebarOpen && (
                         <>
                           <span className="truncate">{item.label}</span>
-                          {item.badge && (
+                          {badgeFor(item) && (
                             <span className="ml-auto shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground ring-1 ring-inset ring-border">
-                              {item.badge}
+                              {badgeFor(item)}
                             </span>
                           )}
                           {item.subItems && (
                             <ChevronRight
                               className={cn(
                                 'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform',
-                                !item.badge && 'ml-auto',
+                                !badgeFor(item) && 'ml-auto',
                                 active && 'rotate-90',
                               )}
                             />

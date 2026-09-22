@@ -47,7 +47,7 @@ const ourOutput = `/* sample from our generator */
   gnb_id_bits: 28,
   gnb_id: 0x12345,
   cell_list: [],
-  nr_cell_list: [{ rf_port: 0, cell_id: 500, band: 78, dl_nr_arfcn: 632628, subcarrier_spacing: 30, ssb_pos_bitmap: "10000000" }],
+  nr_cell_list: [{ rf_port: 0, cell_id: 1, band: 78, dl_nr_arfcn: 632628, subcarrier_spacing: 30, ssb_pos_bitmap: "10000000" }],
   nr_cell_default: {
     bandwidth: 40,
     n_antenna_dl: 1,

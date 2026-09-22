@@ -13,5 +13,7 @@ export interface NSAFormState {
 
 export const DEFAULT_NSA_FORM: NSAFormState = {
   lteForm: { ...DEFAULT_LTE_FORM },
-  nrForm:  { ...DEFAULT_NR_FORM },
+  // NR ids start at 2: the LTE anchor defaults to cell_id 1, and LTE and NR
+  // cells share one cell_id space inside lteenb.
+  nrForm:  { ...DEFAULT_NR_FORM, cellId: 2, cells: DEFAULT_NR_FORM.cells.map((c, i) => ({ ...c, cellId: 2 + i })) },
 };

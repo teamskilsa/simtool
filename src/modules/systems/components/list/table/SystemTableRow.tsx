@@ -41,13 +41,20 @@ function formatUptime(seconds: number): string {
   return `${minutes}m`;
 }
 
-function formatBytes(bytes: number): string {
-  const gb = bytes / (1024 * 1024 * 1024);
-  if (gb >= 1) return `${gb.toFixed(1)} GB`;
-  const mb = bytes / (1024 * 1024);
-  if (mb >= 1) return `${mb.toFixed(1)} MB`;
-  const kb = bytes / 1024;
-  return `${kb.toFixed(1)} KB`;
+// Binary units: the agent reports bytes from os.totalmem()/freemem(), and
+// /proc/meminfo is in KiB, so divide by 1024^n and label GiB.
+function formatGiB(bytes: number): string {
+  return (bytes / 1024 ** 3).toFixed(1);
+}
+
+function Metric({ label, value, sub, title }: { label: string; value: string; sub?: string; title?: string }) {
+  return (
+    <div className="whitespace-nowrap" title={title}>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="font-medium tabular-nums leading-tight">{value}</div>
+      {sub && <div className="text-xs text-muted-foreground tabular-nums">{sub}</div>}
+    </div>
+  );
 }
 
 export function SystemTableRow({
@@ -187,38 +194,33 @@ export function SystemTableRow({
       );
     }
 
+    const threads = stats.cpu.cores?.length || 0;
     return (
-      <div className="flex items-center space-x-6">
-        <div>
-          <div className="text-xs text-muted-foreground">CPU</div>
-          <div className="font-medium flex items-center gap-1">
-            {stats.cpu.usage.toFixed(1)}%
-            {stats.cpu.temperature > 0 && (
-              <span className="text-xs text-muted-foreground">
-                ({stats.cpu.temperature}°C)
-              </span>
-            )}
-          </div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground">Memory</div>
-          <div className="font-medium flex items-center gap-1">
-            {stats.memory.usage.toFixed(1)}%
-            <span className="text-xs text-muted-foreground">
-              ({formatBytes(stats.memory.used)} / {formatBytes(stats.memory.total)})
-            </span>
-          </div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground">Load</div>
-          <div className="font-medium">
-            {stats.load[0].toFixed(2)}
-          </div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground">Uptime</div>
-          <div className="font-medium">{formatUptime(stats.uptime)}</div>
-        </div>
+      <div className="grid w-max grid-cols-2 gap-x-5 gap-y-2 xl:grid-cols-4">
+        <Metric
+          label="CPU"
+          value={`${stats.cpu.usage.toFixed(1)}%${stats.cpu.temperature > 0 ? ` · ${stats.cpu.temperature}°C` : ''}`}
+          sub={threads ? `${threads} threads` : undefined}
+          title="Busy share of all logical CPUs (from top)"
+        />
+        <Metric
+          label="Memory"
+          value={`${stats.memory.usage.toFixed(1)}%`}
+          sub={`${formatGiB(stats.memory.used)} / ${formatGiB(stats.memory.total)} GiB`}
+          title="Used = MemTotal − MemAvailable"
+        />
+        <Metric
+          label="Load"
+          value={stats.load[0].toFixed(2)}
+          sub="1-min avg"
+          title={`Load average 1/5/15 min: ${stats.load.map(l => l.toFixed(2)).join(' / ')}`}
+        />
+        <Metric
+          label="Uptime"
+          value={formatUptime(stats.uptime)}
+          sub="host"
+          title="Host uptime (/proc/uptime), not the Amarisoft service uptime"
+        />
       </div>
     );
   };
@@ -284,18 +286,13 @@ export function SystemTableRow({
         </div>
       </td>
       <td className="px-4 py-4">
-        <SystemConnectionStatus connection={localConnection} />
-      </td>
-      <td className="px-4 py-4">
-        <SystemStatusBadge connection={localConnection} />
+        <div className="flex flex-col items-start gap-1.5">
+          <SystemStatusBadge connection={localConnection} />
+          <SystemConnectionStatus connection={localConnection} />
+        </div>
       </td>
       <td className="px-4 py-4">
         {renderResources()}
-      </td>
-      <td className="px-4 py-4">
-        <div className="text-sm text-gray-500">
-          {system.type === 'Callbox' ? 'Callbox Configuration' : 'UE Simulator Configuration'}
-        </div>
       </td>
       <td className="px-4 py-4 text-right">
         <ActionButtons

@@ -34,7 +34,7 @@ interface ModuleEntry {
 // IMS runs inside ltemme; restarting ltemme also brings IMS back.
 const MODULE_MAP: Record<string, ModuleEntry> = {
   enb:   { configPath: '/root/enb/config/enb.cfg',   service: 'lte',    checkPort: 9001, binary: '/root/enb/lteenb', workingDir: '/root/enb' },
-  gnb:   { configPath: '/root/enb/config/gnb.cfg',   service: 'lte',    checkPort: 9002, binary: '/root/enb/lteenb', workingDir: '/root/enb' },
+  gnb:   { configPath: '/root/enb/config/gnb.cfg',   service: 'lte',    checkPort: 9001, binary: '/root/enb/lteenb', workingDir: '/root/enb' },
   mme:   { configPath: '/root/mme/config/mme.cfg',   service: 'ltemme', checkPort: 9000, binary: '/root/mme/ltemme', workingDir: '/root/mme' },
   // Second core for multi-core / dual-PLMN setups (e.g. roaming demos):
   // core 2 lives beside core 1 as mme2.cfg with its own API port 9010.

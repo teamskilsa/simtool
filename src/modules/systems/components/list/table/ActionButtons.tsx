@@ -65,7 +65,7 @@ export function ActionButtons({
 
   return (
     <TooltipProvider>
-      <div className="flex justify-end items-center gap-2">
+      <div className="flex justify-end items-center gap-0.5">
         <DebugConnectionButton 
           system={system}
           onConnectionUpdate={onConnectionUpdate}
@@ -75,7 +75,7 @@ export function ActionButtons({
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
-              size="sm"
+              size="sm" className="h-8 w-8 p-0"
               onClick={handleRefresh}
               disabled={refreshing}
             >
@@ -87,7 +87,7 @@ export function ActionButtons({
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" onClick={onEdit}>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onEdit}>
               <Pencil className="w-4 h-4" />
             </Button>
           </TooltipTrigger>
@@ -96,7 +96,7 @@ export function ActionButtons({
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" onClick={onDelete}>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onDelete}>
               <Trash2 className="w-4 h-4 text-red-500" />
             </Button>
           </TooltipTrigger>
@@ -107,7 +107,7 @@ export function ActionButtons({
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
-              size="sm"
+              size="sm" className="h-8 w-8 p-0"
               onClick={onOpenSSH}
               disabled={!connection?.sshOk}
             >
